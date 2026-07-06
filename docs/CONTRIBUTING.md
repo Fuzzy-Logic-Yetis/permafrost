@@ -9,7 +9,8 @@ optional (nice for Instruments/debugging; `open Package.swift` works).
 git clone https://github.com/Fuzzy-Logic-Yetis/permafrost.git
 cd permafrost
 swift build            # fetches GRDB, compiles
-swift test             # core unit tests
+./scripts/test.sh      # core unit tests (wraps `swift test`; required on CLT-only
+                       # machines — the CLT hides Testing.framework, see the script)
 ./scripts/make-app.sh  # assembles dist/Permafrost.app (ad-hoc signed)
 ```
 

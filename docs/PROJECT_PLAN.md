@@ -22,7 +22,7 @@ Core requirements (MVP):
 | Milestone | Scope | Status |
 |---|---|---|
 | **M0 — Scaffold** | Repo, docs, GitHub setup, CI skeleton | ✅ done |
-| **M1 — Core engine** | `PermafrostCore`: store (GRDB+FTS5), retention, dedup, thumbnails, import/export; unit tests | 🔨 in progress |
+| **M1 — Core engine** | `PermafrostCore`: store (GRDB+FTS5), retention, dedup, thumbnails, import/export; unit tests | ✅ done |
 | **M2 — The panel** | NSPanel + SwiftUI UI, global hotkey, search, paste-on-select, pinning, accessibility onboarding | ⏳ pending |
 | **M3 — Settings & polish** | Settings window, launch-at-login, status-item menu, import/export UI | ⏳ pending |
 | **M4 — Packaging** | `make-app.sh`, ad-hoc signing, install docs, tag v0.1.0 | ⏳ pending |

@@ -2,8 +2,10 @@
 
 ## Unit tests (automated)
 
-`swift test` — Swift Testing framework, targets `PermafrostCore` only (the executable is a
-thin shell; its logic lives in core precisely so it can be tested headlessly).
+`./scripts/test.sh` — Swift Testing framework, targets `PermafrostCore` only (the
+executable is a thin shell; its logic lives in core precisely so it can be tested
+headlessly). The script wraps `swift test` with the framework paths that Command Line
+Tools-only machines need; with full Xcode installed, plain `swift test` works too.
 
 Required coverage (these are the product's guarantees):
 
