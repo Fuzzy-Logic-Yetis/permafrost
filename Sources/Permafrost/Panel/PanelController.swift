@@ -150,7 +150,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         if input.modifiers == .command, let baseKey = input.baseKey, let digit = Int(baseKey),
             (1...9).contains(digit)
         {
-            model.commit(index: digit - 1)
+            model.commitQuickPaste(number: digit)
             return true
         }
         return false

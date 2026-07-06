@@ -149,3 +149,39 @@ are possible. Transient/auto-generated types remain skipped unconditionally.
 
 **Consequences.** Users who opt in trade safety for convenience with eyes open; the
 default remains safe. Export archives may contain secrets — SECURITY.md says so plainly.
+
+## ADR-012: Pinned section moves to the bottom; quick-paste digits address only recent items; bulk actions gain "Unpin All"
+
+**Context.** First real-world use (project owner, 2026-07-06) surfaced a genuine design
+flaw: with pinned items sorted to the *top* (the original M2 ordering), pinning something
+displaced the most recent copy from the front of the list and, worse, from the `⌘1`
+quick-paste slot — pressing `⌘1` after pinning an old item pasted the pinned item, not the
+newest copy. The owner's read: pinned items are things reused *over time*, not necessarily
+the most recently used thing, so they don't belong competing with "what did I just copy"
+for the top slot or the fast-paste numbers. Separately, the only bulk-history action was
+"Clear Unpinned" — there was no fast way to demote everything pinned back to normal history
+without deleting it outright.
+
+**Decision.**
+
+1. `ClipboardStore.items()` now orders unpinned entries first (by recency), with pinned
+   entries in their own section strictly after (most-recently-pinned first). This is a
+   product guarantee, not a display detail: `⌘1`–`⌘9` in `PanelModel.commitQuickPaste`
+   compute their bound from the live unpinned prefix, so a number key can never paste a
+   pinned item under the belief it's the latest copy.
+2. Pin section position and quick-paste scoping are **not configurable** — this is the one
+   correct behavior, not a preference toggle, matching the project's stance against
+   settings-surface creep (CLAUDE.md coding philosophy).
+3. Added `ClipboardStore.unpinAll()` — converts every pinned row back to unpinned in place
+   (no deletion). Combined with the existing `clearHistory(keepPinned:)`, the status-bar
+   menu and Settings → History Management now expose three tiers: Clear Unpinned History…
+   (safe to pinned), Unpin All Items… (safe, non-destructive — pinned content survives,
+   just loses its expiry exemption), Clear Everything… (destructive, both). All three stay
+   out of the panel's keyboard surface deliberately — the panel is optimized for speed, and
+   a bulk-destroy shortcut there is an accident waiting to happen.
+
+**Consequences.** Existing ordering tests and the ARCHITECTURE.md schema note were updated
+to match (recent-first, pinned-at-bottom). A store-level test
+(`unpinnedAlwaysPrecedePinnedRegardlessOfRecency`) protects the invariant the UI-layer
+quick-paste logic depends on, since the app target has no automated test harness of its
+own (executable is a thin shell over `PermafrostCore` by design).

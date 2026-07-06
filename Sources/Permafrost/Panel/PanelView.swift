@@ -39,7 +39,10 @@ struct PanelView: View {
     }
 
     private var itemList: some View {
-        ScrollViewReader { proxy in
+        // Quick-paste numbers address only the unpinned prefix (ADR-012); pinned
+        // items never carry a stale ⌘N badge even though they share this list.
+        let recentCount = model.items.prefix(while: { !$0.isPinned }).count
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
@@ -53,7 +56,9 @@ struct PanelView: View {
                         ItemCard(
                             item: item,
                             isSelected: index == model.selectedIndex,
-                            quickPasteIndex: index < 9 ? index + 1 : nil
+                            quickPasteIndex: index < recentCount && index < 9 ? index + 1 : nil,
+                            onTogglePin: { if let id = item.id { model.togglePin(id: id) } },
+                            onDelete: { if let id = item.id { model.deleteItem(id: id) } }
                         )
                         .id(item.id)
                         .onTapGesture { model.commit(index: index) }
@@ -74,8 +79,10 @@ struct PanelView: View {
         if index == 0 {
             return items[0].isPinned ? "PINNED" : "RECENT"
         }
-        if items[index - 1].isPinned && !items[index].isPinned {
-            return "RECENT"
+        // Store ordering is always unpinned → pinned (ADR-012); this is the only
+        // transition that can occur in a mixed list.
+        if !items[index - 1].isPinned && items[index].isPinned {
+            return "PINNED"
         }
         return nil
     }
@@ -105,7 +112,7 @@ struct PanelView: View {
             KeyHint(key: "⌫", label: "delete")
             KeyHint(key: "esc", label: "close")
             Spacer()
-            Text("\(model.items.count)")
+            Text(model.countLabel)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -138,11 +145,56 @@ private struct ItemCard: View {
     let item: ClipboardItem
     let isSelected: Bool
     let quickPasteIndex: Int?
+    let onTogglePin: () -> Void
+    let onDelete: () -> Void
+
+    @State private var isHovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             content
             Spacer(minLength: 0)
+            trailing
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+    }
+
+    /// State badges (pin/concealed/quick-number) at rest; mouse-first actions
+    /// (pin, share, delete) on hover — the same affordance as macOS's own
+    /// screenshot share panel, so the panel doesn't require the keyboard.
+    @ViewBuilder
+    private var trailing: some View {
+        if isHovering {
+            HStack(spacing: 6) {
+                Button(action: onTogglePin) {
+                    Image(systemName: item.isPinned ? "pin.slash" : "pin")
+                }
+                .buttonStyle(.plain)
+                .help(item.isPinned ? "Unpin" : "Pin")
+
+                ShareButton(items: item.shareableItems)
+                    .frame(width: 15, height: 15)
+                    .help("Share")
+
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.plain)
+                .help("Delete")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else {
             VStack(alignment: .trailing, spacing: 4) {
                 if item.isPinned {
                     Image(systemName: "pin.fill")
@@ -161,16 +213,6 @@ private struct ItemCard: View {
                 }
             }
         }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 1)
-        )
-        .contentShape(Rectangle())
     }
 
     @ViewBuilder

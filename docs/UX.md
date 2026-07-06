@@ -18,10 +18,6 @@ If an interaction needs the mouse, it's a bug in the design.
 ╭──────────────────────────────────────╮
 │ 🔍 Search…                           │
 ├──────────────────────────────────────┤
-│ 📌 PINNED                            │
-│ ┌──────────────────────────────────┐ │
-│ │ 555-0123 – office door code      │ │
-│ └──────────────────────────────────┘ │
 │ RECENT                               │
 │ ┌──────────────────────────────────┐ │
 │ │ https://github.com/Fuzzy-Logic…  │ │
@@ -30,18 +26,32 @@ If an interaction needs the mouse, it's a bug in the design.
 │ ├──────────────────────────────────┤ │
 │ │ SELECT * FROM clipboard_item…    │ │
 │ └──────────────────────────────────┘ │
+│ 📌 PINNED                            │
+│ ┌──────────────────────────────────┐ │
+│ │ 555-0123 – office door code      │ │
+│ └──────────────────────────────────┘ │
 ├──────────────────────────────────────┤
 │ ⏎ paste  ⌥P pin  ⌫ delete  esc close │
 ╰──────────────────────────────────────╯
 ```
 
-- Text cards: up to 3 lines, monospace-detected content keeps its shape, leading/trailing
-  whitespace visualized subtly. Source app + relative time in the caption.
+Pinned entries live in their own section **at the bottom** (ADR-012). They're things you
+reuse over time, not your most recent copy — pinning one must never bump it ahead of what
+you just copied, and must never steal the `⌘1` slot from it either.
+
+- Text cards: up to 3 lines, system font, standard truncation. Source app + relative time
+  in the caption. Monospace-aware rendering and whitespace visualization for code-like
+  content is a documented future enhancement (docs/BACKLOG.md), not yet implemented.
 - Image cards: thumbnail (max ~120 pt tall) + dimensions caption.
 - Concealed items (passwords, only when opt-in is enabled): shown with a 🔑 marker so the
   user always knows a secret is on screen. Otherwise identical behavior — visible,
   searchable, pinnable (owner's explicit decision; see SECURITY.md).
 - Selected card: accent-tinted border/background, follows system accent color.
+- **Hover actions** (mouse-first, ADR-012): hovering a card swaps its trailing badges for
+  three buttons — pin/unpin, share (opens the system share sheet via
+  `NSSharingServicePicker`, the same one macOS's own screenshot panel uses), and delete.
+  Lets a mouse user manage an item without touching the keyboard; the keyboard shortcuts
+  remain the fast path for everyone else.
 
 ## Keyboard map
 
@@ -49,12 +59,28 @@ If an interaction needs the mouse, it's a bug in the design.
 |---|---|
 | `⌥⌘V` | Open/close panel (global) |
 | type | Filter (search field always live) |
-| `↑` / `↓` | Move selection |
+| `↑` / `↓` | Move selection (moves through Recent, then Pinned) |
 | `⏎` | Paste selected into previous app, close |
-| `⌘1`–`⌘9` | Paste Nth visible item instantly |
+| `⌘1`–`⌘9` | Paste Nth **recent** item instantly — never addresses a pinned item, so pinning something never hijacks a quick-paste slot |
 | `⌥P` | Pin/unpin selected |
 | `⌫` (field empty) | Delete selected entry |
 | `Esc` | Clear search → close |
+
+## Bulk history actions
+
+Available from the status-bar menu and from Settings → History Management (both call the
+same store operations). Deliberately **not** available as bare keystrokes inside the fast,
+low-friction panel — an accidental keypress there shouldn't be able to wipe history.
+
+| Action | Effect |
+|---|---|
+| Clear Unpinned History… | Deletes unpinned entries. Pinned entries are untouched. |
+| Unpin All Items… | Converts every pinned entry back to normal history (not deleted — it now expires per your retention setting like everything else). |
+| Clear Everything… | Deletes all entries, pinned included. Strongest confirmation; irreversible. |
+
+Note: a status-item menu's key equivalents (e.g. the `,` shown next to Settings) only fire
+while that menu is open — they are not global shortcuts, so they don't compete with the app
+hotkey or risk firing by accident.
 
 ## First-run / onboarding
 

@@ -26,6 +26,7 @@ Core requirements (MVP):
 | **M2 — The panel** | NSPanel + SwiftUI UI, global hotkey, search, paste-on-select, pinning, accessibility onboarding | ✅ done |
 | **M3 — Settings & polish** | Settings window, launch-at-login, status-item menu, import/export UI | ✅ done |
 | **M4 — Packaging** | `make-app.sh`, ad-hoc signing, install docs, tag v0.1.0 | ✅ done |
+| **M5 — Pin lifecycle & hover actions** | ADR-012: recent/pinned section split, quick-paste bounded to recent; hover pin/share/delete; Unpin All / Clear Everything; dedup metadata refresh, import path validation, error surfacing from independent code review | ✅ done |
 
 Post-MVP direction: see [ROADMAP.md](ROADMAP.md).
 

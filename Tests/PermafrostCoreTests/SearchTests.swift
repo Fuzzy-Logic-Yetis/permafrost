@@ -54,11 +54,13 @@ import Testing
         #expect(!searched.contains { $0.kind == .image })
     }
 
-    @Test func searchRespectsPinnedFirstOrdering() throws {
+    @Test func pinnedMatchesAppearAfterUnpinnedInSearchResults() throws {
+        // ADR-012: pinning "Hello world" must not pull it ahead of the more
+        // recently-used unpinned match, even within filtered search results.
         let store = try seededStore()
         let target = try store.items().first { $0.text == "Hello world" }!
         try store.setPinned(true, id: target.id!)
         let results = try store.items(matching: "hello").map(\.text)
-        #expect(results.first == "Hello world")
+        #expect(results == ["hello permafrost", "Hello world"])
     }
 }

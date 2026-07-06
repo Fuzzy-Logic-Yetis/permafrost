@@ -2,6 +2,8 @@ import PermafrostCore
 import SwiftUI
 
 struct SettingsView: View {
+    let store: ClipboardStore
+
     @AppStorage(AppSettings.Keys.retentionDays) private var retentionDays = 30
     @AppStorage(AppSettings.Keys.maxUnpinnedCount) private var maxUnpinnedCount = 2000
     @AppStorage(AppSettings.Keys.hotkeyPreset) private var hotkeyPreset =
@@ -12,6 +14,11 @@ struct SettingsView: View {
     @State private var launchAtLogin = AppSettings.shared.launchAtLogin
     @State private var showConcealedWarning = false
     @State private var accessibilityTrusted = PasteService.isTrusted
+    @State private var showUnpinAllConfirm = false
+    @State private var showClearUnpinnedConfirm = false
+    @State private var showClearEverythingConfirm = false
+    @State private var pinnedCount = 0
+    @State private var totalCount = 0
 
     private let trustPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -104,6 +111,23 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Section {
+                HStack {
+                    Button("Clear Unpinned History…") { showClearUnpinnedConfirm = true }
+                    Button("Unpin All…") { showUnpinAllConfirm = true }
+                    Spacer()
+                    Button("Clear Everything…", role: .destructive) {
+                        showClearEverythingConfirm = true
+                    }
+                }
+            } header: {
+                Text("History Management")
+            } footer: {
+                Text("\(totalCount) items, \(pinnedCount) pinned")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .frame(width: 480)
@@ -111,6 +135,42 @@ struct SettingsView: View {
         .onReceive(trustPoll) { _ in
             accessibilityTrusted = PasteService.isTrusted
         }
+        .onAppear { refreshCounts() }
+        .alert("Clear unpinned history?", isPresented: $showClearUnpinnedConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear", role: .destructive) {
+                try? store.clearHistory(keepPinned: true)
+                refreshCounts()
+            }
+        } message: {
+            Text("Pinned entries are kept. This cannot be undone.")
+        }
+        .alert("Unpin all items?", isPresented: $showUnpinAllConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Unpin All") {
+                try? store.unpinAll()
+                refreshCounts()
+            }
+        } message: {
+            Text(
+                "Pinned entries become normal history and will expire per your retention "
+                    + "setting above. Content is not deleted."
+            )
+        }
+        .alert("Clear everything?", isPresented: $showClearEverythingConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear Everything", role: .destructive) {
+                try? store.clearHistory(keepPinned: false)
+                refreshCounts()
+            }
+        } message: {
+            Text("This deletes all clipboard history, including pinned items. This cannot be undone.")
+        }
+    }
+
+    private func refreshCounts() {
+        totalCount = (try? store.count()) ?? 0
+        pinnedCount = (try? store.pinnedCount()) ?? 0
     }
 
     /// Turning the toggle ON routes through the risk acknowledgment (ADR-011);

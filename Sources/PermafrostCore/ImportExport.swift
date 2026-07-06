@@ -14,6 +14,7 @@ public enum ImportExport {
         case missingManifest
         case unsupportedVersion(Int)
         case missingBlob(String)
+        case unsafeBlobPath(String)
     }
 
     struct Manifest: Codable {
@@ -107,9 +108,19 @@ public enum ImportExport {
             throw ImportError.unsupportedVersion(manifest.version)
         }
 
+        // Manifest paths are untrusted input (M-4): reject anything that could
+        // resolve outside the archive directory before touching the filesystem.
+        let root = directory.standardizedFileURL.path
         func blob(_ relativePath: String?) throws -> Data? {
             guard let relativePath else { return nil }
-            let url = directory.appendingPathComponent(relativePath)
+            guard !relativePath.hasPrefix("/"), !relativePath.split(separator: "/").contains("..")
+            else {
+                throw ImportError.unsafeBlobPath(relativePath)
+            }
+            let url = directory.appendingPathComponent(relativePath).standardizedFileURL
+            guard url.path == root || url.path.hasPrefix(root + "/") else {
+                throw ImportError.unsafeBlobPath(relativePath)
+            }
             guard FileManager.default.fileExists(atPath: url.path) else {
                 throw ImportError.missingBlob(relativePath)
             }

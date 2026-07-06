@@ -40,7 +40,11 @@ final class PasteService {
             }
         }
         if let id = item.id {
-            try? store.markUsed(id: id)
+            do {
+                try store.markUsed(id: id)
+            } catch {
+                Log.store.error("markUsed failed: \(error.localizedDescription)")
+            }
         }
     }
 

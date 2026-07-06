@@ -33,8 +33,9 @@ Menu-bar-only agent app (`LSUIElement`), no Dock icon. Two Swift modules:
 ┌──────────────────────▼──────────────────────────────────────┐
 │ PermafrostCore (library — Foundation/GRDB only, no AppKit)  │
 │                                                             │
-│  ClipboardStore   CRUD, dedup-by-hash, pin/unpin, search    │
-│  PermafrostDatabase  schema migrations, FTS5 sync           │
+│  ClipboardStore   CRUD, dedup-by-hash, pin/unpin, search,   │
+│                   schema migrations, FTS5 sync (owns all    │
+│                   SQL — there is no separate database type) │
 │  RetentionPolicy  pinned=forever; unpinned TTL + count cap  │
 │  Thumbnailer      ImageIO downscale for panel display       │
 │  ImportExport     versioned manifest.json + blobs directory │
@@ -55,7 +56,11 @@ Menu-bar-only agent app (`LSUIElement`), no Dock icon. Two Swift modules:
 2. **Recall**: `⌥⌘V` → `PanelController` shows the panel *without activating the app* (the
    target app keeps focus) → typing filters via FTS5 → `⏎` → `PasteService` writes the item
    to the pasteboard and synthesizes `⌘V` into the still-focused target app → panel closes,
-   `last_used_at` bumps.
+   `last_used_at` bumps. List order is unpinned-first-by-recency, then a pinned section
+   (ADR-012); `⌘1`–`⌘9` in `PanelModel.commitQuickPaste` are bounded to the unpinned prefix
+   so pinning something can never hijack a quick-paste slot. Hovering a card swaps its
+   badges for pin/share/delete buttons (`ShareButton` bridges `NSSharingServicePicker`,
+   since SwiftUI has no native share-picker API on macOS).
 3. **Expiry**: `RetentionPolicy` purge runs at launch, hourly, and after every insert.
    `DELETE WHERE is_pinned = 0 AND last_used_at < cutoff` — pinned rows are untouchable by
    design (the WHERE clause, not app logic, guarantees it).
@@ -75,7 +80,8 @@ CREATE TABLE clipboard_item (
   created_at    DATETIME NOT NULL,
   last_used_at  DATETIME NOT NULL,      -- copy-again or paste bumps this
   is_pinned     BOOLEAN NOT NULL DEFAULT 0,
-  pin_order     INTEGER                 -- stable ordering among pinned items
+  pin_order     INTEGER,                -- stable ordering among pinned items
+  is_concealed  BOOLEAN NOT NULL DEFAULT 0  -- password-manager content, opt-in (ADR-011)
 );
 -- + clipboard_item_fts: FTS5 external-content table on (text), trigger-synchronized
 ```

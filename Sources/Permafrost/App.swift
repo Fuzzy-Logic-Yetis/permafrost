@@ -2,7 +2,7 @@ import AppKit
 import PermafrostCore
 
 enum PermafrostVersion {
-    static let string = "0.1.0"
+    static let string = "0.2.0"
 }
 
 @main
@@ -135,6 +135,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         clearItem.target = self
         menu.addItem(clearItem)
 
+        let unpinAllItem = NSMenuItem(
+            title: "Unpin All Items…", action: #selector(unpinAll), keyEquivalent: "")
+        unpinAllItem.target = self
+        menu.addItem(unpinAllItem)
+
+        let clearEverythingItem = NSMenuItem(
+            title: "Clear Everything…", action: #selector(clearEverything), keyEquivalent: "")
+        clearEverythingItem.target = self
+        menu.addItem(clearEverythingItem)
+
         menu.addItem(.separator())
         menu.addItem(
             NSMenuItem(
@@ -159,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         if settingsWindowController == nil {
-            settingsWindowController = SettingsWindowController()
+            settingsWindowController = SettingsWindowController(store: store)
         }
         settingsWindowController?.showWindow()
     }
@@ -171,9 +181,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Clear")
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
-            try? store.clearHistory(keepPinned: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try store.clearHistory(keepPinned: true)
+        } catch {
+            presentOperationFailure(error)
         }
+    }
+
+    @objc private func unpinAll() {
+        let alert = NSAlert()
+        alert.messageText = "Unpin all items?"
+        alert.informativeText =
+            "Pinned entries become normal history and will expire per your retention setting. "
+            + "Content is not deleted."
+        alert.addButton(withTitle: "Unpin All")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try store.unpinAll()
+        } catch {
+            presentOperationFailure(error)
+        }
+    }
+
+    @objc private func clearEverything() {
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Clear everything?"
+        alert.informativeText =
+            "This deletes all clipboard history, including pinned items. This cannot be undone."
+        alert.addButton(withTitle: "Clear Everything")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try store.clearHistory(keepPinned: false)
+        } catch {
+            presentOperationFailure(error)
+        }
+    }
+
+    /// Destructive history operations fail loudly (an alert), not silently
+    /// (review M-3) — a swallowed failure here would let a user believe data
+    /// was cleared/unpinned when it wasn't.
+    private func presentOperationFailure(_ error: Error) {
+        Log.store.error("history operation failed: \(error.localizedDescription)")
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Operation failed"
+        alert.informativeText = error.localizedDescription
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     @objc private func exportHistory() {
@@ -198,8 +258,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Pinned entries never expire. Everything stays on this Mac.
             """
         alert.addButton(withTitle: "Got It")
+        alert.addButton(withTitle: "Enable Launch at Login")
         NSApp.activate(ignoringOtherApps: true)
-        alert.runModal()
+        if alert.runModal() == .alertSecondButtonReturn {
+            settings.launchAtLogin = true
+        }
     }
 
     private func showAccessibilityPrompt() {

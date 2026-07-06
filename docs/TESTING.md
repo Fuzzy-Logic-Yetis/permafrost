@@ -17,10 +17,17 @@ Required coverage (these are the product's guarantees):
 - **Search**: FTS prefix matching (`hel` finds "Hello world"), multi-token queries,
   queries with FTS-hostile characters (`"`, `*`, `(`) fall back safely, image items
   excluded from text search but present in unfiltered list.
-- **Ordering**: pinned first (stable `pin_order`), then unpinned by `last_used_at` desc.
+- **Ordering** (ADR-012): unpinned first by `last_used_at` desc, then pinned in their own
+  section (most-recently-pinned first, stable `pin_order`) — unpinned entries must always
+  precede pinned ones regardless of age, since the panel's `⌘1`–`⌘9` quick-paste bound
+  depends on that invariant.
+- **Dedup metadata**: re-copying identical text refreshes `sourceApp` and `richData` to the
+  new capture; `isConcealed` is OR'd (sticky in the safer direction), never cleared by a
+  later non-concealed copy of the same content.
 - **Import/export**: round-trip preserves content, kind, pinned state, timestamps; import
   into a store with overlapping content skips duplicates; unknown manifest version fails
-  loudly.
+  loudly; a manifest blob path outside the archive root (absolute path or `..` traversal)
+  is rejected before the filesystem is touched.
 - **Thumbnails**: image capture produces a thumbnail ≤ the max pixel size; corrupt image
   data doesn't crash.
 
@@ -59,6 +66,21 @@ Security → Accessibility (remove stale entry, re-add). To reset for testing:
     without relaunch (hotkey re-registers immediately).
 12. **Import/export**: export archive, wipe DB (quit app, delete
     `~/Library/Application Support/Permafrost/`), relaunch, import → history and pins back.
+13. **Pin ordering & quick-paste (ADR-012)**: pin an older item, then copy something new →
+    `⌥⌘V` → the new copy is at the top of RECENT and pastes with `⌘1`; the pinned item shows
+    under a separate PINNED header at the bottom and never responds to a number key.
+14. **Hover actions**: hover a card → pin/share/delete buttons replace the badges; clicking
+    each works and does **not** also trigger paste-on-select (the card's tap-to-paste must
+    not fire underneath a button click).
+15. **Bulk history actions** (menu bar *and* Settings → History Management): Clear Unpinned
+    History (pinned survives), Unpin All Items (pinned items reappear in RECENT, no data
+    lost, then expire per retention like anything else), Clear Everything (wipes all,
+    strongest confirmation). Trigger a failure (e.g. quit the app mid-operation isn't
+    testable manually, but confirm the failure path exists in code review) — on success,
+    verify Settings' "N items, M pinned" footer updates immediately.
+16. **Welcome alert**: delete `didShowWelcome` from defaults (or fresh install), launch →
+    alert offers **Got It** and **Enable Launch at Login**; the latter actually toggles the
+    login item (check System Settings → General → Login Items).
 
 ## Performance spot checks
 

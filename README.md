@@ -12,10 +12,12 @@ Local-first. Keyboard-first. No cloud, no analytics, no network code at all.
 
 - **Clipboard history** — text, rich text, and images (including screen snips via ⌃⇧⌘4)
 - **One hotkey** — `⌥⌘V` opens the panel over whatever you're doing; `Esc` dismisses it
-- **Pinning** — pinned entries never expire, ever
+- **Pinning** — pinned entries never expire, live in their own section, and never steal a
+  quick-paste slot from your latest copy
 - **Time-based retention** — unpinned entries expire automatically (1/7/30/90 days, or never)
 - **Search** — type to filter instantly (SQLite FTS5 under the hood)
 - **Paste on select** — `⏎` pastes straight into the app you were using
+- **Mouse-friendly too** — hover any entry for pin / share / delete buttons
 - **Menu bar app** — no Dock icon, no window clutter
 - **Import / export** — your history is yours; take it with you
 
@@ -72,7 +74,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full story.
 
 ## Status
 
-**v0.1.0 (MVP)** — under active development. See [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).
+**v0.2.0** — under active development. See [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).
 
 ## License
 

@@ -64,7 +64,11 @@ public final class ClipboardStore: Sendable {
     // MARK: - Capture
 
     /// Saves a capture. Identical content (same hash) is deduplicated: the existing
-    /// row keeps its pin state and just moves to the top via `last_used_at`.
+    /// row keeps its pin state, but `sourceApp` and `richData` are refreshed to this
+    /// copy's context (stale formatting/app captions would otherwise survive
+    /// indefinitely), and `isConcealed` is OR'd rather than replaced — once content
+    /// has been recorded as sensitive, a later coincidental non-concealed copy of the
+    /// same text must not un-mark it.
     @discardableResult
     public func save(_ capture: ClipboardCapture, now: Date = Date()) throws -> ClipboardItem {
         let hash = capture.contentHash
@@ -80,6 +84,9 @@ public final class ClipboardStore: Sendable {
                 .fetchOne(db)
             {
                 existing.lastUsedAt = now
+                existing.sourceApp = capture.sourceApp
+                existing.richData = capture.richData
+                existing.isConcealed = existing.isConcealed || capture.isConcealed
                 try existing.update(db)
                 return existing
             }
@@ -105,15 +112,19 @@ public final class ClipboardStore: Sendable {
 
     // MARK: - Reading
 
-    /// Pinned first (stable pin order), then unpinned by recency. A non-empty query
-    /// filters via FTS5 prefix matching; image items have no text and never match.
+    /// Unpinned entries first (by recency), pinned entries in their own section at
+    /// the bottom (most-recently-pinned first). This ordering is a product
+    /// guarantee (ADR-012): pinning something never displaces your latest copy from
+    /// the front of the list or from the `⌘1`–`⌘9` quick-paste slots, which address
+    /// only the unpinned prefix. A non-empty query filters via FTS5 prefix matching;
+    /// image items have no text and never match.
     public func items(matching query: String? = nil, limit: Int = 500) throws -> [ClipboardItem] {
         let trimmed = (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return try dbQueue.read { db in
             let ordering = """
-                ORDER BY is_pinned DESC,
-                         CASE WHEN is_pinned = 1 THEN pin_order END ASC,
-                         last_used_at DESC
+                ORDER BY is_pinned ASC,
+                         CASE WHEN is_pinned = 0 THEN last_used_at END DESC,
+                         CASE WHEN is_pinned = 1 THEN pin_order END DESC
                 LIMIT ?
                 """
             if trimmed.isEmpty {
@@ -143,6 +154,13 @@ public final class ClipboardStore: Sendable {
     public func count() throws -> Int {
         try dbQueue.read { db in
             try ClipboardItem.fetchCount(db)
+        }
+    }
+
+    public func pinnedCount() throws -> Int {
+        try dbQueue.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM clipboard_item WHERE is_pinned = 1")
+                ?? 0
         }
     }
 
@@ -195,6 +213,16 @@ public final class ClipboardStore: Sendable {
             } else {
                 _ = try ClipboardItem.deleteAll(db)
             }
+        }
+    }
+
+    /// Converts every pinned item back to normal history. Non-destructive: content
+    /// is kept, it simply stops being exempt from retention (ADR-012).
+    public func unpinAll() throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE clipboard_item SET is_pinned = 0, pin_order = NULL WHERE is_pinned = 1"
+            )
         }
     }
 

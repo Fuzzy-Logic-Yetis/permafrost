@@ -88,4 +88,42 @@ import Testing
             try ImportExport.importArchive(from: dir, into: store)
         }
     }
+
+    /// Review M-4: manifest blob paths are untrusted input and must not escape
+    /// the archive directory via traversal or an absolute path.
+    private func writeHostileManifest(imageFile: String, in dir: URL) throws {
+        let manifest = """
+            {"version": 1, "exportedAt": "2026-07-05T00:00:00Z", "items": [
+                {"contentHash": "abc", "kind": "text", "text": null, "sourceApp": null,
+                 "createdAt": "2026-07-05T00:00:00Z", "lastUsedAt": "2026-07-05T00:00:00Z",
+                 "isPinned": false, "pinOrder": null, "isConcealed": false,
+                 "imageFile": "\(imageFile)", "thumbnailFile": null, "richDataFile": null}
+            ]}
+            """
+        try manifest.write(
+            to: dir.appendingPathComponent(ImportExport.manifestFileName),
+            atomically: true, encoding: .utf8)
+    }
+
+    @Test func hostileManifestPathWithTraversalIsRejected() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writeHostileManifest(imageFile: "../outside.png", in: dir)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.unsafeBlobPath("../outside.png")) {
+            try ImportExport.importArchive(from: dir, into: store)
+        }
+    }
+
+    @Test func hostileManifestPathWithAbsolutePathIsRejected() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try writeHostileManifest(imageFile: "/etc/passwd", in: dir)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.unsafeBlobPath("/etc/passwd")) {
+            try ImportExport.importArchive(from: dir, into: store)
+        }
+    }
 }

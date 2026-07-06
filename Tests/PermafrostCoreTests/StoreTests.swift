@@ -29,19 +29,94 @@ import Testing
         #expect(try store.count() == 1)
     }
 
-    @Test func orderingIsPinnedFirstThenRecency() throws {
+    @Test func dedupRefreshesSourceAppAndRichDataToLatestCopy() throws {
+        // Review H-1: stale metadata from the first copy must not survive a recopy —
+        // otherwise old RTF formatting or a wrong source-app caption lingers forever.
+        let store = try ClipboardStore.inMemory()
+        _ = try store.save(
+            ClipboardCapture(
+                text: "same", richData: Data("rich-v1".utf8), sourceApp: "AppOne"),
+            now: now)
+
+        let second = try store.save(
+            ClipboardCapture(
+                text: "same", richData: Data("rich-v2".utf8), sourceApp: "AppTwo"),
+            now: now.addingTimeInterval(60))
+
+        #expect(try store.count() == 1)
+        #expect(second.sourceApp == "AppTwo")
+        #expect(second.richData == Data("rich-v2".utf8))
+    }
+
+    @Test func dedupClearsRichDataWhenLatestCopyHasNone() throws {
+        let store = try ClipboardStore.inMemory()
+        _ = try store.save(
+            ClipboardCapture(text: "same", richData: Data("rich".utf8)), now: now)
+
+        let second = try store.save(
+            ClipboardCapture(text: "same"), now: now.addingTimeInterval(60))
+
+        #expect(second.richData == nil)
+    }
+
+    @Test func dedupIsConcealedIsStickyInSaferDirection() throws {
+        // Review H-1: once content has been recorded as sensitive, a later
+        // coincidental non-concealed copy of the same text must not un-mark it.
+        let store = try ClipboardStore.inMemory()
+        _ = try store.save(ClipboardCapture(text: "secretish"), now: now)
+        let second = try store.save(
+            ClipboardCapture(text: "secretish", isConcealed: true),
+            now: now.addingTimeInterval(1))
+        #expect(second.isConcealed)
+
+        let third = try store.save(
+            ClipboardCapture(text: "secretish", isConcealed: false),
+            now: now.addingTimeInterval(2))
+        #expect(third.isConcealed)
+    }
+
+    @Test func orderingIsRecentFirstThenPinnedAtBottom() throws {
+        // ADR-012: pinning must never displace the most recent copy from the
+        // front of the list or steal its ⌘1 quick-paste slot.
         let store = try ClipboardStore.inMemory()
         for i in 0..<4 {
             try store.save(
                 ClipboardCapture(text: "t\(i)"), now: now.addingTimeInterval(TimeInterval(i)))
         }
-        // Pin t1 then t0: pin order must be stable (t1 pinned first).
+        // Pin t1 then t0: within the pinned section, most-recently-pinned is first.
         let all = try store.items()
         try store.setPinned(true, id: all.first { $0.text == "t1" }!.id!)
         try store.setPinned(true, id: all.first { $0.text == "t0" }!.id!)
 
         let ordered = try store.items().map(\.text)
-        #expect(ordered == ["t1", "t0", "t3", "t2"])
+        #expect(ordered == ["t3", "t2", "t0", "t1"])
+    }
+
+    @Test func unpinnedAlwaysPrecedePinnedRegardlessOfRecency() throws {
+        let store = try ClipboardStore.inMemory()
+        let old = try store.save(
+            ClipboardCapture(text: "ancient"), now: now.addingTimeInterval(-1000))
+        try store.setPinned(true, id: old.id!)
+        try store.save(ClipboardCapture(text: "brand new"), now: now)
+
+        #expect(try store.items().map(\.text) == ["brand new", "ancient"])
+    }
+
+    @Test func unpinAllConvertsPinnedToUnpinnedWithoutDeleting() throws {
+        let store = try ClipboardStore.inMemory()
+        let a = try store.save(ClipboardCapture(text: "a"), now: now)
+        let b = try store.save(
+            ClipboardCapture(text: "b"), now: now.addingTimeInterval(1))
+        try store.setPinned(true, id: a.id!)
+        try store.setPinned(true, id: b.id!)
+        #expect(try store.pinnedCount() == 2)
+
+        try store.unpinAll()
+
+        #expect(try store.pinnedCount() == 0)
+        let items = try store.items()
+        #expect(items.count == 2)
+        #expect(items.allSatisfy { !$0.isPinned && $0.pinOrder == nil })
     }
 
     @Test func deleteRemovesRow() throws {
