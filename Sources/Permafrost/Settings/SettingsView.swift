@@ -1,0 +1,130 @@
+import PermafrostCore
+import SwiftUI
+
+struct SettingsView: View {
+    @AppStorage(AppSettings.Keys.retentionDays) private var retentionDays = 30
+    @AppStorage(AppSettings.Keys.maxUnpinnedCount) private var maxUnpinnedCount = 2000
+    @AppStorage(AppSettings.Keys.hotkeyPreset) private var hotkeyPreset =
+        HotkeyPreset.optionCommandV.rawValue
+    @AppStorage(AppSettings.Keys.recordConcealed) private var recordConcealed = false
+    @AppStorage(AppSettings.Keys.maxImageMegabytes) private var maxImageMegabytes = 10
+
+    @State private var launchAtLogin = AppSettings.shared.launchAtLogin
+    @State private var showConcealedWarning = false
+    @State private var accessibilityTrusted = PasteService.isTrusted
+
+    private let trustPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Form {
+            Section("General") {
+                Picker("Open panel with", selection: $hotkeyPreset) {
+                    ForEach(HotkeyPreset.allCases, id: \.rawValue) { preset in
+                        Text(preset.display).tag(preset.rawValue)
+                    }
+                }
+                Toggle("Launch at login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) {
+                        AppSettings.shared.launchAtLogin = launchAtLogin
+                    }
+            }
+
+            Section {
+                Picker("Unpinned entries expire after", selection: $retentionDays) {
+                    Text("1 day").tag(1)
+                    Text("7 days").tag(7)
+                    Text("30 days").tag(30)
+                    Text("90 days").tag(90)
+                    Text("Never").tag(0)
+                }
+                Picker("Keep at most", selection: $maxUnpinnedCount) {
+                    Text("500 entries").tag(500)
+                    Text("2,000 entries").tag(2000)
+                    Text("10,000 entries").tag(10000)
+                    Text("Unlimited").tag(0)
+                }
+            } header: {
+                Text("Retention")
+            } footer: {
+                Text("Pinned entries never expire — that's the whole point.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Images") {
+                Picker("Skip images larger than", selection: $maxImageMegabytes) {
+                    Text("5 MB").tag(5)
+                    Text("10 MB").tag(10)
+                    Text("25 MB").tag(25)
+                    Text("50 MB").tag(50)
+                }
+            }
+
+            Section {
+                Toggle("Record concealed content (passwords)", isOn: concealedBinding)
+                    .alert("Record passwords in clipboard history?", isPresented: $showConcealedWarning) {
+                        Button("Cancel", role: .cancel) {}
+                        Button("I Understand the Risk") { recordConcealed = true }
+                    } message: {
+                        Text(
+                            """
+                            Passwords you copy will be stored in plain text in Permafrost's \
+                            local database, will appear in the history panel, can be pinned, \
+                            and will be included in exports. Anyone with access to this Mac \
+                            user account can read them.
+                            """
+                        )
+                    }
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("Recorded passwords are marked with a key icon in the panel.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Permissions") {
+                LabeledContent("Accessibility (paste-on-select)") {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(accessibilityTrusted ? Color.green : Color.orange)
+                            .frame(width: 8, height: 8)
+                        Text(accessibilityTrusted ? "Granted" : "Not granted")
+                            .foregroundStyle(.secondary)
+                        if !accessibilityTrusted {
+                            Button("Open System Settings") {
+                                PasteService.requestTrust()
+                                NSWorkspace.shared.open(
+                                    URL(
+                                        string:
+                                            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+                                    )!)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
+        .onReceive(trustPoll) { _ in
+            accessibilityTrusted = PasteService.isTrusted
+        }
+    }
+
+    /// Turning the toggle ON routes through the risk acknowledgment (ADR-011);
+    /// turning it OFF is immediate.
+    private var concealedBinding: Binding<Bool> {
+        Binding(
+            get: { recordConcealed },
+            set: { newValue in
+                if newValue {
+                    showConcealedWarning = true
+                } else {
+                    recordConcealed = false
+                }
+            }
+        )
+    }
+}
