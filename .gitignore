@@ -1,0 +1,23 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved.lock
+
+# Xcode (if added later)
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+xcuserdata/
+
+# macOS
+.DS_Store
+
+# Build artifacts
+dist/
+*.app
+*.dmg
+*.zip
+
+# Editors
+.vscode/settings.json
+.idea/
