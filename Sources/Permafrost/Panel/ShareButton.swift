@@ -29,6 +29,7 @@ struct ShareButton: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    @MainActor
     final class Coordinator: NSObject {
         var items: [Any] = []
         weak var button: NSButton?
