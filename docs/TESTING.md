@@ -162,6 +162,10 @@ outside the app (e.g. CI or a broken build that won't launch):
     is draggable via its title bar and resizable via its edges (found 2026-07-07: it had
     grown taller than the screen as sections were added, with no way to reposition it since
     it also wasn't resizable at the time).
+19. **Pause Capture**: status menu → Pause Capture shows a checkmark and the snowflake
+    tints orange; copy a unique string while paused → it does not appear in `⌥⌘V`; uncheck
+    Pause Capture, copy another unique string → the second string appears, while the skipped
+    paused string is not backfilled. Settings → General mirrors the paused state.
 
 ## Performance spot checks
 

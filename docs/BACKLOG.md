@@ -13,7 +13,9 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    exports all 10 `.iconset` sizes, converted with `iconutil`). Wired into
    `scripts/make-app.sh` (`CFBundleIconFile` in `Info.plist`); `.icns` committed as a
    binary resource, not regenerated per build.
-3. **Pause capture** — status-item menu toggle to temporarily stop recording.
+3. ~~Pause capture~~ — **DONE 2026-07-07.** Status-item menu toggle (mirrored in
+   Settings → General) persists `capturePaused`; while paused, pasteboard changes advance
+   the watcher checkpoint but are not saved, so skipped items are not backfilled on resume.
 4. **Per-app exclusion list** — never record from user-chosen apps (e.g., a password
    manager that doesn't set concealed types, a VNC client).
 5. **Background inserts for large images** — move image writes off the main actor if
