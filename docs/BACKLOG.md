@@ -14,8 +14,12 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    `scripts/make-app.sh` (`CFBundleIconFile` in `Info.plist`); `.icns` committed as a
    binary resource, not regenerated per build.
 3. **Pause capture** — status-item menu toggle to temporarily stop recording.
-4. **Per-app exclusion list** — never record from user-chosen apps (e.g., a password
-   manager that doesn't set concealed types, a VNC client).
+4. ~~Per-app exclusion list~~ — **DONE 2026-07-07.** Settings → Excluded Apps lets you add
+   any installed app via an Open panel; Permafrost matches on bundle identifier (stable
+   across renames, unlike the display name) and skips capture entirely — before the
+   concealed-type check, before touching the pasteboard payload — whenever that app is
+   frontmost. Excluded apps are stored as JSON in UserDefaults (`AppSettings.excludedApps`),
+   consistent with the existing settings pattern.
 5. **Background inserts for large images** — move image writes off the main actor if
    Instruments shows panel jank (see ARCHITECTURE.md → Concurrency).
 6. **Preview pane** — space bar quick-look of full text/image for the selected item.

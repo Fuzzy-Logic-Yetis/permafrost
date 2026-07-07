@@ -2,6 +2,16 @@ import Foundation
 import PermafrostCore
 import ServiceManagement
 
+/// An app excluded from clipboard capture, identified by bundle ID (stable across
+/// launches and renames); the display name is cached alongside it so the Settings
+/// list can show something readable even while the app isn't running.
+struct ExcludedApp: Codable, Identifiable, Equatable {
+    var bundleID: String
+    var displayName: String
+
+    var id: String { bundleID }
+}
+
 /// UserDefaults-backed settings. SwiftUI views bind via @AppStorage on the same keys;
 /// this type is the single place that interprets raw values (e.g. into RetentionPolicy).
 @MainActor
@@ -15,6 +25,7 @@ final class AppSettings {
         static let recordConcealed = "recordConcealed"
         static let maxImageMegabytes = "maxImageMegabytes"
         static let didShowWelcome = "didShowWelcome"
+        static let excludedApps = "excludedApps"  // JSON-encoded [ExcludedApp]
     }
 
     private let defaults = UserDefaults.standard
@@ -54,6 +65,35 @@ final class AppSettings {
     var didShowWelcome: Bool {
         get { defaults.bool(forKey: Keys.didShowWelcome) }
         set { defaults.set(newValue, forKey: Keys.didShowWelcome) }
+    }
+
+    var excludedApps: [ExcludedApp] {
+        get {
+            guard let data = defaults.data(forKey: Keys.excludedApps) else { return [] }
+            return (try? JSONDecoder().decode([ExcludedApp].self, from: data)) ?? []
+        }
+        set {
+            let data = try? JSONEncoder().encode(newValue)
+            defaults.set(data, forKey: Keys.excludedApps)
+        }
+    }
+
+    private var excludedBundleIDs: Set<String> {
+        Set(excludedApps.map(\.bundleID))
+    }
+
+    func isExcluded(bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return excludedBundleIDs.contains(bundleID)
+    }
+
+    func addExcludedApp(_ app: ExcludedApp) {
+        guard !excludedBundleIDs.contains(app.bundleID) else { return }
+        excludedApps.append(app)
+    }
+
+    func removeExcludedApp(bundleID: String) {
+        excludedApps.removeAll { $0.bundleID == bundleID }
     }
 
     /// Login item state via SMAppService. Registration only works from a real .app

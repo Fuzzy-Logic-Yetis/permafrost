@@ -162,6 +162,10 @@ outside the app (e.g. CI or a broken build that won't launch):
     is draggable via its title bar and resizable via its edges (found 2026-07-07: it had
     grown taller than the screen as sections were added, with no way to reposition it since
     it also wasn't resizable at the time).
+19. **Per-app exclusion**: Settings → Excluded Apps → Add App…, pick an app (e.g. Terminal)
+    → it appears in the list. Switch to that app, copy text → `⌥⌘V` → item does NOT appear.
+    Remove it from the list, copy the same text again → it now appears. Quit and relaunch
+    Permafrost → the exclusion list persists.
 
 ## Performance spot checks
 
