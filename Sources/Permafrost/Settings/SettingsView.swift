@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import PermafrostCore
 import SwiftUI
 
@@ -21,6 +22,10 @@ struct SettingsView: View {
     @State private var showClearUnpinnedConfirm = false
     @State private var showClearEverythingConfirm = false
     @State private var showResetPermissionsConfirm = false
+    @State private var customHotkey = AppSettings.shared.customHotkey
+    @State private var isRecordingHotkey = false
+    @State private var hotkeyRecorderMessage: String?
+    @State private var hotkeyRecorderMessageIsError = false
     @State private var pinnedCount = 0
     @State private var totalCount = 0
     @State private var excludedApps = AppSettings.shared.excludedApps
@@ -34,6 +39,86 @@ struct SettingsView: View {
                     ForEach(HotkeyPreset.allCases, id: \.rawValue) { preset in
                         Text(preset.display).tag(preset.rawValue)
                     }
+                }
+                .onChange(of: hotkeyPreset) {
+                    AppSettings.shared.customHotkey = nil
+                    customHotkey = nil
+                    isRecordingHotkey = false
+                    hotkeyRecorderMessage = nil
+                    hotkeyRecorderMessageIsError = false
+                }
+                LabeledContent("Active hotkey") {
+                    Text(AppSettings.shared.hotkeyDisplay)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(customHotkey == nil ? .secondary : .primary)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Button(isRecordingHotkey ? "Press Shortcut…" : "Record Custom…") {
+                            isRecordingHotkey = true
+                            hotkeyRecorderMessage = "Press a key with ⌘, ⌥, or ⌃. Esc cancels."
+                            hotkeyRecorderMessageIsError = false
+                        }
+                        .disabled(isRecordingHotkey)
+
+                        if isRecordingHotkey {
+                            Button("Cancel") {
+                                isRecordingHotkey = false
+                                hotkeyRecorderMessage = nil
+                                hotkeyRecorderMessageIsError = false
+                            }
+                        }
+
+                        if customHotkey != nil {
+                            Button("Use Selected Preset") {
+                                AppSettings.shared.customHotkey = nil
+                                customHotkey = nil
+                                isRecordingHotkey = false
+                                hotkeyRecorderMessage = nil
+                                hotkeyRecorderMessageIsError = false
+                            }
+                        }
+
+                        Button("Reset to Default") {
+                            hotkeyPreset = HotkeyPreset.optionCommandV.rawValue
+                            AppSettings.shared.customHotkey = nil
+                            customHotkey = nil
+                            isRecordingHotkey = false
+                            hotkeyRecorderMessage = nil
+                            hotkeyRecorderMessageIsError = false
+                        }
+                        .disabled(
+                            customHotkey == nil && hotkeyPreset == HotkeyPreset.optionCommandV.rawValue
+                        )
+                    }
+
+                    if let hotkeyRecorderMessage {
+                        Text(hotkeyRecorderMessage)
+                            .font(.caption)
+                            .foregroundStyle(hotkeyRecorderMessageIsError ? .red : .secondary)
+                    }
+
+                    HotkeyRecorderField(
+                        isRecording: $isRecordingHotkey,
+                        onRecord: { shortcut in
+                            AppSettings.shared.customHotkey = shortcut
+                            customHotkey = shortcut
+                            isRecordingHotkey = false
+                            hotkeyRecorderMessage = "Recorded custom shortcut: \(shortcut.display)"
+                            hotkeyRecorderMessageIsError = false
+                        },
+                        onCancel: {
+                            isRecordingHotkey = false
+                            hotkeyRecorderMessage = nil
+                            hotkeyRecorderMessageIsError = false
+                        },
+                        onInvalid: {
+                            hotkeyRecorderMessage = "Use at least one of ⌘, ⌥, or ⌃ so the shortcut is safe globally."
+                            hotkeyRecorderMessageIsError = true
+                        }
+                    )
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
                 }
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) {
@@ -285,5 +370,62 @@ struct SettingsView: View {
                 }
             }
         )
+    }
+}
+
+private struct HotkeyRecorderField: NSViewRepresentable {
+    @Binding var isRecording: Bool
+    var onRecord: (HotkeyShortcut) -> Void
+    var onCancel: () -> Void
+    var onInvalid: () -> Void
+
+    func makeNSView(context: Context) -> RecorderView {
+        let view = RecorderView()
+        view.onRecord = onRecord
+        view.onCancel = onCancel
+        view.onInvalid = onInvalid
+        return view
+    }
+
+    func updateNSView(_ view: RecorderView, context: Context) {
+        view.onRecord = onRecord
+        view.onCancel = onCancel
+        view.onInvalid = onInvalid
+        view.isRecording = isRecording
+        if isRecording {
+            DispatchQueue.main.async {
+                view.window?.makeFirstResponder(view)
+            }
+        }
+    }
+
+    final class RecorderView: NSView {
+        var isRecording = false
+        var onRecord: (HotkeyShortcut) -> Void = { _ in }
+        var onCancel: () -> Void = {}
+        var onInvalid: () -> Void = {}
+
+        override var acceptsFirstResponder: Bool { true }
+
+        override func keyDown(with event: NSEvent) {
+            guard isRecording else {
+                super.keyDown(with: event)
+                return
+            }
+
+            if Int(event.keyCode) == kVK_Escape {
+                onCancel()
+                return
+            }
+
+            guard let shortcut = HotkeyShortcut.fromEvent(
+                keyCode: event.keyCode,
+                modifiers: event.modifierFlags
+            ) else {
+                onInvalid()
+                return
+            }
+            onRecord(shortcut)
+        }
     }
 }

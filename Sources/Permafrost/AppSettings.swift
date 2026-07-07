@@ -22,6 +22,8 @@ final class AppSettings {
         static let retentionDays = "retentionDays"  // 0 = keep forever
         static let maxUnpinnedCount = "maxUnpinnedCount"  // 0 = unlimited
         static let hotkeyPreset = "hotkeyPreset"
+        static let customHotkeyKeyCode = "customHotkeyKeyCode"
+        static let customHotkeyModifiers = "customHotkeyModifiers"
         static let recordConcealed = "recordConcealed"
         static let capturePaused = "capturePaused"
         static let maxImageMegabytes = "maxImageMegabytes"
@@ -54,6 +56,37 @@ final class AppSettings {
     var hotkeyPreset: HotkeyPreset {
         HotkeyPreset(rawValue: defaults.string(forKey: Keys.hotkeyPreset) ?? "")
             ?? .optionCommandV
+    }
+
+    var customHotkey: HotkeyShortcut? {
+        get {
+            guard defaults.object(forKey: Keys.customHotkeyKeyCode) != nil,
+                defaults.object(forKey: Keys.customHotkeyModifiers) != nil
+            else { return nil }
+            let shortcut = HotkeyShortcut(
+                keyCode: UInt32(defaults.integer(forKey: Keys.customHotkeyKeyCode)),
+                carbonModifiers: UInt32(defaults.integer(forKey: Keys.customHotkeyModifiers))
+            )
+            guard shortcut.isValidGlobalShortcut else { return nil }
+            return shortcut
+        }
+        set {
+            if let newValue {
+                defaults.set(Int(newValue.keyCode), forKey: Keys.customHotkeyKeyCode)
+                defaults.set(Int(newValue.carbonModifiers), forKey: Keys.customHotkeyModifiers)
+            } else {
+                defaults.removeObject(forKey: Keys.customHotkeyKeyCode)
+                defaults.removeObject(forKey: Keys.customHotkeyModifiers)
+            }
+        }
+    }
+
+    var effectiveHotkey: HotkeyShortcut {
+        customHotkey ?? hotkeyPreset.shortcut
+    }
+
+    var hotkeyDisplay: String {
+        effectiveHotkey.display
     }
 
     var recordConcealed: Bool {

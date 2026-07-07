@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         HotkeyManager.requestInputMonitoringAccessIfNeeded()
         hotkeyManager.onHotkey = { [weak self] in self?.panelController.toggle() }
-        hotkeyManager.register(preset: settings.hotkeyPreset)
+        hotkeyManager.register(shortcut: settings.effectiveHotkey)
         observeSettingsChanges()
         observeFrontmostAppChanges()
 
@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.hotkeyManager.register(preset: self.settings.hotkeyPreset)
+                self.hotkeyManager.register(shortcut: self.settings.effectiveHotkey)
                 self.refreshOpenMenuItemTitle()
                 self.refreshCaptureIndicatorState()
             }
@@ -126,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         let openItem = NSMenuItem(
-            title: "Open Permafrost  (\(settings.hotkeyPreset.display))",
+            title: "Open Permafrost  (\(settings.hotkeyDisplay))",
             action: #selector(openPanel), keyEquivalent: "")
         openItem.target = self
         openItem.tag = MenuTag.open.rawValue
@@ -206,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshOpenMenuItemTitle() {
         statusItem?.menu?.item(withTag: MenuTag.open.rawValue)?.title =
-            "Open Permafrost  (\(settings.hotkeyPreset.display))"
+            "Open Permafrost  (\(settings.hotkeyDisplay))"
     }
 
     private func refreshCaptureIndicatorState() {

@@ -70,6 +70,11 @@ preset list; a full custom recorder is backlogged.
 
 **Consequences.** ~80 lines of well-understood code, zero dependencies.
 
+**Follow-up 2026-07-07.** The custom recorder was implemented natively instead of adopting
+`KeyboardShortcuts`, preserving ADR-003's one-dependency budget. Presets remain the default
+and fallback behavior; a recorded custom shortcut is stored as Carbon key code/modifier
+values in UserDefaults and passed through the same `RegisterEventHotKey` wrapper.
+
 ## ADR-006: Paste-on-select via CGEvent ⌘V synthesis + Accessibility permission
 
 **Context.** "Select → it pastes" is the essence of Win+V. The only way to paste into

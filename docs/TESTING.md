@@ -170,6 +170,13 @@ outside the app (e.g. CI or a broken build that won't launch):
     → it appears in the list. Switch to that app, copy text → `⌥⌘V` → item does NOT appear.
     Remove it from the list, copy the same text again → it now appears. Quit and relaunch
     Permafrost → the exclusion list persists.
+21. **Custom hotkey recorder**: Settings → General → Record Custom…, press a chord with at
+    least one of `⌘`, `⌥`, or `⌃` (for example `⌃⌥H`) → Active hotkey and the status-menu
+    Open title update immediately, and the new chord opens/closes the panel without
+    relaunch. Try a plain key or Shift-only chord → it is rejected. Record again and press
+    `Esc` or Cancel → the old shortcut remains. Use Selected Preset → the chosen preset
+    works again. Reset to Default → `⌥⌘V` works again. Quit/relaunch → the last custom
+    shortcut persists if one was active.
 
 ## Performance spot checks
 
