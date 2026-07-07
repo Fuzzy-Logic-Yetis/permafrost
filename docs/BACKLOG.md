@@ -58,11 +58,13 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
     custom registration, failed first custom registration falling back to the selected
     preset, and failed replacement custom registration restoring the previous working
     custom hotkey while reporting the rejected chord.
-11. **Preview-mode keyboard-routing tests** — `PanelController.handle` lets paste/delete/
-    pin/quick-paste act on the previewed item while the overlay is open (documented in
-    docs/UX.md, review L-1). `PanelModel` already has app-target test coverage
-    (docs/BACKLOG.md item 8); extend it to assert those actions still resolve to the
-    correct item while `isPreviewShown` is true.
+11. ~~Preview-mode keyboard-routing tests~~ — **DONE 2026-07-07.** Extended
+    `PermafrostTests` model coverage for the documented preview behavior without brittle
+    AppKit event driving: preview opens/closes, closes on `prepareForShow`, follows
+    selection, commit/delete/pin/quick-paste resolve to the intended item while
+    `isPreviewShown` is true. Also tightened model behavior so deleting the previewed item
+    closes preview and pinning keeps selection anchored to the item after section reordering.
+    Real `PanelController` `NSEvent` routing remains covered by the manual preview checklist.
 12. ~~Testable policy object for pasteboard watcher pause/excluded-app behavior~~ — **DONE
     2026-07-07.** `PasteboardWatcher.poll()`'s pause/transient/excluded-app/concealed
     skip logic is now a pure `PasteboardCapturePolicy.decide(_:)` (in

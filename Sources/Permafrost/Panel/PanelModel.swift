@@ -129,10 +129,14 @@ final class PanelModel: ObservableObject {
             Log.store.error("pin toggle failed: \(error.localizedDescription)")
         }
         reload()
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            selectedIndex = index
+        }
     }
 
     func deleteItem(id: Int64) {
         let previousSelection = selectedIndex
+        let wasSelectedItem = selectedItem?.id == id
         do {
             try store.delete(id: id)
         } catch {
@@ -140,5 +144,8 @@ final class PanelModel: ObservableObject {
         }
         reload()
         selectedIndex = min(previousSelection, max(items.count - 1, 0))
+        if wasSelectedItem {
+            isPreviewShown = false
+        }
     }
 }

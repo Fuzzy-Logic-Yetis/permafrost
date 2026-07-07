@@ -23,6 +23,7 @@ import PermafrostCore
         try store.save(ClipboardCapture(text: "second"), now: now.addingTimeInterval(1))
         model.prepareForShow()
         model.moveSelection(by: 1)
+        model.togglePreview()
         model.query = "first"
         let focusBefore = model.focusToken
 
@@ -31,7 +32,26 @@ import PermafrostCore
         #expect(model.query == "")
         #expect(model.selectedIndex == 0)
         #expect(model.items.map(\.text) == ["second", "first"])
+        #expect(model.isPreviewShown == false)
         #expect(model.focusToken != focusBefore)
+    }
+
+    @Test func previewTogglesAndFollowsSelectedItem() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "older"), now: now)
+        try store.save(ClipboardCapture(text: "newer"), now: now.addingTimeInterval(1))
+        model.prepareForShow()
+
+        model.togglePreview()
+        #expect(model.isPreviewShown == true)
+        #expect(model.selectedItem?.text == "newer")
+
+        model.moveSelection(by: 1)
+        #expect(model.isPreviewShown == true)
+        #expect(model.selectedItem?.text == "older")
+
+        model.togglePreview()
+        #expect(model.isPreviewShown == false)
     }
 
     @Test func searchReloadsAndClampsSelection() throws {
@@ -84,6 +104,23 @@ import PermafrostCore
         #expect(pasteService.pastedTexts == ["recent two", "recent one"])
     }
 
+    @Test func quickPasteWhilePreviewShownStillAddressesRecentPrefix() throws {
+        let (store, model, pasteService) = try makeModel()
+        let pinned = try store.save(ClipboardCapture(text: "pinned"), now: now)
+        try store.setPinned(true, id: pinned.id!)
+        try store.save(ClipboardCapture(text: "recent"), now: now.addingTimeInterval(1))
+        model.prepareForShow()
+        model.select(index: 1)
+        model.togglePreview()
+
+        model.commitQuickPaste(number: 1)
+        model.commitQuickPaste(number: 2)
+
+        #expect(model.isPreviewShown == true)
+        #expect(model.selectedItem?.text == "pinned")
+        #expect(pasteService.pastedTexts == ["recent"])
+    }
+
     @Test func commitClosesBeforePasteAndReportsAccessibilityFallback() throws {
         let (store, model, pasteService) = try makeModel(pasteResult: false)
         try store.save(ClipboardCapture(text: "needs accessibility"), now: now)
@@ -97,6 +134,22 @@ import PermafrostCore
 
         #expect(pasteService.pastedTexts == ["needs accessibility"])
         #expect(events == ["close", "paste", "accessibility"])
+    }
+
+    @Test func commitWhilePreviewShownPastesSelectedItem() throws {
+        let (store, model, pasteService) = try makeModel()
+        try store.save(ClipboardCapture(text: "not selected"), now: now)
+        try store.save(ClipboardCapture(text: "previewed"), now: now.addingTimeInterval(1))
+        var didClose = false
+        model.onCommit = { didClose = true }
+        model.prepareForShow()
+        model.togglePreview()
+
+        model.commitSelection()
+
+        #expect(didClose == true)
+        #expect(model.isPreviewShown == true)
+        #expect(pasteService.pastedTexts == ["previewed"])
     }
 
     @Test func togglePinSelectedMovesItemToPinnedSection() throws {
@@ -114,6 +167,21 @@ import PermafrostCore
         #expect(try store.pinnedCount() == 1)
     }
 
+    @Test func togglePinWhilePreviewShownKeepsPreviewedItemSelected() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "older"), now: now)
+        try store.save(ClipboardCapture(text: "previewed"), now: now.addingTimeInterval(1))
+        model.prepareForShow()
+        model.togglePreview()
+
+        model.togglePinSelected()
+
+        #expect(model.isPreviewShown == true)
+        #expect(model.items.map(\.text) == ["older", "previewed"])
+        #expect(model.selectedItem?.text == "previewed")
+        #expect(model.selectedItem?.isPinned == true)
+    }
+
     @Test func deleteSelectedReloadsAndKeepsSelectionInBounds() throws {
         let (store, model, _) = try makeModel()
         try store.save(ClipboardCapture(text: "oldest"), now: now)
@@ -126,6 +194,20 @@ import PermafrostCore
 
         #expect(model.items.map(\.text) == ["newest", "middle"])
         #expect(model.selectedIndex == 1)
+    }
+
+    @Test func deleteWhilePreviewShownRemovesPreviewedItemAndClosesPreview() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "older"), now: now)
+        try store.save(ClipboardCapture(text: "previewed"), now: now.addingTimeInterval(1))
+        model.prepareForShow()
+        model.togglePreview()
+
+        model.deleteSelected()
+
+        #expect(model.isPreviewShown == false)
+        #expect(model.items.map(\.text) == ["older"])
+        #expect(model.selectedItem?.text == "older")
     }
 }
 
