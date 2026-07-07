@@ -102,6 +102,13 @@ alive (ADR-010).
 - `ClipboardStore` wraps a GRDB `DatabaseQueue` (serialized writes, Sendable). Reads may
   still happen from UI code when the panel opens/searches; writes are serialized by both
   `CaptureSaveQueue` and GRDB.
+- `VisionTextRecognizer` (`Sources/Permafrost/OCR`, issue #6) follows the same rule: Vision's
+  `VNImageRequestHandler.perform` is synchronous and blocks the calling thread for the
+  duration of recognition, so it must only ever be called from a background context (the
+  intended caller is `CaptureSaveQueue`'s serial queue once a sibling branch adds somewhere
+  to persist the result), never the main actor. `TextRecognizing` is the protocol seam
+  (mirrors `PanelPasteServing`) so recognition-dependent code can be tested with a fake
+  recognizer instead of real Vision calls.
 
 ## Key constraints
 

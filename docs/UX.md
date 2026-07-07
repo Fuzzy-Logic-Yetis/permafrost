@@ -79,6 +79,18 @@ you just copied, and must never steal the `⌘1` slot from it either.
   row for. Flagged by the 2026-07-07 review (L-1); documenting instead of gating, since
   gating would remove the ability to pin/delete/paste without first closing the preview.
 
+  **Future OCR insertion points** (issue #6, scaffold only — `VisionTextRecognizer` in
+  `Sources/Permafrost/OCR` has no UI wiring yet, pending a sibling branch's storage work):
+  the natural place for a "Recognized Text" section is inside `PreviewPane`'s `content`
+  switch in `PanelView.swift` (Sources/Permafrost/Panel/PanelView.swift), added below the
+  full-resolution image for `.image` items, in a `ScrollView`-friendly `TextPreview` block
+  (selectable, like the existing text-item preview) — collapsed/absent when recognition
+  found nothing. "Copy OCR Text" and "Paste OCR Text" would sit as two new actions
+  alongside the existing pin/share/delete hover row in `ItemCard` (only relevant for
+  `.image` items with recognized text), and as new `PanelModel` methods parallel to
+  `togglePinSelected()`/`commitSelection()` once `ClipboardItem` has somewhere to hold the
+  recognized string.
+
 ## Keyboard map
 
 | Key | Action |

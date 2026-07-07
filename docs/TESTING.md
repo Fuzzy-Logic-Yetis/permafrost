@@ -58,6 +58,13 @@ Required coverage (these are the product's guarantees):
   (`recordConcealed`); transient/auto-generated types skip; normal content captures; pause
   takes priority when multiple skip reasons apply at once. Tested with plain `Input` values
   — no `NSPasteboard`/`NSWorkspace` involved.
+- **OCR text normalization** (BACKLOG item 13, issue #6): `OCRTextNormalizer` — lines sort
+  top-to-bottom, ties broken left-to-right; per-line trimming; runs of blank lines collapse
+  to one; leading/trailing blank lines are stripped; empty input yields an empty string.
+  Tested with plain `RecognizedLine` values, no Vision/`VNRecognizedTextObservation`
+  involved. `VisionTextRecognizer` itself (the actual Vision call) has no automated test —
+  it's a thin, side-effect-free wrapper around `VNImageRequestHandler.perform`; exercise it
+  manually by copying a screenshot with visible text once the storage/UI wiring lands.
 
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).
