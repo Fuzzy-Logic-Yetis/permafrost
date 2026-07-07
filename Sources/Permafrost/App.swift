@@ -286,7 +286,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Not Now")
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn {
-            PasteService.requestTrust()
+            // Navigate only — calling PasteService.requestTrust() here too would fire
+            // the native system prompt on top of this navigation (redundant double-popup,
+            // found 2026-07-07). PasteService.isTrusted is already checked elsewhere,
+            // which is enough to get Permafrost listed in System Settings.
             let url = URL(
                 string:
                     "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"

@@ -154,7 +154,12 @@ private struct ItemCard: View {
         HStack(alignment: .top, spacing: 8) {
             content
             Spacer(minLength: 0)
+            // Fixed width regardless of hover state: the badge column (at rest) and
+            // the 3-button row (on hover) have very different natural widths, and
+            // without pinning this slot, `content` would reflow/re-wrap every time
+            // the mouse moved onto a different card.
             trailing
+                .frame(width: 60, alignment: .trailing)
         }
         .padding(8)
         .background(

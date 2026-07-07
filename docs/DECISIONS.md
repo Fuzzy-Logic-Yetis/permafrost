@@ -308,3 +308,51 @@ off the menu bar permanently on this machine. Nothing in `setupStatusItem()` nee
 change as a result — the `isTemplate`/`isVisible` hygiene from ADR-013 and the Input
 Monitoring request from ADR-014 remain good, correct code, just not the fix for this
 specific symptom. No further action needed; BACKLOG item 9 is closed.
+
+## ADR-016: Self-service "Reset Permissions" button for stale ad-hoc TCC grants
+
+**Context.** Separately from ADR-015, the project owner hit a genuinely confusing symptom
+the same day: Permafrost's own Settings → Permissions showed Accessibility as **"Not
+granted"** even after toggling the System Settings checkbox off and on, and even after a
+full quit/relaunch of Permafrost following the toggle. Root-caused by reproducing it
+cleanly: `tccutil reset Accessibility com.fuzzylogicyetis.Permafrost`, followed by granting
+fresh via Permafrost's own "Open System Settings" button against that *one* unchanging
+build, worked immediately and the live 2-second poll picked up "Granted" with no relaunch
+needed at all. Conclusion: ad-hoc signed builds get a new code identity on every re-sign
+(already known, docs/TESTING.md), and System Settings' Accessibility list matches entries
+to apps **by name/bundle ID for display**, so a checkbox can visibly appear checked while
+the underlying TCC record is still bound to a *previous* build's signature. Toggling the
+existing (stale) checkbox off/on does not rebind it to the new signature — only a reset
+followed by a fresh grant does. The same instability affects Input Monitoring
+(`kTCCServiceListenEvent`, ADR-014) for the identical reason.
+
+**Decision.** Added a **"Reset Permissions…" button** directly in Permafrost's Settings →
+Permissions section (`PermissionReset.resetAccessibilityAndInputMonitoring()`), running
+`tccutil reset Accessibility <bundle-id>` and `tccutil reset ListenEvent <bundle-id>` via
+`Process`. This needs no elevated privileges — `tccutil reset` only touches the current
+user's own per-app grants. Also added an Input Monitoring status row alongside the existing
+Accessibility one (previously only Accessibility was surfaced in Settings, despite
+Input Monitoring mattering since ADR-014). A confirmation alert explains the effect before
+resetting (paste-on-select and the hotkey degrade until re-granted) and both status rows
+update live via the existing poll once the user re-checks the box in System Settings — no
+relaunch required, confirmed during the clean repro above.
+
+**Consequences.** This turns a "quit Permafrost, open Terminal, run tccutil, ask Claude why
+it's still broken" afternoon into a two-click in-app fix, and will recur for every
+developer/tester on this project doing ad-hoc rebuilds — worth having permanently, not just
+as a one-off workaround. It does **not** fix the underlying ad-hoc signing instability
+(that's inherent to unsigned/ad-hoc builds and only truly goes away with a stable Developer
+ID identity at v1.0, docs/ROADMAP.md) — it just makes recovering from it fast and
+self-service instead of confusing.
+
+**Follow-up same day: redundant permission popups.** Testing the above surfaced a related
+bug: the Accessibility and Input Monitoring "Open System Settings" buttons (in both
+Settings and the paste-failure alert) each called *both* the explicit prompt-triggering API
+(`PasteService.requestTrust()` / `HotkeyManager.requestInputMonitoringAccessIfNeeded()`)
+*and* `NSWorkspace.shared.open(...)` to navigate there directly — so one click could produce
+the native system permission dialog **and** a separately-opened System Settings window at
+the same time, which looked like an unexplained random popup. Fixed by keeping only the
+direct navigation in all three call sites; the passive `isTrusted`/`isInputMonitoringGranted`
+checks already performed elsewhere (Settings' `@State` init, the 2-second poll) are
+sufficient to get Permafrost listed in System Settings, so the explicit prompt call was
+redundant. `PasteService.requestTrust()` had no remaining callers and was deleted.

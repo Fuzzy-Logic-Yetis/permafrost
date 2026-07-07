@@ -76,6 +76,14 @@ machine running inside VS Code, learned the hard way on 2026-07-06/07:
   system prompt — see ADR-014. Once TCC has recorded a *denial* for a service, the API
   won't re-prompt; `tccutil reset ListenEvent <bundle-id>` clears it without needing a
   password (unlike manually adding an app via System Settings' "+" button, which does).
+  Because `requestInputMonitoringAccessIfNeeded()` runs on every launch, and ad-hoc
+  rebuilds mean TCC sees a brand-new, never-before-seen signature each time, the native
+  "Keystroke Receiving" system prompt will pop up on **every fresh ad-hoc rebuild's first
+  launch** during development — this is expected, correct system behavior for an
+  undetermined grant, not a bug. It's tied to *launching the app*, not to opening
+  Permafrost's own Settings window, even though the two often happen close together during
+  a test cycle and can look related. A real end user would only see this once, on their
+  genuine first launch.
 - Modern macOS collapses many third-party menu-bar icons into Control Center's own
   aggregated list, where they show up as unlabeled `"status menu"` entries via
   accessibility queries and don't expose their `NSMenu` the classic
@@ -86,9 +94,19 @@ machine running inside VS Code, learned the hard way on 2026-07-06/07:
 ## Manual smoke checklist (before every tag)
 
 Environment note: ad-hoc signed builds get a **new identity every re-sign** — macOS will
-drop the Accessibility grant after rebuilds. Re-grant in System Settings → Privacy &
-Security → Accessibility (remove stale entry, re-add). To reset for testing:
-`tccutil reset Accessibility com.fuzzylogicyetis.Permafrost`.
+drop the Accessibility/Input Monitoring grants after rebuilds. The confusing part
+(confirmed 2026-07-07): the System Settings checkbox for "Permafrost" can still *appear*
+checked after a rebuild — it's matched by name/bundle ID for display, but tied to the
+*previous* signature underneath. Permafrost's own Settings → Permissions display will
+correctly and honestly report **Not granted** for the new binary despite the checkbox
+looking checked. Toggling the existing checkbox off and back on is **not sufficient** — it
+doesn't rebind to the new signature. Fix: Settings → Permissions → **"Reset Permissions…"**
+(ADR-016), then grant fresh via the "Open System Settings" button next to each row — no
+relaunch needed, the status updates live within ~2 seconds. Don't rebuild again before
+verifying (any further rebuild repeats the mismatch). The manual equivalent, if needed
+outside the app (e.g. CI or a broken build that won't launch):
+`tccutil reset Accessibility com.fuzzylogicyetis.Permafrost` and
+`tccutil reset ListenEvent com.fuzzylogicyetis.Permafrost`.
 
 1. **Launch**: `./scripts/make-app.sh && open dist/Permafrost.app` → snowflake appears in
    menu bar; no Dock icon; no window. If your menu bar is auto-hidden (fullscreen apps,
@@ -135,6 +153,15 @@ Security → Accessibility (remove stale entry, re-add). To reset for testing:
 16. **Welcome alert**: delete `didShowWelcome` from defaults (or fresh install), launch →
     alert offers **Got It** and **Enable Launch at Login**; the latter actually toggles the
     login item (check System Settings → General → Login Items).
+17. **Reset Permissions (ADR-016)**: with Accessibility granted, rebuild (new signature) →
+    Settings shows Not granted despite the System Settings checkbox still appearing
+    checked → Settings → Permissions → Reset Permissions… → re-grant via the row's "Open
+    System Settings" button → status flips to Granted within ~2s with no relaunch needed.
+18. **Settings window fits on screen**: open Settings → entire window (through History
+    Management) is visible and none of it is hidden behind the Dock or off-screen; window
+    is draggable via its title bar and resizable via its edges (found 2026-07-07: it had
+    grown taller than the screen as sections were added, with no way to reposition it since
+    it also wasn't resizable at the time).
 
 ## Performance spot checks
 

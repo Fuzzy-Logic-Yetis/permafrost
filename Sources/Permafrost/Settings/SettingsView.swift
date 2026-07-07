@@ -14,9 +14,11 @@ struct SettingsView: View {
     @State private var launchAtLogin = AppSettings.shared.launchAtLogin
     @State private var showConcealedWarning = false
     @State private var accessibilityTrusted = PasteService.isTrusted
+    @State private var inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
     @State private var showUnpinAllConfirm = false
     @State private var showClearUnpinnedConfirm = false
     @State private var showClearEverythingConfirm = false
+    @State private var showResetPermissionsConfirm = false
     @State private var pinnedCount = 0
     @State private var totalCount = 0
 
@@ -90,7 +92,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Permissions") {
+            Section {
                 LabeledContent("Accessibility (paste-on-select)") {
                     HStack(spacing: 8) {
                         Circle()
@@ -99,8 +101,11 @@ struct SettingsView: View {
                         Text(accessibilityTrusted ? "Granted" : "Not granted")
                             .foregroundStyle(.secondary)
                         if !accessibilityTrusted {
+                            // Navigate only — don't also call requestTrust() here, or the
+                            // native system prompt and this navigation both fire at once
+                            // (confusing double-popup, found 2026-07-07). The passive
+                            // isTrusted check elsewhere already gets Permafrost listed.
                             Button("Open System Settings") {
-                                PasteService.requestTrust()
                                 NSWorkspace.shared.open(
                                     URL(
                                         string:
@@ -110,6 +115,35 @@ struct SettingsView: View {
                         }
                     }
                 }
+                LabeledContent("Input Monitoring (global hotkey)") {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(inputMonitoringGranted ? Color.green : Color.orange)
+                            .frame(width: 8, height: 8)
+                        Text(inputMonitoringGranted ? "Granted" : "Not granted")
+                            .foregroundStyle(.secondary)
+                        if !inputMonitoringGranted {
+                            Button("Open System Settings") {
+                                NSWorkspace.shared.open(
+                                    URL(
+                                        string:
+                                            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+                                    )!)
+                            }
+                        }
+                    }
+                }
+                Button("Reset Permissions…") { showResetPermissionsConfirm = true }
+            } header: {
+                Text("Permissions")
+            } footer: {
+                Text(
+                    "Rebuilding Permafrost from source changes its code signature, which can "
+                        + "leave System Settings showing a permission as granted when it no "
+                        + "longer matches — reset clears the stale record so you can re-grant it."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section {
@@ -131,9 +165,9 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
         .onReceive(trustPoll) { _ in
             accessibilityTrusted = PasteService.isTrusted
+            inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
         }
         .onAppear { refreshCounts() }
         .alert("Clear unpinned history?", isPresented: $showClearUnpinnedConfirm) {
@@ -165,6 +199,20 @@ struct SettingsView: View {
             }
         } message: {
             Text("This deletes all clipboard history, including pinned items. This cannot be undone.")
+        }
+        .alert("Reset permissions?", isPresented: $showResetPermissionsConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset") {
+                PermissionReset.resetAccessibilityAndInputMonitoring()
+                accessibilityTrusted = PasteService.isTrusted
+                inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
+            }
+        } message: {
+            Text(
+                "Clears Permafrost's Accessibility and Input Monitoring grants. You'll need "
+                    + "to re-enable them above afterward — paste-on-select and the global "
+                    + "hotkey fall back to degraded modes until you do."
+            )
         }
     }
 

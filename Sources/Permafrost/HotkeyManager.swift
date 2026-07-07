@@ -41,6 +41,11 @@ final class HotkeyManager {
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
 
+    /// For Settings' permission status display (ADR-016).
+    static var isInputMonitoringGranted: Bool {
+        IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
+    }
+
     /// Explicitly requests Input Monitoring access via the official IOHID API —
     /// this triggers a normal system Allow/Don't Allow prompt (no password
     /// needed, unlike manually adding an app via System Settings' "+" button).

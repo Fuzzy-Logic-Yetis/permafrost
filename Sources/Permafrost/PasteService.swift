@@ -17,14 +17,6 @@ final class PasteService {
         AXIsProcessTrusted()
     }
 
-    /// Shows the system Accessibility consent prompt (once per app identity).
-    static func requestTrust() {
-        // Literal key: the kAXTrustedCheckOptionPrompt global is a mutable C var,
-        // which Swift 6 strict concurrency rejects.
-        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
-    }
-
     func copyToPasteboard(_ item: ClipboardItem) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
