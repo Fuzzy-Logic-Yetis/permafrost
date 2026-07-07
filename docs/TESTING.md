@@ -44,6 +44,12 @@ Required coverage (these are the product's guarantees):
   Carbon does not need to fail globally; they cover successful custom registration, first
   custom failure falling back to the selected preset, and replacement custom failure
   restoring the previous working custom shortcut while surfacing the rejected chord.
+- **Pasteboard capture policy**: `PasteboardCapturePolicy.decide` (extracted from
+  `PasteboardWatcher.poll`, BACKLOG item 12) — paused capture skips; excluded frontmost
+  app skips; concealed content skips by default; concealed content captures once opted in
+  (`recordConcealed`); transient/auto-generated types skip; normal content captures; pause
+  takes priority when multiple skip reasons apply at once. Tested with plain `Input` values
+  — no `NSPasteboard`/`NSWorkspace` involved.
 
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).

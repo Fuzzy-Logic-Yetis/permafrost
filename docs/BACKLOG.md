@@ -63,12 +63,16 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
     docs/UX.md, review L-1). `PanelModel` already has app-target test coverage
     (docs/BACKLOG.md item 8); extend it to assert those actions still resolve to the
     correct item while `isPreviewShown` is true.
-12. **Testable policy object for pasteboard watcher pause/excluded-app behavior** — review
-    L-1/testing-assessment note: `PasteboardWatcher`'s pause-capture and excluded-app skip
-    logic (Sources/Permafrost/PasteboardWatcher.swift) currently lives inline against
-    `NSWorkspace`/`AppSettings` and isn't unit tested. Extract the "should this capture be
-    skipped right now" decision behind a small protocol so it can be tested the way
-    `PanelPasteServing` let `PanelModel` be tested without AppKit.
+12. ~~Testable policy object for pasteboard watcher pause/excluded-app behavior~~ — **DONE
+    2026-07-07.** `PasteboardWatcher.poll()`'s pause/transient/excluded-app/concealed
+    skip logic is now a pure `PasteboardCapturePolicy.decide(_:)` (in
+    Sources/Permafrost/PasteboardWatcher.swift) that takes a plain `Input` (types, isPaused,
+    isExcludedApp, recordConcealed) and returns `.capture`/`.skip(reason:)` — no
+    `NSPasteboard`/`NSWorkspace` involved, following the `PanelPasteServing` precedent.
+    `poll()` still gathers the AppKit/AppSettings-backed inputs and just calls the policy.
+    Covered by Tests/PermafrostTests/PasteboardCapturePolicyTests.swift (paused, excluded
+    app, concealed default-skip, concealed opt-in, transient/auto-generated, normal capture,
+    and pause-takes-priority-over-other-reasons).
 
 ## Later
 
