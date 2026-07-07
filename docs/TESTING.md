@@ -170,6 +170,16 @@ outside the app (e.g. CI or a broken build that won't launch):
     → it appears in the list. Switch to that app, copy text → `⌥⌘V` → item does NOT appear.
     Remove it from the list, copy the same text again → it now appears. Quit and relaunch
     Permafrost → the exclusion list persists.
+21. **Preview pane**: `⌥⌘V`, select a long multi-line text item, press `␣` → full text
+    appears in an overlay (unwrapped, scrollable if long), replacing the list within the same
+    panel size; select some of the text with the mouse to confirm it's copyable. Press `↑`/
+    `↓` → preview updates to the newly selected item without closing. Press `␣` again → closes,
+    list reappears. Reopen preview, press `Esc` → preview closes but the panel stays open;
+    press `Esc` again → panel closes (search was empty) or search clears first (non-empty).
+    Select an image item, press `␣` → full-resolution image shown (not the card's thumbnail),
+    scaled to fit. Type a character while the field is empty and preview is closed → confirm
+    it goes into the search field rather than toggling preview (only an *empty* field treats
+    `␣` as the preview key).
 
 ## Performance spot checks
 
