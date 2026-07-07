@@ -40,6 +40,12 @@ Required coverage (these are the product's guarantees):
 - **Panel model**: show/search resets, selection clamping, `⌘1`-`⌘9` quick-paste restricted
   to the unpinned prefix, commit callback order and Accessibility fallback, pin toggling,
   and delete selection bounds.
+- **Pasteboard capture policy**: `PasteboardCapturePolicy.decide` (extracted from
+  `PasteboardWatcher.poll`, BACKLOG item 12) — paused capture skips; excluded frontmost
+  app skips; concealed content skips by default; concealed content captures once opted in
+  (`recordConcealed`); transient/auto-generated types skip; normal content captures; pause
+  takes priority when multiple skip reasons apply at once. Tested with plain `Input` values
+  — no `NSPasteboard`/`NSWorkspace` involved.
 
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).
