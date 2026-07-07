@@ -271,3 +271,40 @@ this is a reasonable next experiment and doesn't require Developer ID membership
 project owner should, at minimum, look at their actual menu bar with their own eyes after
 pulling this commit and report back — screenshots analyzed by Claude in this session may
 simply have been looking at the wrong moment, wrong Space, or wrong crop.
+
+## ADR-015: Root cause found — the menu bar was full; not a Permafrost bug
+
+**Context.** Same investigation, continued the next morning (2026-07-07) with the project
+owner present and actively testing. Confirmed via live screenshots that the icon appeared
+and disappeared across repeated quit/relaunch cycles with no reliable trigger — sometimes a
+plain relaunch worked, sometimes an identical relaunch didn't, and restarting Control
+Center (`killall ControlCenter`) had no consistent effect either way. The project owner
+asked directly: "can the bar be too full? does it scroll?" — the key question that had been
+missed. Checked System Settings → Control Center's popover panel for a hidden/scrollable
+"other apps" section: none exists: what's visible (Wi-Fi, Bluetooth, AirDrop, media
+controls, Display, Sound) is the complete content, so items don't get moved there when
+crowded, contrary to the ADR-014 "Control Center aggregation" theory.
+
+**Decision/finding.** Went to System Settings → Menu Bar and unchecked two built-in system
+items (Siri, Spotlight) to free horizontal space. Permafrost's snowflake icon appeared
+immediately and has remained visible since. Root cause: **the menu bar had too many items
+competing for space, and macOS silently drops status items that don't fit rather than
+showing any overflow indicator or moving them elsewhere.** This also fully explains the
+flakiness documented in ADR-013/014 — whether Permafrost's icon fit depended on exactly
+which other transient icons (VPN state, browser helpers, etc.) happened to be present at
+that exact moment, which is inherently non-deterministic across launches. It also explains
+why the ADR-014 accessibility "ghost item" signature (`position 0,956 size 0,0`) was a red
+herring: that data was shown to be unreliable — a live screenshot taken *while* the
+accessibility query still reported ghost data proved the icon was genuinely visible on
+screen at the same moment, so that query does not reflect real visibility for these items
+at all, for any app, crowded or not.
+
+**Consequences.** This is a **macOS OS-level space constraint, not a Permafrost code bug**
+— there is nothing in `NSStatusItem`'s public API to reserve guaranteed space or request
+priority over other apps' menu extras. The practical fix lives entirely in System Settings,
+not in this codebase: free menu bar space by disabling unused system items (Menu Bar pane)
+or quitting other menu-bar-extra apps. Project owner's resolution: keep Siri and Spotlight
+off the menu bar permanently on this machine. Nothing in `setupStatusItem()` needed to
+change as a result — the `isTemplate`/`isVisible` hygiene from ADR-013 and the Input
+Monitoring request from ADR-014 remain good, correct code, just not the fix for this
+specific symptom. No further action needed; BACKLOG item 9 is closed.

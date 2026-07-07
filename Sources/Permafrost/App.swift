@@ -103,30 +103,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        Log.app.info("status item created; button is nil: \(self.statusItem.button == nil)")
 
         let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
         let image = NSImage(systemSymbolName: "snowflake", accessibilityDescription: "Permafrost")?
             .withSymbolConfiguration(config)
         image?.isTemplate = true
-        Log.app.info(
-            "snowflake image loaded: \(image != nil), size: \(image?.size.debugDescription ?? "nil")"
-        )
-
-        if let button = statusItem.button {
-            button.image = image
-            // ADR-013 follow-up: the object model can report success (button non-nil,
-            // image non-nil, isVisible true) while the icon still renders invisibly on
-            // some setups. A plain-text title is a different rendering path entirely and
-            // is shown *alongside* the image (imagePosition .imageLeading), so the item
-            // stays identifiable even if the SF Symbol image never becomes visible.
-            button.title = " ❄︎"
-            button.imagePosition = .imageLeading
-            button.font = .menuBarFont(ofSize: 0)
-        }
-        statusItem.length = NSStatusItem.variableLength
+        statusItem.button?.image = image
+        statusItem.button?.imagePosition = .imageOnly
         statusItem.isVisible = true
-        Log.app.info("status item isVisible: \(self.statusItem.isVisible)")
+        Log.app.info("status item set up; image loaded: \(image != nil)")
 
         let menu = NSMenu()
         let openItem = NSMenuItem(

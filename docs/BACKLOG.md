@@ -23,31 +23,15 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    bounds, section transitions, hover action wiring) is currently verified only by the
    manual checklist (docs/TESTING.md) and store-level invariant tests. Investigate a
    lightweight harness once the interaction surface stabilizes (2026-07-06 review M-5).
-9. **[NEXT ACTION, needs project owner] Confirm status item icon visibility** (ADR-013,
-   ADR-014) — genuinely unresolved as of 2026-07-07. What's confirmed: the core `⌥⌘V`
-   panel works correctly (real screenshot showed actual captured history), so this is a
-   discoverability/cosmetic bug, not a functional one. What's ruled out: crash, nil
-   button/image, `isVisible: false`, global menu-bar auto-hide, a system "Menu Bar Only"
-   per-app toggle (no such control exists in System Settings → Menu Bar — checked), and
-   Input Monitoring denial (hotkey works without it, so probably unrelated despite being a
-   real, now-fixed gap — see ADR-014). Applied so far: `isTemplate = true`, explicit
-   `isVisible = true`, a text-title fallback (" ❄︎") alongside the image, and an explicit
-   `IOHIDRequestAccess` call for Input Monitoring. None of these were visually confirmed to
-   fix it in a live screenshot taken afterward.
-   **Concrete next steps, in order of effort:**
-   a. Project owner: just look at the actual menu bar after pulling this commit and
-      rebuilding — screenshots analyzed mid-session may have caught the wrong moment/Space.
-   b. If still not visible: manually add Permafrost to System Settings → Privacy &
-      Security → Input Monitoring via the "+" button (requires your password/Touch ID —
-      Claude cannot do this step) and relaunch, in case ADR-014's "probably unrelated"
-      conclusion is wrong.
-   c. If still not visible: try signing with a persistent self-signed identity (`security`
-      + `codesign --sign "<name>"`) instead of ad-hoc `-`, to test whether a stable code
-      identity changes how `NSStatusBar`/tccd treat the item — doesn't require Developer ID
-      membership, untried so far.
-   d. Last resort: replace the SF Symbol with a bundled custom `.icns`/PNG image (also
-      double-serves BACKLOG item 2, the app icon) to rule out an SF-Symbol-specific
-      rendering quirk on this OS version entirely.
+9. ~~Confirm status item icon visibility~~ — **RESOLVED 2026-07-07, see ADR-015.** Root
+   cause: the menu bar had too many items competing for space; macOS silently drops status
+   items that don't fit, with no overflow indicator. Not a Permafrost bug — freeing space
+   (project owner disabled Siri and Spotlight in System Settings → Menu Bar) fixed it
+   immediately and reliably. No code change needed. This also explains the ADR-013/014
+   flakiness (which other transient icons were present varied per launch) and retroactively
+   invalidates the ADR-014 "ghost item" accessibility-position diagnostic — a live
+   screenshot proved the icon was genuinely visible while that query still reported bogus
+   data, so that signal was never meaningful in the first place.
 
 ## Later
 

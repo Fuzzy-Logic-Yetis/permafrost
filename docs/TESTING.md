@@ -93,8 +93,10 @@ Security → Accessibility (remove stale entry, re-add). To reset for testing:
 1. **Launch**: `./scripts/make-app.sh && open dist/Permafrost.app` → snowflake appears in
    menu bar; no Dock icon; no window. If your menu bar is auto-hidden (fullscreen apps,
    or the global auto-hide preference), you have to reveal it first — don't mistake a
-   hidden menu bar for a missing icon. See ADR-013 if the icon still isn't there once the
-   bar is actually visible.
+   hidden menu bar for a missing icon. If it's genuinely still not there: macOS silently
+   drops menu-bar-extra icons that don't fit when the bar is crowded, with no overflow
+   indicator at all (ADR-015, not a Permafrost bug) — free space via System Settings →
+   Menu Bar (disable Siri/Spotlight) or by quitting other menu-bar-extra apps.
 2. **Capture text**: copy three different strings in another app → `⌥⌘V` → all three
    present, newest first.
 3. **Capture snip**: `⌃⇧⌘4`, snip a region → `⌥⌘V` → thumbnail card present → `⏎` into
