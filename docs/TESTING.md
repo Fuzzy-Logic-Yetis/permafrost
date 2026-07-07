@@ -39,7 +39,9 @@ Required coverage (these are the product's guarantees):
   data doesn't crash.
 - **Panel model**: show/search resets, selection clamping, `⌘1`-`⌘9` quick-paste restricted
   to the unpinned prefix, commit callback order and Accessibility fallback, pin toggling,
-  and delete selection bounds.
+  delete selection bounds, and preview-mode behavior: preview opens/closes, closes on
+  `prepareForShow`, follows selection, and commit/delete/pin/quick-paste still resolve to
+  the intended selected/recent item while preview is shown.
 
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).

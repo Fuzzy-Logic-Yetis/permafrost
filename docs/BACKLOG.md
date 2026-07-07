@@ -58,11 +58,13 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
     unit test (would need to first claim a shortcut in a separate process). Cover with the
     manual checklist for now (docs/TESTING.md); revisit if Carbon exposes a way to simulate
     failure, or extract the success/failure branch behind a seam that can be faked.
-11. **Preview-mode keyboard-routing tests** — `PanelController.handle` lets paste/delete/
-    pin/quick-paste act on the previewed item while the overlay is open (documented in
-    docs/UX.md, review L-1). `PanelModel` already has app-target test coverage
-    (docs/BACKLOG.md item 8); extend it to assert those actions still resolve to the
-    correct item while `isPreviewShown` is true.
+11. ~~Preview-mode keyboard-routing tests~~ — **DONE 2026-07-07.** Extended
+    `PermafrostTests` model coverage for the documented preview behavior without brittle
+    AppKit event driving: preview opens/closes, closes on `prepareForShow`, follows
+    selection, commit/delete/pin/quick-paste resolve to the intended item while
+    `isPreviewShown` is true. Also tightened model behavior so deleting the previewed item
+    closes preview and pinning keeps selection anchored to the item after section reordering.
+    Real `PanelController` `NSEvent` routing remains covered by the manual preview checklist.
 12. **Testable policy object for pasteboard watcher pause/excluded-app behavior** — review
     L-1/testing-assessment note: `PasteboardWatcher`'s pause-capture and excluded-app skip
     logic (Sources/Permafrost/PasteboardWatcher.swift) currently lives inline against
