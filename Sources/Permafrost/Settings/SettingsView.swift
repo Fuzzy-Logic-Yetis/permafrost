@@ -29,8 +29,11 @@ struct SettingsView: View {
     @State private var pinnedCount = 0
     @State private var totalCount = 0
     @State private var excludedApps = AppSettings.shared.excludedApps
+    @State private var operationErrorMessage: String?
 
     private let trustPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+    private let hotkeyRegistrationFailed = NotificationCenter.default.publisher(
+        for: .hotkeyRegistrationFailed)
 
     var body: some View {
         Form {
@@ -286,12 +289,21 @@ struct SettingsView: View {
             accessibilityTrusted = PasteService.isTrusted
             inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
         }
+        .onReceive(hotkeyRegistrationFailed) { notification in
+            let failedDisplay = notification.userInfo?["failedShortcut"] as? String ?? "that shortcut"
+            customHotkey = AppSettings.shared.customHotkey
+            hotkeyPreset = AppSettings.shared.hotkeyPreset.rawValue
+            isRecordingHotkey = false
+            hotkeyRecorderMessage =
+                "\(failedDisplay) couldn't be registered (already in use elsewhere) — "
+                + "reverted to \(AppSettings.shared.hotkeyDisplay)."
+            hotkeyRecorderMessageIsError = true
+        }
         .onAppear { refreshCounts() }
         .alert("Clear unpinned history?", isPresented: $showClearUnpinnedConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Clear", role: .destructive) {
-                try? store.clearHistory(keepPinned: true)
-                refreshCounts()
+                runHistoryOperation { try store.clearHistory(keepPinned: true) }
             }
         } message: {
             Text("Pinned entries are kept. This cannot be undone.")
@@ -299,8 +311,7 @@ struct SettingsView: View {
         .alert("Unpin all items?", isPresented: $showUnpinAllConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Unpin All") {
-                try? store.unpinAll()
-                refreshCounts()
+                runHistoryOperation { try store.unpinAll() }
             }
         } message: {
             Text(
@@ -311,18 +322,30 @@ struct SettingsView: View {
         .alert("Clear everything?", isPresented: $showClearEverythingConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Clear Everything", role: .destructive) {
-                try? store.clearHistory(keepPinned: false)
-                refreshCounts()
+                runHistoryOperation { try store.clearHistory(keepPinned: false) }
             }
         } message: {
             Text("This deletes all clipboard history, including pinned items. This cannot be undone.")
         }
+        .alert(
+            "Operation failed",
+            isPresented: Binding(
+                get: { operationErrorMessage != nil },
+                set: { if !$0 { operationErrorMessage = nil } }
+            )
+        ) {
+            Button("OK") {}
+        } message: {
+            Text(operationErrorMessage ?? "")
+        }
         .alert("Reset permissions?", isPresented: $showResetPermissionsConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Reset") {
-                PermissionReset.resetAccessibilityAndInputMonitoring()
-                accessibilityTrusted = PasteService.isTrusted
-                inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
+                Task {
+                    await PermissionReset.resetAccessibilityAndInputMonitoring()
+                    accessibilityTrusted = PasteService.isTrusted
+                    inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
+                }
             }
         } message: {
             Text(
@@ -336,6 +359,18 @@ struct SettingsView: View {
     private func refreshCounts() {
         totalCount = (try? store.count()) ?? 0
         pinnedCount = (try? store.pinnedCount()) ?? 0
+    }
+
+    /// Shared error path for destructive history actions (review M-3) — matches
+    /// the status-menu behavior in App.swift so a failure never looks like success.
+    private func runHistoryOperation(_ operation: () throws -> Void) {
+        do {
+            try operation()
+        } catch {
+            Log.store.error("history operation failed: \(error.localizedDescription)")
+            operationErrorMessage = error.localizedDescription
+        }
+        refreshCounts()
     }
 
     private func addExcludedApp() {

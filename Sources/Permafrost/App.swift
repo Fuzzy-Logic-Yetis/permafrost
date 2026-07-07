@@ -2,7 +2,14 @@ import AppKit
 import PermafrostCore
 
 enum PermafrostVersion {
-    static let string = "0.2.0"
+    static let string = "0.3.0"
+}
+
+extension Notification.Name {
+    /// Posted when Carbon rejects a shortcut and Permafrost falls back to a
+    /// preset (review M-1). userInfo["failedShortcut"] is the display string
+    /// of the shortcut that failed to register.
+    static let hotkeyRegistrationFailed = Notification.Name("PermafrostHotkeyRegistrationFailed")
 }
 
 @main
@@ -55,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         HotkeyManager.requestInputMonitoringAccessIfNeeded()
         hotkeyManager.onHotkey = { [weak self] in self?.panelController.toggle() }
-        hotkeyManager.register(shortcut: settings.effectiveHotkey)
+        registerEffectiveHotkey()
         observeSettingsChanges()
         observeFrontmostAppChanges()
 
@@ -95,11 +102,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.hotkeyManager.register(shortcut: self.settings.effectiveHotkey)
-                self.refreshOpenMenuItemTitle()
+                self.registerEffectiveHotkey()
                 self.refreshCaptureIndicatorState()
             }
         }
+    }
+
+    /// Registers the currently configured hotkey; if Carbon rejects it (review
+    /// M-1 — e.g. a reserved or already-claimed combination), clears the custom
+    /// shortcut, falls back to the default preset, and tells Settings why.
+    private func registerEffectiveHotkey() {
+        let shortcut = settings.effectiveHotkey
+        if !hotkeyManager.register(shortcut: shortcut) {
+            let failedDisplay = shortcut.display
+            Log.app.error("hotkey \(failedDisplay, privacy: .public) rejected; reverting to default")
+            settings.customHotkey = nil
+            _ = hotkeyManager.register(shortcut: settings.effectiveHotkey)
+            NotificationCenter.default.post(
+                name: .hotkeyRegistrationFailed,
+                object: nil,
+                userInfo: ["failedShortcut": failedDisplay]
+            )
+        }
+        refreshOpenMenuItemTitle()
     }
 
     private func observeFrontmostAppChanges() {

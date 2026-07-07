@@ -126,4 +126,86 @@ import Testing
             try ImportExport.importArchive(from: dir, into: store)
         }
     }
+
+    /// Review M-2: manifest fields must actually match the declared kind — a
+    /// text row can't carry an image blob (and vice versa).
+    @Test func textKindWithImageBlobIsRejected() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let blobs = dir.appendingPathComponent("blobs", isDirectory: true)
+        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
+        try TestImages.png(width: 4, height: 4).write(to: blobs.appendingPathComponent("x.png"))
+        try writeHostileManifest(imageFile: "blobs/x.png", in: dir)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.kindFieldMismatch("abc")) {
+            try ImportExport.importArchive(from: dir, into: store)
+        }
+    }
+
+    @Test func imageKindWithoutImageDataIsRejected() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let manifest = """
+            {"version": 1, "exportedAt": "2026-07-05T00:00:00Z", "items": [
+                {"contentHash": "abc", "kind": "image", "text": null, "sourceApp": null,
+                 "createdAt": "2026-07-05T00:00:00Z", "lastUsedAt": "2026-07-05T00:00:00Z",
+                 "isPinned": false, "pinOrder": null, "isConcealed": false,
+                 "imageFile": null, "thumbnailFile": null, "richDataFile": null}
+            ]}
+            """
+        try manifest.write(
+            to: dir.appendingPathComponent(ImportExport.manifestFileName),
+            atomically: true, encoding: .utf8)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.kindFieldMismatch("abc")) {
+            try ImportExport.importArchive(from: dir, into: store)
+        }
+    }
+
+    /// Review M-2: a manifest can't lie about its content hash — it must match
+    /// what actually hashing the entry's text/image content produces.
+    @Test func mismatchedContentHashIsRejected() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let manifest = """
+            {"version": 1, "exportedAt": "2026-07-05T00:00:00Z", "items": [
+                {"contentHash": "not-the-real-hash", "kind": "text", "text": "hello",
+                 "sourceApp": null, "createdAt": "2026-07-05T00:00:00Z",
+                 "lastUsedAt": "2026-07-05T00:00:00Z", "isPinned": false, "pinOrder": null,
+                 "isConcealed": false, "imageFile": null, "thumbnailFile": null,
+                 "richDataFile": null}
+            ]}
+            """
+        try manifest.write(
+            to: dir.appendingPathComponent(ImportExport.manifestFileName),
+            atomically: true, encoding: .utf8)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.contentHashMismatch("not-the-real-hash")) {
+            try ImportExport.importArchive(from: dir, into: store)
+        }
+    }
+
+    @Test func symlinkedBlobIsRejected() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let blobs = dir.appendingPathComponent("blobs", isDirectory: true)
+        try FileManager.default.createDirectory(at: blobs, withIntermediateDirectories: true)
+
+        let outsideSecret = dir.deletingLastPathComponent()
+            .appendingPathComponent("permafrost-secret-\(UUID().uuidString).png")
+        try TestImages.png(width: 4, height: 4).write(to: outsideSecret)
+        defer { try? FileManager.default.removeItem(at: outsideSecret) }
+        let link = blobs.appendingPathComponent("x.png")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outsideSecret)
+
+        try writeHostileManifest(imageFile: "blobs/x.png", in: dir)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.unsafeBlobPath("blobs/x.png")) {
+            try ImportExport.importArchive(from: dir, into: store)
+        }
+    }
 }

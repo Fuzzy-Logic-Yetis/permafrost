@@ -163,11 +163,16 @@ final class HotkeyManager {
         }
     }
 
-    func register(preset: HotkeyPreset) {
+    @discardableResult
+    func register(preset: HotkeyPreset) -> Bool {
         register(shortcut: preset.shortcut)
     }
 
-    func register(shortcut: HotkeyShortcut) {
+    /// Returns whether Carbon actually accepted the shortcut (review M-1): a
+    /// reserved or already-claimed combination fails registration but was
+    /// previously reported to the caller as if it succeeded.
+    @discardableResult
+    func register(shortcut: HotkeyShortcut) -> Bool {
         unregister()
         installHandlerIfNeeded()
         let hotKeyID = EventHotKeyID(signature: OSType(0x5046_5254) /* 'PFRT' */, id: 1)
@@ -181,7 +186,9 @@ final class HotkeyManager {
         )
         if status != noErr {
             Log.app.error("hotkey registration failed: \(status)")
+            return false
         }
+        return true
     }
 
     func unregister() {

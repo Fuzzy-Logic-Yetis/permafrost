@@ -53,8 +53,12 @@ FileVault), and password presence in export archives.
 | Permission | Why | When |
 |---|---|---|
 | Accessibility | Synthesize ⌘V for paste-on-select | First paste attempt; optional (copy-only fallback) |
+| Input Monitoring | Register the global `⌥⌘V`-style hotkey via Carbon `RegisterEventHotKey` (ADR-005); macOS separately gates this API behind Input Monitoring (`kTCCServiceListenEvent`), discovered in ADR-014 | Requested once at launch via `IOHIDRequestAccess`, before the hotkey is registered |
 
-That's the whole list. No Full Disk Access, no Screen Recording, no Input Monitoring.
+Permafrost never reads keystroke content — Input Monitoring here only lets the OS notify the
+app when its own registered hotkey combination fires. If denied, the global hotkey doesn't
+work; the panel is still reachable from the menu-bar item. No Full Disk Access, no Screen
+Recording, no camera/microphone, no network entitlements.
 
 ## Reporting
 

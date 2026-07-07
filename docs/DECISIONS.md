@@ -361,3 +361,62 @@ direct navigation in all three call sites; the passive `isTrusted`/`isInputMonit
 checks already performed elsewhere (Settings' `@State` init, the 2-second poll) are
 sufficient to get Permafrost listed in System Settings, so the explicit prompt call was
 redundant. `PasteService.requestTrust()` had no remaining callers and was deleted.
+
+## ADR-017: Independent review fixes (2026-07-07 review, M-1 through M-4, L-1 through L-3)
+
+**Context.** `docs/2026-07-07_codex_review.md`, a read-only independent review following
+the v0.3 feature batch (docs/CODE_REVIEW.md process), found four Medium and three Low
+findings. No Critical or High findings — the review's overall verdict was "close, but not
+quite release-clean."
+
+**Decisions, one per finding:**
+
+- **M-1 (custom hotkey can claim success while failing to register).**
+  `HotkeyManager.register(shortcut:)` now returns `Bool` reflecting Carbon's actual
+  `RegisterEventHotKey` status instead of only logging failure. `AppDelegate` wraps both
+  call sites in `registerEffectiveHotkey()`: on failure it clears the stored custom
+  shortcut, re-registers the default preset, and posts `.hotkeyRegistrationFailed` with the
+  failed shortcut's display string. `SettingsView` listens for that notification, refreshes
+  its displayed hotkey/preset state, and shows an inline error instead of a stale "Recorded
+  custom shortcut" message.
+- **M-2 (import trusts manifest content/hash claims).** `ImportExport.importArchive`
+  now recomputes each entry's content hash from its actual text/image data using the same
+  `ClipboardCapture.contentHash` logic used at capture time, rejects kind/field mismatches
+  (a `.text` entry must have text and no image blob; a `.image` entry must have image data
+  and no text), and rejects symlinked blob files via `URLResourceValues.isSymbolicLink`
+  before reading them. New `ImportError` cases: `kindFieldMismatch`, `contentHashMismatch`.
+  Covered by five new tests in `ImportExportTests.swift`.
+- **M-3 (Settings history actions swallow failures via `try?`).** Settings → History
+  Management now routes all three destructive actions through a shared
+  `runHistoryOperation(_:)` helper that surfaces `error.localizedDescription` in an alert,
+  matching the behavior `AppDelegate.presentOperationFailure` already had for the identical
+  status-menu actions. Same user-visible operation now fails the same way regardless of
+  which surface triggered it.
+- **M-4 (SECURITY.md denies Input Monitoring the code actually requests).**
+  `docs/SECURITY.md`'s permissions table now lists Input Monitoring alongside
+  Accessibility, explains it's only used to receive the app's own registered hotkey event
+  (not keystroke content), and states the degraded behavior (menu bar still works) if
+  denied.
+- **L-1 (preview overlay's active keys during preview aren't documented).** Kept the
+  existing behavior (paste/delete/pin/quick-paste stay live during preview) rather than
+  gating it — gating would remove the ability to act on an item without first closing the
+  preview, which is worse for a keyboard-first tool. `docs/UX.md` now documents this
+  explicitly instead of leaving it implicit.
+- **L-2 (Roadmap/Backlog status mismatch).** `docs/ROADMAP.md`'s v0.3 section is now
+  marked done (2026-07-07) with a pointer to BACKLOG.md for details, and a new v0.3.1
+  "Hardening" section names this review's fixes as the actual next milestone.
+  `PermafrostVersion.string` (App.swift) and `VERSION` (scripts/make-app.sh) both bumped to
+  `0.3.0` to match — the app had been reporting `0.2.0` while a full v0.3 feature set was
+  already shipped.
+- **L-3 (PermissionReset blocks the main actor running `tccutil`).**
+  `PermissionReset.resetAccessibilityAndInputMonitoring()` is now `async`, running the two
+  `Process` invocations inside `Task.detached`; its one call site in `SettingsView` awaits
+  it from a `Task { }` in the alert action instead of calling it synchronously.
+
+**Consequences.** No dependency, schema, or permission-model changes — this ADR exists
+because CLAUDE.md requires one for "reversing a prior ADR" (none reversed here) and for
+tracking a coordinated multi-finding fix batch; recorded for traceability back to the
+review artifact. Remaining review items intentionally deferred to BACKLOG.md: hotkey
+registration failure/rollback tests (Carbon's `RegisterEventHotKey` isn't practical to fail
+deterministically in a unit test), preview-mode keyboard-routing tests, and a testable
+policy object for pasteboard watcher pause/excluded-app behavior.

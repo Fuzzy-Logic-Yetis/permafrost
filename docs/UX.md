@@ -68,6 +68,14 @@ you just copied, and must never steal the `⌘1` slot from it either.
   existing `⌫`-delete gating — otherwise a search query containing a literal space
   (e.g. "hello world") couldn't be typed.
 
+  While the preview is open, the underlying list's other shortcuts stay live and act on
+  the previewed (selected) item: `⏎` pastes it and closes both preview and panel, `⌫`
+  deletes it (preview closes with it), `⌥P` pins/unpins it, and `⌘1`–`⌘9` still quick-paste
+  by position. This is deliberate — the preview is a bigger look at the same selection, not
+  a separate mode — but it means those keys act on a card you can no longer see the list
+  row for. Flagged by the 2026-07-07 review (L-1); documenting instead of gating, since
+  gating would remove the ability to pin/delete/paste without first closing the preview.
+
 ## Keyboard map
 
 | Key | Action |

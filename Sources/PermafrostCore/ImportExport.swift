@@ -15,6 +15,12 @@ public enum ImportExport {
         case unsupportedVersion(Int)
         case missingBlob(String)
         case unsafeBlobPath(String)
+        /// Review M-2: a manifest entry's declared kind doesn't match its populated
+        /// fields (e.g. a text row with an image blob, or an image row with no image data).
+        case kindFieldMismatch(String)
+        /// Review M-2: recomputing the hash from the entry's actual content didn't
+        /// match the manifest's claimed `contentHash` — the archive is malformed or hostile.
+        case contentHashMismatch(String)
     }
 
     struct Manifest: Codable {
@@ -121,6 +127,12 @@ public enum ImportExport {
             guard url.path == root || url.path.hasPrefix(root + "/") else {
                 throw ImportError.unsafeBlobPath(relativePath)
             }
+            // A symlink inside the archive could point outside it despite the
+            // string-only checks above (review M-2) — refuse to follow one.
+            let resourceValues = try? url.resourceValues(forKeys: [.isSymbolicLinkKey])
+            if resourceValues?.isSymbolicLink == true {
+                throw ImportError.unsafeBlobPath(relativePath)
+            }
             guard FileManager.default.fileExists(atPath: url.path) else {
                 throw ImportError.missingBlob(relativePath)
             }
@@ -129,14 +141,41 @@ public enum ImportExport {
 
         var imported = 0
         for entry in manifest.items {
+            let richData = try blob(entry.richDataFile)
+            let imageData = try blob(entry.imageFile)
+            let thumbnail = try blob(entry.thumbnailFile)
+
+            // Review M-2: don't trust the manifest's kind/hash claims — recompute
+            // the hash from the actual content using the same logic that produced
+            // it at capture time, and reject fields that don't match the kind.
+            let capture: ClipboardCapture
+            switch entry.kind {
+            case .text:
+                guard let text = entry.text, imageData == nil else {
+                    throw ImportError.kindFieldMismatch(entry.contentHash)
+                }
+                capture = ClipboardCapture(
+                    text: text, richData: richData, sourceApp: entry.sourceApp,
+                    isConcealed: entry.isConcealed)
+            case .image:
+                guard let imageData, entry.text == nil else {
+                    throw ImportError.kindFieldMismatch(entry.contentHash)
+                }
+                capture = ClipboardCapture(
+                    imageData: imageData, sourceApp: entry.sourceApp, isConcealed: entry.isConcealed)
+            }
+            guard capture.contentHash == entry.contentHash else {
+                throw ImportError.contentHashMismatch(entry.contentHash)
+            }
+
             let item = ClipboardItem(
                 id: nil,
                 contentHash: entry.contentHash,
                 kind: entry.kind,
                 text: entry.text,
-                richData: try blob(entry.richDataFile),
-                imageData: try blob(entry.imageFile),
-                thumbnail: try blob(entry.thumbnailFile),
+                richData: richData,
+                imageData: imageData,
+                thumbnail: thumbnail,
                 sourceApp: entry.sourceApp,
                 createdAt: entry.createdAt,
                 lastUsedAt: entry.lastUsedAt,

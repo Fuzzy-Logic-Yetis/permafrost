@@ -14,14 +14,24 @@ recent section, hover pin/share/delete on every card, Unpin All / Clear Everythi
 actions (menu + Settings), dedup metadata refresh (source app, rich text, sticky concealed
 flag), import path-traversal validation, and error surfacing on destructive actions.
 
-## v0.3 — Daily-driver polish
+## v0.3.0 — Daily-driver polish (done 2026-07-07)
 
-- Custom hotkey recorder
-- App icon
-- Pause capture; per-app exclusions
-- Preview pane (space bar), paste-as-plain-text, drag-out
-- Monospace-aware text rendering for code-like clipboard content
-- Performance pass with Instruments at 10k+ items
+- ~~Custom hotkey recorder~~, ~~app icon~~, ~~pause capture~~, ~~per-app exclusions~~,
+  ~~preview pane~~ (space bar), ~~monospace-aware text rendering~~ — see docs/BACKLOG.md
+  for details and dates.
+- Deferred out of this milestone: paste-as-plain-text, drag-out (docs/BACKLOG.md "Later").
+- Performance pass with Instruments at 10k+ items — deferred until Instruments is available
+  (no Xcode installed yet, see docs/PROJECT_PLAN.md environment notes).
+
+## v0.3.1 — Hardening (now)
+
+Driven by the 2026-07-07 review (`docs/2026-07-07_codex_review.md`): custom hotkey
+registration failure now rolls back to a working preset and surfaces the failure in
+Settings instead of claiming success silently; import validates recomputed content hashes,
+kind/field consistency, and rejects symlinked blobs instead of trusting the manifest;
+Settings' History Management actions surface errors the same way the status-menu versions
+already did; docs/SECURITY.md now discloses Input Monitoring; PermissionReset no longer
+blocks the main actor. See docs/DECISIONS.md for the ADR.
 
 ## v1.0 — Distribution
 

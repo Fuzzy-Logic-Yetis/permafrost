@@ -31,7 +31,10 @@ Required coverage (these are the product's guarantees):
 - **Import/export**: round-trip preserves content, kind, pinned state, timestamps; import
   into a store with overlapping content skips duplicates; unknown manifest version fails
   loudly; a manifest blob path outside the archive root (absolute path or `..` traversal)
-  is rejected before the filesystem is touched.
+  is rejected before the filesystem is touched. Added 2026-07-07 (review M-2): a
+  recomputed content hash that doesn't match the manifest's claim is rejected; a `.text`
+  entry with an image blob (or vice versa) is rejected; a symlinked blob file is rejected
+  without being followed.
 - **Thumbnails**: image capture produces a thumbnail ≤ the max pixel size; corrupt image
   data doesn't crash.
 - **Panel model**: show/search resets, selection clamping, `⌘1`-`⌘9` quick-paste restricted
@@ -156,7 +159,8 @@ outside the app (e.g. CI or a broken build that won't launch):
     lost, then expire per retention like anything else), Clear Everything (wipes all,
     strongest confirmation). Trigger a failure (e.g. quit the app mid-operation isn't
     testable manually, but confirm the failure path exists in code review) — on success,
-    verify Settings' "N items, M pinned" footer updates immediately.
+    verify Settings' "N items, M pinned" footer updates immediately. Both surfaces (menu
+    bar and Settings) now share the same failure-alert path (ADR-017, review M-3).
 16. **Welcome alert**: delete `didShowWelcome` from defaults (or fresh install), launch →
     alert offers **Got It** and **Enable Launch at Login**; the latter actually toggles the
     login item (check System Settings → General → Login Items).
@@ -194,6 +198,15 @@ outside the app (e.g. CI or a broken build that won't launch):
     scaled to fit. Type a character while the field is empty and preview is closed → confirm
     it goes into the search field rather than toggling preview (only an *empty* field treats
     `␣` as the preview key).
+23. **Custom hotkey conflict/rollback (review M-1)**: pick a chord already claimed
+    system-wide (a reliable one: `⌘Space`'s modifier alone won't register since it needs a
+    letter/number/etc. — instead bind Permafrost's custom hotkey to the same chord already
+    used by e.g. a running app's global shortcut, such as a screenshot tool's capture key,
+    or simplest: register the same chord in a second copy of Permafrost first so the OS
+    already owns it). Recording that chord in Settings should, instead of silently claiming
+    success: revert the Active Hotkey display back to the previous working shortcut, show an
+    inline error message naming the rejected chord, and the previous shortcut must still
+    open the panel.
 
 ## Performance spot checks
 
