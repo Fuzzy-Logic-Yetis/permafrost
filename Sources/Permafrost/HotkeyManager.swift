@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import IOKit.hid
 
 /// Preset global shortcuts (ADR-005). All use V for Win+V muscle memory;
 /// ⇧⌘V is deliberately absent — it collides with "Paste and Match Style".
@@ -27,14 +28,37 @@ enum HotkeyPreset: String, CaseIterable {
     }
 }
 
-/// Carbon RegisterEventHotKey wrapper (ADR-005): the one reliable, native,
-/// no-permission-needed way to own a global shortcut.
+/// Carbon RegisterEventHotKey wrapper (ADR-005). ADR-005 originally assumed this
+/// needs no permission at all — true for the hotkey firing, but ADR-014 found
+/// this OS also silently checks Input Monitoring (`kTCCServiceListenEvent`)
+/// around app launch, denies it with no prompt if never explicitly requested,
+/// and the status item can end up invisible as a result. See
+/// `requestInputMonitoringAccessIfNeeded()` below.
 @MainActor
 final class HotkeyManager {
     var onHotkey: () -> Void = {}
 
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
+
+    /// Explicitly requests Input Monitoring access via the official IOHID API —
+    /// this triggers a normal system Allow/Don't Allow prompt (no password
+    /// needed, unlike manually adding an app via System Settings' "+" button).
+    /// Call once at startup, before registering the hotkey (ADR-014).
+    static func requestInputMonitoringAccessIfNeeded() {
+        let accessType = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
+        switch accessType {
+        case kIOHIDAccessTypeGranted:
+            Log.app.info("Input Monitoring already granted")
+        case kIOHIDAccessTypeDenied:
+            Log.app.error(
+                "Input Monitoring denied — enable in System Settings > Privacy & Security > Input Monitoring, then relaunch Permafrost"
+            )
+        default:
+            let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+            Log.app.info("Input Monitoring access requested; granted: \(granted)")
+        }
+    }
 
     func register(preset: HotkeyPreset) {
         unregister()

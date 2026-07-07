@@ -65,6 +65,17 @@ machine running inside VS Code, learned the hard way on 2026-07-06/07:
   success while quietly not being the region you meant. When in doubt, capture the full
   screen unregioned and crop the saved file, or verify against a known-good coordinate
   (e.g. a window's own position/size via `System Events`) rather than assuming pixel dims.
+- `cliclick m:x,y` / `c:x,y` also take **points, not pixels** — same 2x gotcha as
+  `screencapture -R` above. Converting a coordinate you eyeballed from a *displayed* (chat)
+  image requires two steps, not one: multiply by the image's own displayed→original ratio
+  to get real pixels, **then divide by 2** for cliclick's point space. Forgetting the second
+  step silently clicks the wrong place with no error — verify by screenshotting immediately
+  after a click and confirming the expected UI actually changed.
+- `IOHIDCheckAccess`/`IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)` is the correct way
+  to explicitly request **Input Monitoring** (distinct from Accessibility) with a normal
+  system prompt — see ADR-014. Once TCC has recorded a *denial* for a service, the API
+  won't re-prompt; `tccutil reset ListenEvent <bundle-id>` clears it without needing a
+  password (unlike manually adding an app via System Settings' "+" button, which does).
 - Modern macOS collapses many third-party menu-bar icons into Control Center's own
   aggregated list, where they show up as unlabeled `"status menu"` entries via
   accessibility queries and don't expose their `NSMenu` the classic

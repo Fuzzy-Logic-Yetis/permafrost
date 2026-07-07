@@ -219,3 +219,55 @@ macOS is supposed to be configured — so it stays either way. If the icon is st
 visible after this, the next place to look is whether `NSStatusBar.system` is silently
 declining to render additional items when the bar is already crowded (no overflow chevron
 was observed, but behavior here varies by macOS version) — tracked in docs/BACKLOG.md.
+
+## ADR-014: Explicit Input Monitoring request added; root cause of ADR-013 still unconfirmed
+
+**Context.** Continued investigation the same night (2026-07-07, project owner asleep,
+session continued autonomously per their request). A broader `log show` (not filtered to
+our own subsystem) revealed Permafrost makes a `TCCAccessRequest()` IPC call for
+`kTCCServiceListenEvent` (the **Input Monitoring** privacy category — distinct from
+Accessibility) at launch, which returns `result: false` with no prompt ever shown to the
+user. System Settings → Privacy & Security → Input Monitoring confirmed Permafrost isn't
+even listed there ("No Items") — it was silently denied without ever being added to the
+user-manageable list. Separately, `System Events` accessibility queries showed 8 unlabeled
+"status menu" items under the Control Center process, all reporting **identical position
+`(0, 956)` and zero size `(0, 0)`** — i.e., phantom accessibility entries with no real
+on-screen presence, not actually-rendered-but-mislabeled icons. Both findings looked like
+promising leads toward explaining the ADR-013 invisible-icon bug.
+
+**Decision.** Added `HotkeyManager.requestInputMonitoringAccessIfNeeded()`, called at
+launch before hotkey registration, using the official `IOHIDCheckAccess`/
+`IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)` API — the proper way to trigger a normal
+system Allow/Don't Allow prompt (no password required), rather than relying on whatever
+implicit check macOS performs on its own. In testing, `IOHIDCheckAccess` reported the
+decision as already `Denied` (not "undetermined"), so no prompt fired — TCC will not
+re-prompt once a service has a recorded denial for a given code identity.
+`tccutil reset ListenEvent com.fuzzylogicyetis.Permafrost` successfully cleared the
+decision (no password needed, unlike the System Settings "+" button flow), but **the very
+next launch was immediately re-denied before our own code even ran**, suggesting something
+about this ad-hoc-signed, non-notarized binary causes tccd to auto-deny this specific,
+unusually sensitive category (Input Monitoring is keylogging-adjacent) on every launch,
+without ever offering the app or the user a real choice through the normal API path.
+
+**Consequences — read this carefully before treating Input Monitoring as "the fix":**
+The global hotkey (`⌥⌘V`) was independently confirmed working via a real screenshot showing
+the panel open with actual captured clipboard history, **despite** Input Monitoring being
+denied the entire time. If this permission were required for the hotkey or status item to
+function, the hotkey should have failed too — it didn't. So Input Monitoring denial is
+recorded as a **real, legitimate, now-properly-handled gap** (the app now requests it
+correctly and logs its state honestly instead of silently doing nothing), but is **probably
+not** the actual root cause of the ADR-013 invisible icon. The two are documented together
+because they were investigated together, not because a causal link was established.
+
+**What's still genuinely unknown, for whoever picks this up next (human or Claude):**
+the invisible status item is not yet explained. Ruled out so far: crash, exception, nil
+button/image, `isVisible` reporting false, a global auto-hidden menu bar, a system-level
+per-app "Menu Bar Only" visibility toggle (checked System Settings → Menu Bar — no such
+per-third-party-app control exists there, only built-in system items), and Input Monitoring
+denial (the hotkey works without it). Not yet tried: signing with a persistent (even if
+still unnotarized) identity instead of pure ad-hoc `-` signing, to see whether tccd/
+`NSStatusBar` treats a stable code identity differently than ad-hoc's "no identity at all";
+this is a reasonable next experiment and doesn't require Developer ID membership. The
+project owner should, at minimum, look at their actual menu bar with their own eyes after
+pulling this commit and report back — screenshots analyzed by Claude in this session may
+simply have been looking at the wrong moment, wrong Space, or wrong crop.
