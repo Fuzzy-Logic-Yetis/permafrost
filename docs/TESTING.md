@@ -40,6 +40,10 @@ Required coverage (these are the product's guarantees):
 - **Panel model**: show/search resets, selection clamping, `⌘1`-`⌘9` quick-paste restricted
   to the unpinned prefix, commit callback order and Accessibility fallback, pin toggling,
   and delete selection bounds.
+- **Hotkey registration rollback**: app-target tests fake registration success/failure so
+  Carbon does not need to fail globally; they cover successful custom registration, first
+  custom failure falling back to the selected preset, and replacement custom failure
+  restoring the previous working custom shortcut while surfacing the rejected chord.
 
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).

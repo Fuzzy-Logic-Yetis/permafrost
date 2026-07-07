@@ -52,12 +52,12 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    screenshot proved the icon was genuinely visible while that query still reported bogus
    data, so that signal was never meaningful in the first place.
 
-10. **Hotkey registration failure/rollback test coverage** — `HotkeyManager.register`
-    (Sources/Permafrost/HotkeyManager.swift) now returns a success `Bool` (ADR-017, review
-    M-1), but Carbon's `RegisterEventHotKey` isn't practical to fail deterministically in a
-    unit test (would need to first claim a shortcut in a separate process). Cover with the
-    manual checklist for now (docs/TESTING.md); revisit if Carbon exposes a way to simulate
-    failure, or extract the success/failure branch behind a seam that can be faked.
+10. ~~Hotkey registration failure/rollback test coverage~~ — **DONE 2026-07-07.** Extracted
+    the registration/rollback branch behind a small fakeable seam so tests don't need to
+    force Carbon's `RegisterEventHotKey` to fail globally. Coverage now asserts successful
+    custom registration, failed first custom registration falling back to the selected
+    preset, and failed replacement custom registration restoring the previous working
+    custom hotkey while reporting the rejected chord.
 11. **Preview-mode keyboard-routing tests** — `PanelController.handle` lets paste/delete/
     pin/quick-paste act on the previewed item while the overlay is open (documented in
     docs/UX.md, review L-1). `PanelModel` already has app-target test coverage

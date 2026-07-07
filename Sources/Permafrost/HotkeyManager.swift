@@ -96,6 +96,53 @@ struct HotkeyShortcut: Equatable {
     }
 }
 
+@MainActor
+protocol HotkeySettingsStore: AnyObject {
+    var customHotkey: HotkeyShortcut? { get set }
+    var effectiveHotkey: HotkeyShortcut { get }
+    var hotkeyDisplay: String { get }
+}
+
+@MainActor
+protocol HotkeyRegistering: AnyObject {
+    @discardableResult
+    func register(shortcut: HotkeyShortcut) -> Bool
+}
+
+@MainActor
+final class HotkeyRegistrationCoordinator {
+    private let settings: HotkeySettingsStore
+    private let registrar: HotkeyRegistering
+    private var lastRegisteredCustomHotkey: HotkeyShortcut?
+    private var lastRegisteredShortcut: HotkeyShortcut?
+
+    init(settings: HotkeySettingsStore, registrar: HotkeyRegistering) {
+        self.settings = settings
+        self.registrar = registrar
+    }
+
+    /// Registers the currently configured hotkey. If Carbon rejects it, restore
+    /// the last working custom hotkey (or the selected preset if there was no
+    /// prior custom) and re-register that rollback target. The closure receives
+    /// the rejected shortcut's display string so Settings can surface the error.
+    @discardableResult
+    func registerEffectiveHotkey(onFailure: (String) -> Void = { _ in }) -> Bool {
+        let requestedShortcut = settings.effectiveHotkey
+        let requestedCustomHotkey = settings.customHotkey
+        guard registrar.register(shortcut: requestedShortcut) else {
+            settings.customHotkey = lastRegisteredCustomHotkey
+            let rollbackShortcut = lastRegisteredShortcut ?? settings.effectiveHotkey
+            _ = registrar.register(shortcut: rollbackShortcut)
+            onFailure(requestedShortcut.display)
+            return false
+        }
+
+        lastRegisteredShortcut = requestedShortcut
+        lastRegisteredCustomHotkey = requestedCustomHotkey
+        return true
+    }
+}
+
 /// Preset global shortcuts (ADR-005). All use V for Win+V muscle memory;
 /// ⇧⌘V is deliberately absent — it collides with "Paste and Match Style".
 enum HotkeyPreset: String, CaseIterable {
@@ -224,3 +271,5 @@ final class HotkeyManager {
         )
     }
 }
+
+extension HotkeyManager: HotkeyRegistering {}
