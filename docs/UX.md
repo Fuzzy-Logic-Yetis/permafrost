@@ -39,9 +39,10 @@ Pinned entries live in their own section **at the bottom** (ADR-012). They're th
 reuse over time, not your most recent copy — pinning one must never bump it ahead of what
 you just copied, and must never steal the `⌘1` slot from it either.
 
-- Text cards: up to 3 lines, system font, standard truncation. Source app + relative time
-  in the caption. Monospace-aware rendering and whitespace visualization for code-like
-  content is a documented future enhancement (docs/BACKLOG.md), not yet implemented.
+- Text cards: up to 3 lines with standard truncation. Source app + relative time in the
+  caption. Code-like content (for example indented snippets, structured data, shell
+  commands, SQL, or source-language keywords/punctuation) renders in a monospaced font
+  with subtle markers for leading/trailing spaces and tabs.
 - Image cards: thumbnail (max ~120 pt tall) + dimensions caption.
 - Concealed items (passwords, only when opt-in is enabled): shown with a 🔑 marker so the
   user always knows a secret is on screen. Otherwise identical behavior — visible,

@@ -25,9 +25,9 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 5. **Background inserts for large images** — move image writes off the main actor if
    Instruments shows panel jank (see ARCHITECTURE.md → Concurrency).
 6. **Preview pane** — space bar quick-look of full text/image for the selected item.
-7. **Monospace-aware text rendering** — detect code-like clipboard content and render with
-   a monospaced font + subtle leading/trailing whitespace markers (UX.md originally
-   promised this for MVP; deferred, see 2026-07-06 review L-2).
+7. ~~Monospace-aware text rendering~~ — **DONE 2026-07-07.** Code-like text
+   clips are detected in the panel and rendered with a monospaced font plus subtle
+   leading/trailing whitespace markers.
 8. **UI-layer automated tests** — `PanelModel`/`PanelController` behavior (quick-paste
    bounds, section transitions, hover action wiring) is currently verified only by the
    manual checklist (docs/TESTING.md) and store-level invariant tests. Investigate a

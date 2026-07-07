@@ -225,10 +225,7 @@ private struct ItemCard: View {
         VStack(alignment: .leading, spacing: 4) {
             switch item.kind {
             case .text:
-                Text(item.text ?? "")
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-                    .truncationMode(.tail)
+                TextPreview(text: item.text ?? "")
             case .image:
                 if let thumbnail = item.thumbnail, let nsImage = NSImage(data: thumbnail) {
                     Image(nsImage: nsImage)
@@ -261,5 +258,135 @@ private struct ItemCard: View {
             parts.append("\(size.width)×\(size.height)")
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+private struct TextPreview: View {
+    let text: String
+
+    private var isCodeLike: Bool {
+        TextPreviewClassifier.isCodeLike(text)
+    }
+
+    var body: some View {
+        Text(displayText)
+            .font(isCodeLike ? .system(.body, design: .monospaced) : .body)
+            .foregroundStyle(.primary)
+            .lineLimit(3)
+            .multilineTextAlignment(.leading)
+            .truncationMode(.tail)
+    }
+
+    private var displayText: AttributedString {
+        guard isCodeLike else {
+            return AttributedString(text)
+        }
+        return WhitespaceVisualizer.attributedPreview(for: text)
+    }
+}
+
+private enum TextPreviewClassifier {
+    static func isCodeLike(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 6 else { return false }
+
+        let lines = text.split(
+            separator: "\n",
+            omittingEmptySubsequences: false
+        ).map(String.init)
+
+        var score = 0
+        if text.contains("\t") { score += 2 }
+        if lines.count > 1 { score += 1 }
+        if lines.contains(where: hasCodeIndentation) { score += 2 }
+        if containsCodePunctuation(trimmed) { score += 1 }
+        if containsCodeKeyword(trimmed) { score += 2 }
+        if looksLikeSQL(trimmed) { score += 3 }
+        if looksLikeShellCommand(trimmed) { score += 3 }
+        if looksLikeStructuredData(trimmed) { score += 2 }
+
+        return score >= 3
+    }
+
+    private static func hasCodeIndentation(_ line: String) -> Bool {
+        guard let first = line.first, first == " " || first == "\t" else {
+            return false
+        }
+        return !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func containsCodePunctuation(_ text: String) -> Bool {
+        let punctuation = ["{", "}", ";", "=>", "==", "&&", "||", "</", "/>", "::"]
+        return punctuation.contains { text.contains($0) }
+    }
+
+    private static func containsCodeKeyword(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+        let keywords = [
+            "func ", "let ", "var ", "class ", "struct ", "enum ", "import ",
+            "return ", "const ", "function ", "select ", "insert ", "update ",
+            "delete from ", "where ", "def ", "package ", "public ", "private ",
+        ]
+        return keywords.contains { lowercased.contains($0) }
+    }
+
+    private static func looksLikeSQL(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+        return lowercased.contains("select ") && lowercased.contains(" from ")
+    }
+
+    private static func looksLikeShellCommand(_ text: String) -> Bool {
+        text.hasPrefix("$ ") || text.hasPrefix("> ")
+    }
+
+    private static func looksLikeStructuredData(_ text: String) -> Bool {
+        (text.hasPrefix("{") && text.hasSuffix("}"))
+            || (text.hasPrefix("[") && text.hasSuffix("]"))
+            || (text.hasPrefix("<") && text.hasSuffix(">"))
+    }
+}
+
+private enum WhitespaceVisualizer {
+    static func attributedPreview(for text: String) -> AttributedString {
+        var result = AttributedString()
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+
+        for (index, line) in lines.enumerated() {
+            if index > 0 {
+                result += AttributedString("\n")
+            }
+            result += attributedLine(String(line))
+        }
+
+        return result
+    }
+
+    private static func attributedLine(_ line: String) -> AttributedString {
+        var output = AttributedString()
+        let characters = Array(line)
+        let leadingCount = characters.prefix { $0 == " " || $0 == "\t" }.count
+        let trailingCount = characters.dropFirst(leadingCount).reversed()
+            .prefix { $0 == " " || $0 == "\t" }
+            .count
+        let bodyStart = leadingCount
+        let bodyEnd = characters.count - trailingCount
+
+        output += markerString(for: characters.prefix(leadingCount))
+        if bodyStart < bodyEnd {
+            output += AttributedString(String(characters[bodyStart..<bodyEnd]))
+        }
+        output += markerString(for: characters.suffix(trailingCount))
+        return output
+    }
+
+    private static func markerString<S: Sequence>(for characters: S) -> AttributedString
+    where S.Element == Character {
+        var markers = AttributedString(
+            characters.map { character in
+                character == "\t" ? "→" : "·"
+            }.joined()
+        )
+        markers.foregroundColor = .secondary
+        return markers
     }
 }
