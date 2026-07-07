@@ -75,6 +75,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full story.
 | [docs/RESEARCH.md](docs/RESEARCH.md) | Why this exists — competitor analysis and the build-vs-buy gate |
 | [docs/UX.md](docs/UX.md) | Interaction spec and keyboard map |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Where this is going |
+| [docs/FUTURE_IDEAS.md](docs/FUTURE_IDEAS.md) | Deferred ideas and explicitly unscheduled possibilities |
 
 ## Status
 
