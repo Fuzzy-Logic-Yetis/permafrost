@@ -58,6 +58,22 @@ public final class ClipboardStore: Sendable {
                 t.tokenizer = .unicode61()
             }
         }
+        migrator.registerMigration("v2_ocr_text") { db in
+            try db.alter(table: "clipboard_item") { t in
+                t.add(column: "ocr_text", .text)
+            }
+            try db.execute(sql: "DROP TRIGGER IF EXISTS __clipboard_item_fts_ai")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS __clipboard_item_fts_ad")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS __clipboard_item_fts_au")
+            try db.drop(table: "clipboard_item_fts")
+            try db.create(virtualTable: "clipboard_item_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "clipboard_item")
+                t.column("text")
+                t.column("ocr_text")
+                t.tokenizer = .unicode61()
+            }
+            try db.execute(sql: "INSERT INTO clipboard_item_fts(clipboard_item_fts) VALUES ('rebuild')")
+        }
         return migrator
     }
 
@@ -86,6 +102,9 @@ public final class ClipboardStore: Sendable {
                 existing.lastUsedAt = now
                 existing.sourceApp = capture.sourceApp
                 existing.richData = capture.richData
+                if capture.ocrText != nil {
+                    existing.ocrText = capture.ocrText
+                }
                 existing.isConcealed = existing.isConcealed || capture.isConcealed
                 try existing.update(db)
                 return existing
@@ -95,6 +114,7 @@ public final class ClipboardStore: Sendable {
                 contentHash: hash,
                 kind: capture.kind,
                 text: capture.text,
+                ocrText: capture.ocrText,
                 richData: capture.richData,
                 imageData: capture.imageData,
                 thumbnail: thumbnail,
@@ -117,7 +137,7 @@ public final class ClipboardStore: Sendable {
     /// guarantee (ADR-012): pinning something never displaces your latest copy from
     /// the front of the list or from the `⌘1`–`⌘9` quick-paste slots, which address
     /// only the unpinned prefix. A non-empty query filters via FTS5 prefix matching;
-    /// image items have no text and never match.
+    /// text rows match their body and image rows match recognized OCR metadata when present.
     public func items(matching query: String? = nil, limit: Int = 500) throws -> [ClipboardItem] {
         let trimmed = (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return try dbQueue.read { db in

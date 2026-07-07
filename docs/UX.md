@@ -8,7 +8,8 @@ If an interaction needs the mouse, it's a bug in the design.
 - `⌥⌘V` opens a compact floating panel near the center of the active screen.
 - The app you were using **keeps focus** (the panel is non-activating); whatever you pick
   pastes into it.
-- Search field is focused on open. Typing filters immediately.
+- Search field is focused on open. Typing filters immediately, including OCR-recognized
+  text attached to image/snipping rows once OCR has run.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 
@@ -44,7 +45,9 @@ you just copied, and must never steal the `⌘1` slot from it either.
   caption. Code-like content (for example indented snippets, structured data, shell
   commands, SQL, or source-language keywords/punctuation) renders in a monospaced font
   with subtle markers for leading/trailing spaces and tabs.
-- Image cards: thumbnail (max ~120 pt tall) + dimensions caption.
+- Image cards: thumbnail (max ~120 pt tall) + dimensions caption. OCR text stored for an
+  image is searchable, but the image still pastes as the original image; UI affordances for
+  copying recognized text are deferred to the OCR UI branch.
 - Concealed items (passwords, only when opt-in is enabled): shown with a 🔑 marker so the
   user always knows a secret is on screen. Otherwise identical behavior — visible,
   searchable, pinnable (owner's explicit decision; see SECURITY.md).

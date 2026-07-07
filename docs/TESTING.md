@@ -19,16 +19,20 @@ Required coverage (these are the product's guarantees):
 - **Dedup**: saving identical content twice yields one row with bumped `last_used_at`;
   re-copying a pinned item does not unpin it.
 - **Search**: FTS prefix matching (`hel` finds "Hello world"), multi-token queries,
-  queries with FTS-hostile characters (`"`, `*`, `(`) fall back safely, image items
-  excluded from text search but present in unfiltered list.
+  queries with FTS-hostile characters (`"`, `*`, `(`) fall back safely, image items with no
+  OCR metadata are excluded from text search but present in unfiltered list, and image rows
+  with `ocr_text` can match recognized text without changing image paste behavior.
 - **Ordering** (ADR-012): unpinned first by `last_used_at` desc, then pinned in their own
   section (most-recently-pinned first, stable `pin_order`) — unpinned entries must always
   precede pinned ones regardless of age, since the panel's `⌘1`–`⌘9` quick-paste bound
   depends on that invariant.
 - **Dedup metadata**: re-copying identical text refreshes `sourceApp` and `richData` to the
-  new capture; `isConcealed` is OR'd (sticky in the safer direction), never cleared by a
-  later non-concealed copy of the same content.
-- **Import/export**: round-trip preserves content, kind, pinned state, timestamps; import
+  new capture; re-copying identical images refreshes non-nil OCR metadata without changing
+  the image content hash/dedup key and does not clear existing OCR text just because a later
+  capture has none; `isConcealed` is OR'd (sticky in the safer direction), never
+  cleared by a later non-concealed copy of the same content.
+- **Import/export**: round-trip preserves content, kind, OCR text metadata for image rows,
+  pinned state, timestamps; import
   into a store with overlapping content skips duplicates; unknown manifest version fails
   loudly; a manifest blob path outside the archive root (absolute path or `..` traversal)
   is rejected before the filesystem is touched. Added 2026-07-07 (review M-2): a

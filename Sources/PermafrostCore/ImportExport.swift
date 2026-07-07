@@ -33,6 +33,7 @@ public enum ImportExport {
         var contentHash: String
         var kind: ClipboardItemKind
         var text: String?
+        var ocrText: String?
         var sourceApp: String?
         var createdAt: Date
         var lastUsedAt: Date
@@ -57,6 +58,7 @@ public enum ImportExport {
                 contentHash: item.contentHash,
                 kind: item.kind,
                 text: item.text,
+                ocrText: item.ocrText,
                 sourceApp: item.sourceApp,
                 createdAt: item.createdAt,
                 lastUsedAt: item.lastUsedAt,
@@ -151,7 +153,7 @@ public enum ImportExport {
             let capture: ClipboardCapture
             switch entry.kind {
             case .text:
-                guard let text = entry.text, imageData == nil else {
+                guard let text = entry.text, entry.ocrText == nil, imageData == nil else {
                     throw ImportError.kindFieldMismatch(entry.contentHash)
                 }
                 capture = ClipboardCapture(
@@ -162,7 +164,8 @@ public enum ImportExport {
                     throw ImportError.kindFieldMismatch(entry.contentHash)
                 }
                 capture = ClipboardCapture(
-                    imageData: imageData, sourceApp: entry.sourceApp, isConcealed: entry.isConcealed)
+                    imageData: imageData, ocrText: entry.ocrText, sourceApp: entry.sourceApp,
+                    isConcealed: entry.isConcealed)
             }
             guard capture.contentHash == entry.contentHash else {
                 throw ImportError.contentHashMismatch(entry.contentHash)
@@ -173,6 +176,7 @@ public enum ImportExport {
                 contentHash: entry.contentHash,
                 kind: entry.kind,
                 text: entry.text,
+                ocrText: entry.ocrText,
                 richData: richData,
                 imageData: imageData,
                 thumbnail: thumbnail,

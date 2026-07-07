@@ -46,12 +46,28 @@ import Testing
         #expect(try store.items(matching: nil).count == 4)
     }
 
-    @Test func imagesAppearUnfilteredButNeverMatchTextSearch() throws {
+    @Test func imagesWithoutOCRAppearUnfilteredButNeverMatchTextSearch() throws {
         let store = try seededStore()
         let all = try store.items()
         #expect(all.contains { $0.kind == .image })
         let searched = try store.items(matching: "hello")
         #expect(!searched.contains { $0.kind == .image })
+    }
+
+    @Test func imageRowsCanMatchOCRTextSearch() throws {
+        let store = try ClipboardStore.inMemory()
+        let image = try store.save(
+            ClipboardCapture(
+                imageData: TestImages.png(width: 10, height: 10),
+                ocrText: "Receipt total cappuccino"),
+            now: now)
+        try store.save(ClipboardCapture(text: "plain receipt text"), now: now.addingTimeInterval(1))
+
+        let results = try store.items(matching: "cappuccino")
+
+        #expect(results.map(\.id) == [image.id])
+        #expect(results[0].kind == .image)
+        #expect(results[0].ocrText == "Receipt total cappuccino")
     }
 
     @Test func pinnedMatchesAppearAfterUnpinnedInSearchResults() throws {

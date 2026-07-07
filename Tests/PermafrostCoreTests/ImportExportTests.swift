@@ -47,6 +47,26 @@ import Testing
         #expect(image?.thumbnail != nil)
     }
 
+    @Test func roundTripPreservesImageOCRText() throws {
+        let source = try ClipboardStore.inMemory()
+        let image = TestImages.png(width: 64, height: 32)
+        try source.save(
+            ClipboardCapture(imageData: image, ocrText: "Boarding pass gate B12"), now: now)
+
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try ImportExport.exportArchive(from: source, to: dir)
+
+        let destination = try ClipboardStore.inMemory()
+        let imported = try ImportExport.importArchive(from: dir, into: destination)
+
+        #expect(imported == 1)
+        let item = try #require(destination.allItems().first)
+        #expect(item.kind == .image)
+        #expect(item.ocrText == "Boarding pass gate B12")
+        #expect(try destination.items(matching: "gate").map(\.id) == [item.id])
+    }
+
     @Test func importSkipsExistingContent() throws {
         let source = try ClipboardStore.inMemory()
         try source.save(ClipboardCapture(text: "shared"), now: now)
@@ -148,7 +168,28 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         let manifest = """
             {"version": 1, "exportedAt": "2026-07-05T00:00:00Z", "items": [
-                {"contentHash": "abc", "kind": "image", "text": null, "sourceApp": null,
+                {"contentHash": "abc", "kind": "image", "text": null, "ocrText": null, "sourceApp": null,
+                 "createdAt": "2026-07-05T00:00:00Z", "lastUsedAt": "2026-07-05T00:00:00Z",
+                 "isPinned": false, "pinOrder": null, "isConcealed": false,
+                 "imageFile": null, "thumbnailFile": null, "richDataFile": null}
+            ]}
+            """
+        try manifest.write(
+            to: dir.appendingPathComponent(ImportExport.manifestFileName),
+            atomically: true, encoding: .utf8)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.kindFieldMismatch("abc")) {
+            try ImportExport.importArchive(from: dir, into: store)
+        }
+    }
+
+    @Test func textKindWithOCRTextIsRejected() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let manifest = """
+            {"version": 1, "exportedAt": "2026-07-05T00:00:00Z", "items": [
+                {"contentHash": "abc", "kind": "text", "text": "hello", "ocrText": "not for text", "sourceApp": null,
                  "createdAt": "2026-07-05T00:00:00Z", "lastUsedAt": "2026-07-05T00:00:00Z",
                  "isPinned": false, "pinOrder": null, "isConcealed": false,
                  "imageFile": null, "thumbnailFile": null, "richDataFile": null}

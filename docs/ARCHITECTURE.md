@@ -50,11 +50,12 @@ Menu-bar-only agent app (`LSUIElement`), no Dock icon. Two Swift modules:
 1. **Capture**: user copies anywhere → `PasteboardWatcher` notices `changeCount` change →
    builds a `ClipboardCapture` (image preferred over text if both present; concealed types
    skipped unless the user opted in — ADR-011) → `ClipboardStore.save()` hashes content
-   (SHA-256); an existing hash just bumps
-   `last_used_at` (dedup), otherwise a new row + thumbnail (images) is inserted, then
-   retention runs.
+   (SHA-256 over text for text rows or image bytes for image rows; OCR metadata is not part
+   of the dedup key); an existing hash bumps `last_used_at` and refreshes capture metadata,
+   otherwise a new row + thumbnail (images) is inserted, then retention runs.
 2. **Recall**: `⌥⌘V` → `PanelController` shows the panel *without activating the app* (the
-   target app keeps focus) → typing filters via FTS5 → `⏎` → `PasteService` writes the item
+   target app keeps focus) → typing filters via FTS5 over text rows and image OCR metadata
+   → `⏎` → `PasteService` writes the item
    to the pasteboard and synthesizes `⌘V` into the still-focused target app → panel closes,
    `last_used_at` bumps. List order is unpinned-first-by-recency, then a pinned section
    (ADR-012); `⌘1`–`⌘9` in `PanelModel.commitQuickPaste` are bounded to the unpinned prefix
@@ -65,7 +66,7 @@ Menu-bar-only agent app (`LSUIElement`), no Dock icon. Two Swift modules:
    `DELETE WHERE is_pinned = 0 AND last_used_at < cutoff` — pinned rows are untouchable by
    design (the WHERE clause, not app logic, guarantees it).
 
-## Schema (v1)
+## Schema (current, v2)
 
 ```sql
 CREATE TABLE clipboard_item (
@@ -73,6 +74,7 @@ CREATE TABLE clipboard_item (
   content_hash  TEXT NOT NULL UNIQUE,   -- SHA-256 of content; dedup key
   kind          TEXT NOT NULL,          -- 'text' | 'image'
   text          TEXT,                   -- plain text (also FTS5-indexed)
+  ocr_text      TEXT,                   -- recognized text for image rows; not a dedup key
   rich_data     BLOB,                   -- RTF alternate representation, if any
   image_data    BLOB,                   -- original PNG for images/snips
   thumbnail     BLOB,                   -- downscaled PNG for panel display
@@ -83,7 +85,7 @@ CREATE TABLE clipboard_item (
   pin_order     INTEGER,                -- stable ordering among pinned items
   is_concealed  BOOLEAN NOT NULL DEFAULT 0  -- password-manager content, opt-in (ADR-011)
 );
--- + clipboard_item_fts: FTS5 external-content table on (text), trigger-synchronized
+-- + clipboard_item_fts: FTS5 external-content table on (text, ocr_text), trigger-synchronized
 ```
 
 Expiry is measured from `last_used_at`, not `created_at`: an entry you keep pasting stays
