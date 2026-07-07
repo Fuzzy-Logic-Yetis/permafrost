@@ -8,8 +8,11 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 1. **Custom hotkey recorder** — Settings currently offers presets (ADR-005). Evaluate
    building a recorder natively vs. adopting `KeyboardShortcuts` (would need an ADR to
    spend the dependency budget).
-2. **App icon** — proper `.icns` (snowflake/yeti mark). MVP uses the SF Symbol status icon
-   only, and the bundle ships without a custom icon.
+2. ~~App icon~~ — **DONE 2026-07-07.** Icy-blue gradient squircle with a bold white
+   snowflake glyph, generated via `scripts/generate-icon.swift` (CoreGraphics/AppKit,
+   exports all 10 `.iconset` sizes, converted with `iconutil`). Wired into
+   `scripts/make-app.sh` (`CFBundleIconFile` in `Info.plist`); `.icns` committed as a
+   binary resource, not regenerated per build.
 3. **Pause capture** — status-item menu toggle to temporarily stop recording.
 4. **Per-app exclusion list** — never record from user-chosen apps (e.g., a password
    manager that doesn't set concealed types, a VNC client).
