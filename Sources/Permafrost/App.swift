@@ -95,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.hotkeyManager.register(preset: self.settings.hotkeyPreset)
                 self.refreshOpenMenuItemTitle()
+                self.refreshCapturePausedState()
             }
         }
     }
@@ -120,6 +121,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openItem.target = self
         openItem.tag = MenuTag.open.rawValue
         menu.addItem(openItem)
+
+        let captureItem = NSMenuItem(
+            title: "Pause Capture", action: #selector(toggleCapturePaused), keyEquivalent: "")
+        captureItem.target = self
+        captureItem.tag = MenuTag.capturePaused.rawValue
+        captureItem.state = settings.capturePaused ? .on : .off
+        menu.addItem(captureItem)
         menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(
@@ -164,11 +172,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private enum MenuTag: Int {
         case open = 1
+        case capturePaused = 2
     }
 
     private func refreshOpenMenuItemTitle() {
         statusItem?.menu?.item(withTag: MenuTag.open.rawValue)?.title =
             "Open Permafrost  (\(settings.hotkeyPreset.display))"
+    }
+
+    private func refreshCapturePausedState() {
+        statusItem?.menu?.item(withTag: MenuTag.capturePaused.rawValue)?.state =
+            settings.capturePaused ? .on : .off
+        statusItem?.button?.contentTintColor = settings.capturePaused ? .systemOrange : nil
+    }
+
+    @objc private func toggleCapturePaused() {
+        settings.capturePaused.toggle()
+        refreshCapturePausedState()
     }
 
     @objc private func openPanel() {

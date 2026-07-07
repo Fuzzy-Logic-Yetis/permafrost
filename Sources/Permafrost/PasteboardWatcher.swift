@@ -36,6 +36,11 @@ final class PasteboardWatcher {
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
 
+        guard !AppSettings.shared.capturePaused else {
+            Log.capture.debug("capture paused; skipped pasteboard change")
+            return
+        }
+
         let types = Set((pasteboard.types ?? []).map(\.rawValue))
         if !types.isDisjoint(with: Self.transientTypes) { return }
 

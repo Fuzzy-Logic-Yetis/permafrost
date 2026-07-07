@@ -13,6 +13,7 @@ final class AppSettings {
         static let maxUnpinnedCount = "maxUnpinnedCount"  // 0 = unlimited
         static let hotkeyPreset = "hotkeyPreset"
         static let recordConcealed = "recordConcealed"
+        static let capturePaused = "capturePaused"
         static let maxImageMegabytes = "maxImageMegabytes"
         static let didShowWelcome = "didShowWelcome"
     }
@@ -25,6 +26,7 @@ final class AppSettings {
             Keys.maxUnpinnedCount: 2000,
             Keys.hotkeyPreset: HotkeyPreset.optionCommandV.rawValue,
             Keys.recordConcealed: false,
+            Keys.capturePaused: false,
             Keys.maxImageMegabytes: 10,
         ])
     }
@@ -45,6 +47,11 @@ final class AppSettings {
 
     var recordConcealed: Bool {
         defaults.bool(forKey: Keys.recordConcealed)
+    }
+
+    var capturePaused: Bool {
+        get { defaults.bool(forKey: Keys.capturePaused) }
+        set { defaults.set(newValue, forKey: Keys.capturePaused) }
     }
 
     var maxImageBytes: Int {

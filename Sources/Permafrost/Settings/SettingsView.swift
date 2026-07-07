@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.Keys.maxUnpinnedCount) private var maxUnpinnedCount = 2000
     @AppStorage(AppSettings.Keys.hotkeyPreset) private var hotkeyPreset =
         HotkeyPreset.optionCommandV.rawValue
+    @AppStorage(AppSettings.Keys.capturePaused) private var capturePaused = false
     @AppStorage(AppSettings.Keys.recordConcealed) private var recordConcealed = false
     @AppStorage(AppSettings.Keys.maxImageMegabytes) private var maxImageMegabytes = 10
 
@@ -36,6 +37,17 @@ struct SettingsView: View {
                     .onChange(of: launchAtLogin) {
                         AppSettings.shared.launchAtLogin = launchAtLogin
                     }
+                Toggle("Pause capture", isOn: $capturePaused)
+            }
+
+            Section {
+                Text(
+                    capturePaused
+                        ? "Clipboard changes are ignored until you resume capture."
+                        : "Use the menu bar toggle to temporarily stop recording clipboard changes."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section {

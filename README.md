@@ -19,6 +19,7 @@ Local-first. Keyboard-first. No cloud, no analytics, no network code at all.
 - **Paste on select** — `⏎` pastes straight into the app you were using
 - **Mouse-friendly too** — hover any entry for pin / share / delete buttons
 - **Menu bar app** — no Dock icon, no window clutter
+- **Pause capture** — temporarily stop recording from the menu bar or Settings
 - **Import / export** — your history is yours; take it with you
 
 ## Windows → macOS cheat sheet

@@ -82,6 +82,14 @@ Note: a status-item menu's key equivalents (e.g. the `,` shown next to Settings)
 while that menu is open — they are not global shortcuts, so they don't compete with the app
 hotkey or risk firing by accident.
 
+## Capture controls
+
+The status-bar menu includes **Pause Capture**. When checked, Permafrost continues running
+and the history panel remains available, but new pasteboard changes are ignored and not
+backfilled later. Resuming capture starts from the next clipboard change. The same persisted
+setting appears in Settings → General so the paused state is visible even if the menu is not
+open.
+
 ## First-run / onboarding
 
 1. First launch: menu bar snowflake appears; a one-time notification-style alert explains
