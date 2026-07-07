@@ -28,10 +28,12 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 7. ~~Monospace-aware text rendering~~ — **DONE 2026-07-07.** Code-like text
    clips are detected in the panel and rendered with a monospaced font plus subtle
    leading/trailing whitespace markers.
-8. **UI-layer automated tests** — `PanelModel`/`PanelController` behavior (quick-paste
-   bounds, section transitions, hover action wiring) is currently verified only by the
-   manual checklist (docs/TESTING.md) and store-level invariant tests. Investigate a
-   lightweight harness once the interaction surface stabilizes (2026-07-06 review M-5).
+8. ~~UI-layer automated tests~~ — **DONE 2026-07-07.** Added a lightweight
+   `PermafrostTests` target that imports the app module and tests `PanelModel` with an
+   in-memory store plus fake paste service. Covered show/search resets, selection clamping,
+   quick-paste recent-only bounds, commit callback ordering/accessibility fallback,
+   pinning, and delete selection bounds. Screenshot/UI automation remains deliberately
+   out of scope; hover action wiring stays in the manual checklist.
 9. ~~Confirm status item icon visibility~~ — **RESOLVED 2026-07-07, see ADR-015.** Root
    cause: the menu bar had too many items competing for space; macOS silently drops status
    items that don't fit, with no overflow indicator. Not a Permafrost bug — freeing space

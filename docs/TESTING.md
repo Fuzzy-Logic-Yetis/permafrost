@@ -2,10 +2,14 @@
 
 ## Unit tests (automated)
 
-`./scripts/test.sh` — Swift Testing framework, targets `PermafrostCore` only (the
-executable is a thin shell; its logic lives in core precisely so it can be tested
-headlessly). The script wraps `swift test` with the framework paths that Command Line
-Tools-only machines need; with full Xcode installed, plain `swift test` works too.
+`./scripts/test.sh` — Swift Testing framework. The script wraps `swift test` with the
+framework paths that Command Line Tools-only machines need; with full Xcode installed,
+plain `swift test` works too.
+
+Most storage/search/retention behavior lives in `PermafrostCoreTests`. Lightweight
+UI-layer coverage lives in `PermafrostTests`, which imports the app module and exercises
+`PanelModel` against an in-memory store plus a fake paste service. These tests deliberately
+avoid screenshots, synthetic key events, pasteboard writes, or Accessibility prompts.
 
 Required coverage (these are the product's guarantees):
 
@@ -30,6 +34,9 @@ Required coverage (these are the product's guarantees):
   is rejected before the filesystem is touched.
 - **Thumbnails**: image capture produces a thumbnail ≤ the max pixel size; corrupt image
   data doesn't crash.
+- **Panel model**: show/search resets, selection clamping, `⌘1`-`⌘9` quick-paste restricted
+  to the unpinned prefix, commit callback order and Accessibility fallback, pin toggling,
+  and delete selection bounds.
 
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).
