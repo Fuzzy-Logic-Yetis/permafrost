@@ -166,6 +166,10 @@ outside the app (e.g. CI or a broken build that won't launch):
     tints orange; copy a unique string while paused → it does not appear in `⌥⌘V`; uncheck
     Pause Capture, copy another unique string → the second string appears, while the skipped
     paused string is not backfilled. Settings → General mirrors the paused state.
+20. **Per-app exclusion**: Settings → Excluded Apps → Add App…, pick an app (e.g. Terminal)
+    → it appears in the list. Switch to that app, copy text → `⌥⌘V` → item does NOT appear.
+    Remove it from the list, copy the same text again → it now appears. Quit and relaunch
+    Permafrost → the exclusion list persists.
 
 ## Performance spot checks
 

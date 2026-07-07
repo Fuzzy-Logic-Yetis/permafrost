@@ -1,3 +1,4 @@
+import AppKit
 import PermafrostCore
 import SwiftUI
 
@@ -22,6 +23,7 @@ struct SettingsView: View {
     @State private var showResetPermissionsConfirm = false
     @State private var pinnedCount = 0
     @State private var totalCount = 0
+    @State private var excludedApps = AppSettings.shared.excludedApps
 
     private let trustPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -100,6 +102,24 @@ struct SettingsView: View {
                 Text("Privacy")
             } footer: {
                 Text("Recorded passwords are marked with a key icon in the panel.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                ForEach(excludedApps) { app in
+                    HStack {
+                        Text(app.displayName)
+                        Spacer()
+                        Button("Remove") { removeExcludedApp(app) }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                Button("Add App…") { addExcludedApp() }
+            } header: {
+                Text("Excluded Apps")
+            } footer: {
+                Text("Clipboard content copied while one of these apps is frontmost is never recorded.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -231,6 +251,25 @@ struct SettingsView: View {
     private func refreshCounts() {
         totalCount = (try? store.count()) ?? 0
         pinnedCount = (try? store.pinnedCount()) ?? 0
+    }
+
+    private func addExcludedApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url,
+            let bundleID = Bundle(url: url)?.bundleIdentifier
+        else { return }
+        let name = FileManager.default.displayName(atPath: url.path)
+        AppSettings.shared.addExcludedApp(ExcludedApp(bundleID: bundleID, displayName: name))
+        excludedApps = AppSettings.shared.excludedApps
+    }
+
+    private func removeExcludedApp(_ app: ExcludedApp) {
+        AppSettings.shared.removeExcludedApp(bundleID: app.bundleID)
+        excludedApps = AppSettings.shared.excludedApps
     }
 
     /// Turning the toggle ON routes through the risk acknowledgment (ADR-011);

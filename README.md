@@ -58,6 +58,9 @@ copy-to-clipboard mode.
   default** — Permafrost honors `org.nspasteboard.ConcealedType` and transient pasteboard
   types. If you *want* password history, there's an explicit opt-in behind a
   risk-acknowledgment prompt (see [docs/SECURITY.md](docs/SECURITY.md))
+- **Excluded apps** — add any app to Settings → Excluded Apps and Permafrost never records
+  anything copied while that app is frontmost, useful for apps that don't mark their
+  clipboard content as concealed
 - There is no network code in this application. None. Verify it — the source is right here.
 
 See [docs/SECURITY.md](docs/SECURITY.md) for the full story.

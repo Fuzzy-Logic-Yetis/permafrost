@@ -44,20 +44,24 @@ final class PasteboardWatcher {
         let types = Set((pasteboard.types ?? []).map(\.rawValue))
         if !types.isDisjoint(with: Self.transientTypes) { return }
 
+        let frontmostApp = NSWorkspace.shared.frontmostApplication
+        if AppSettings.shared.isExcluded(bundleID: frontmostApp?.bundleIdentifier) { return }
+
         let concealed = types.contains(Self.concealedType)
         if concealed && !AppSettings.shared.recordConcealed { return }
 
-        guard let capture = makeCapture(from: pasteboard, types: types, concealed: concealed)
+        guard
+            let capture = makeCapture(
+                from: pasteboard, types: types, concealed: concealed,
+                sourceApp: frontmostApp?.localizedName)
         else { return }
         Log.capture.debug("captured \(capture.kind.rawValue, privacy: .public) item")
         onCapture(capture)
     }
 
     private func makeCapture(
-        from pasteboard: NSPasteboard, types: Set<String>, concealed: Bool
+        from pasteboard: NSPasteboard, types: Set<String>, concealed: Bool, sourceApp: String?
     ) -> ClipboardCapture? {
-        let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName
-
         // Copied files: store their paths as text rather than Finder's icon images.
         if types.contains("public.file-url"),
             let urls = pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL],
