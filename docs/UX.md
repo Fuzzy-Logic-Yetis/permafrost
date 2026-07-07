@@ -58,7 +58,7 @@ you just copied, and must never steal the `⌘1` slot from it either.
 
 | Key | Action |
 |---|---|
-| `⌥⌘V` | Open/close panel (global) |
+| `⌥⌘V` | Open/close panel (global default; configurable in Settings) |
 | type | Filter (search field always live) |
 | `↑` / `↓` | Move selection (moves through Recent, then Pinned) |
 | `⏎` | Paste selected into previous app, close |
@@ -91,6 +91,16 @@ and the history panel remains available, but new pasteboard changes are ignored 
 backfilled later. Resuming capture starts from the next clipboard change. The same persisted
 setting appears in Settings → General so the paused state is visible even if the menu is not
 open.
+
+## Hotkey settings
+
+Settings → General keeps the preset picker from ADR-005 and adds a native custom recorder.
+Click **Record Custom…**, press one key chord, then Permafrost immediately re-registers the
+global hotkey and updates the status-menu title. Custom shortcuts must include at least one
+primary modifier (`⌘`, `⌥`, or `⌃`) so a plain letter or Shift-only chord cannot accidentally
+hijack normal typing. `Esc` or **Cancel** exits recording without changing the current
+shortcut. **Use Selected Preset** removes a custom recording and returns to the currently
+selected preset; **Reset to Default** returns to `⌥⌘V`.
 
 ## First-run / onboarding
 

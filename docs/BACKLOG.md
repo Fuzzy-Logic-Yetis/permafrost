@@ -5,9 +5,11 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 
 ## Next up (v0.3)
 
-1. **Custom hotkey recorder** — Settings currently offers presets (ADR-005). Evaluate
-   building a recorder natively vs. adopting `KeyboardShortcuts` (would need an ADR to
-   spend the dependency budget).
+1. ~~Custom hotkey recorder~~ — **DONE 2026-07-07.** Built natively with an AppKit-backed
+   recorder in Settings; no dependency added. Existing presets/defaults remain, while a
+   recorded custom shortcut is stored in UserDefaults (`customHotkeyKeyCode` +
+   `customHotkeyModifiers`) and takes precedence until the user returns to a preset or
+   resets to `⌥⌘V`.
 2. ~~App icon~~ — **DONE 2026-07-07.** Icy-blue gradient squircle with a bold white
    snowflake glyph, generated via `scripts/generate-icon.swift` (CoreGraphics/AppKit,
    exports all 10 `.iconset` sizes, converted with `iconutil`). Wired into

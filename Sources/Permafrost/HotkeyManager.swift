@@ -2,6 +2,100 @@ import AppKit
 import Carbon.HIToolbox
 import IOKit.hid
 
+struct HotkeyShortcut: Equatable {
+    var keyCode: UInt32
+    var carbonModifiers: UInt32
+
+    var display: String {
+        HotkeyShortcut.modifierDisplay(carbonModifiers) + HotkeyShortcut.keyDisplay(keyCode)
+    }
+
+    var isValidGlobalShortcut: Bool {
+        let primaryModifiers = UInt32(cmdKey | optionKey | controlKey)
+        return carbonModifiers & primaryModifiers != 0
+    }
+
+    static func fromEvent(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> HotkeyShortcut? {
+        var carbonModifiers: UInt32 = 0
+        if modifiers.contains(.command) { carbonModifiers |= UInt32(cmdKey) }
+        if modifiers.contains(.option) { carbonModifiers |= UInt32(optionKey) }
+        if modifiers.contains(.control) { carbonModifiers |= UInt32(controlKey) }
+        if modifiers.contains(.shift) { carbonModifiers |= UInt32(shiftKey) }
+
+        let shortcut = HotkeyShortcut(keyCode: UInt32(keyCode), carbonModifiers: carbonModifiers)
+        guard shortcut.isValidGlobalShortcut else { return nil }
+        return shortcut
+    }
+
+    private static func modifierDisplay(_ modifiers: UInt32) -> String {
+        var result = ""
+        if modifiers & UInt32(controlKey) != 0 { result += "⌃" }
+        if modifiers & UInt32(optionKey) != 0 { result += "⌥" }
+        if modifiers & UInt32(shiftKey) != 0 { result += "⇧" }
+        if modifiers & UInt32(cmdKey) != 0 { result += "⌘" }
+        return result
+    }
+
+    private static func keyDisplay(_ keyCode: UInt32) -> String {
+        switch Int(keyCode) {
+        case kVK_ANSI_A: "A"
+        case kVK_ANSI_B: "B"
+        case kVK_ANSI_C: "C"
+        case kVK_ANSI_D: "D"
+        case kVK_ANSI_E: "E"
+        case kVK_ANSI_F: "F"
+        case kVK_ANSI_G: "G"
+        case kVK_ANSI_H: "H"
+        case kVK_ANSI_I: "I"
+        case kVK_ANSI_J: "J"
+        case kVK_ANSI_K: "K"
+        case kVK_ANSI_L: "L"
+        case kVK_ANSI_M: "M"
+        case kVK_ANSI_N: "N"
+        case kVK_ANSI_O: "O"
+        case kVK_ANSI_P: "P"
+        case kVK_ANSI_Q: "Q"
+        case kVK_ANSI_R: "R"
+        case kVK_ANSI_S: "S"
+        case kVK_ANSI_T: "T"
+        case kVK_ANSI_U: "U"
+        case kVK_ANSI_V: "V"
+        case kVK_ANSI_W: "W"
+        case kVK_ANSI_X: "X"
+        case kVK_ANSI_Y: "Y"
+        case kVK_ANSI_Z: "Z"
+        case kVK_ANSI_0: "0"
+        case kVK_ANSI_1: "1"
+        case kVK_ANSI_2: "2"
+        case kVK_ANSI_3: "3"
+        case kVK_ANSI_4: "4"
+        case kVK_ANSI_5: "5"
+        case kVK_ANSI_6: "6"
+        case kVK_ANSI_7: "7"
+        case kVK_ANSI_8: "8"
+        case kVK_ANSI_9: "9"
+        case kVK_Space: "Space"
+        case kVK_Return: "↩"
+        case kVK_Tab: "⇥"
+        case kVK_Delete: "⌫"
+        case kVK_Escape: "Esc"
+        case kVK_F1: "F1"
+        case kVK_F2: "F2"
+        case kVK_F3: "F3"
+        case kVK_F4: "F4"
+        case kVK_F5: "F5"
+        case kVK_F6: "F6"
+        case kVK_F7: "F7"
+        case kVK_F8: "F8"
+        case kVK_F9: "F9"
+        case kVK_F10: "F10"
+        case kVK_F11: "F11"
+        case kVK_F12: "F12"
+        default: "Key \(keyCode)"
+        }
+    }
+}
+
 /// Preset global shortcuts (ADR-005). All use V for Win+V muscle memory;
 /// ⇧⌘V is deliberately absent — it collides with "Paste and Match Style".
 enum HotkeyPreset: String, CaseIterable {
@@ -25,6 +119,10 @@ enum HotkeyPreset: String, CaseIterable {
         case .controlCommandV: "⌃⌘V"
         case .controlOptionV: "⌃⌥V"
         }
+    }
+
+    var shortcut: HotkeyShortcut {
+        HotkeyShortcut(keyCode: keyCode, carbonModifiers: carbonModifiers)
     }
 }
 
@@ -66,12 +164,16 @@ final class HotkeyManager {
     }
 
     func register(preset: HotkeyPreset) {
+        register(shortcut: preset.shortcut)
+    }
+
+    func register(shortcut: HotkeyShortcut) {
         unregister()
         installHandlerIfNeeded()
         let hotKeyID = EventHotKeyID(signature: OSType(0x5046_5254) /* 'PFRT' */, id: 1)
         let status = RegisterEventHotKey(
-            preset.keyCode,
-            preset.carbonModifiers,
+            shortcut.keyCode,
+            shortcut.carbonModifiers,
             hotKeyID,
             GetEventDispatcherTarget(),
             0,
