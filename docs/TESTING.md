@@ -35,8 +35,10 @@ Required coverage (these are the product's guarantees):
   recomputed content hash that doesn't match the manifest's claim is rejected; a `.text`
   entry with an image blob (or vice versa) is rejected; a symlinked blob file is rejected
   without being followed.
-- **Thumbnails**: image capture produces a thumbnail ≤ the max pixel size; corrupt image
-  data doesn't crash.
+- **Thumbnails and image storage**: image capture produces a thumbnail ≤ the max pixel
+  size; large images preserve original image data while generating a bounded thumbnail;
+  identical large images deduplicate; large image rows obey the same recent-first/pinned
+  ordering as text rows; corrupt image data doesn't crash.
 - **Panel model**: show/search resets, selection clamping, `⌘1`-`⌘9` quick-paste restricted
   to the unpinned prefix, commit callback order and Accessibility fallback, pin toggling,
   delete selection bounds, and preview-mode behavior: preview opens/closes, closes on
@@ -224,4 +226,6 @@ outside the app (e.g. CI or a broken build that won't launch):
 
 - Panel open feels instant (< 100 ms) with 1k+ items
 - Typing in search never drops keystrokes
+- Large image capture does not visibly stall panel/search interaction; measure with
+  Instruments around screenshot-to-clipboard captures before closing BACKLOG item 5.
 - `top`: idle CPU ~0.0 for the Permafrost process

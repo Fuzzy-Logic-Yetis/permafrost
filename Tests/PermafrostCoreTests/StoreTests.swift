@@ -147,12 +147,66 @@ import Testing
         #expect(size.width <= 480 && size.height <= 480)
     }
 
+    @Test func largeImageCaptureStoresOriginalAndBoundedThumbnail() throws {
+        let store = try ClipboardStore.inMemory()
+        let png = TestImages.png(width: 4096, height: 3072)
+
+        let item = try store.save(ClipboardCapture(imageData: png), now: now)
+
+        #expect(item.kind == .image)
+        #expect(item.imageData == png)
+        let originalData = try #require(item.imageData)
+        let originalSize = try #require(Thumbnailer.pixelSize(of: originalData))
+        #expect(originalSize.width == 4096)
+        #expect(originalSize.height == 3072)
+        let thumbnail = try #require(item.thumbnail)
+        let size = try #require(Thumbnailer.pixelSize(of: thumbnail))
+        #expect(size.width <= 480)
+        #expect(size.height <= 480)
+    }
+
     @Test func identicalImagesDedup() throws {
         let store = try ClipboardStore.inMemory()
         let png = TestImages.png(width: 100, height: 100)
         try store.save(ClipboardCapture(imageData: png), now: now)
         try store.save(ClipboardCapture(imageData: png), now: now.addingTimeInterval(5))
         #expect(try store.count() == 1)
+    }
+
+    @Test func identicalLargeImagesDedupAndKeepThumbnail() throws {
+        let store = try ClipboardStore.inMemory()
+        let png = TestImages.png(width: 4096, height: 3072)
+
+        let first = try store.save(ClipboardCapture(imageData: png), now: now)
+        let second = try store.save(
+            ClipboardCapture(imageData: png), now: now.addingTimeInterval(5))
+
+        #expect(try store.count() == 1)
+        #expect(first.id == second.id)
+        #expect(second.lastUsedAt > first.lastUsedAt)
+        #expect(second.imageData == png)
+        let thumbnail = try #require(second.thumbnail)
+        let size = try #require(Thumbnailer.pixelSize(of: thumbnail))
+        #expect(size.width <= 480 && size.height <= 480)
+    }
+
+    @Test func largeImageOrderingStaysRecentFirstThenPinned() throws {
+        let store = try ClipboardStore.inMemory()
+        let oldText = try store.save(ClipboardCapture(text: "old text"), now: now)
+        let largeImage = try store.save(
+            ClipboardCapture(imageData: TestImages.png(width: 4096, height: 3072)),
+            now: now.addingTimeInterval(1))
+
+        #expect(try store.items().map(\.id) == [largeImage.id, oldText.id])
+
+        try store.setPinned(true, id: largeImage.id!)
+        let newText = try store.save(
+            ClipboardCapture(text: "new text"), now: now.addingTimeInterval(2))
+
+        let items = try store.items()
+        #expect(items.map(\.id) == [newText.id, oldText.id, largeImage.id])
+        #expect(items.map(\.kind) == [.text, .text, .image])
+        #expect(items[2].isPinned)
     }
 
     @Test func corruptImageDataDoesNotCrashThumbnailer() throws {
