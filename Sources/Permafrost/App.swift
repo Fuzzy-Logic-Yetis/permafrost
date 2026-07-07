@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = AppSettings.shared
     private var cleanupTimer: Timer?
     private var settingsWindowController: SettingsWindowController?
+    private var statusIconState: StatusIconState = .normal
 
     static func main() {
         let app = NSApplication.shared
@@ -56,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager.onHotkey = { [weak self] in self?.panelController.toggle() }
         hotkeyManager.register(preset: settings.hotkeyPreset)
         observeSettingsChanges()
+        observeFrontmostAppChanges()
 
         let timer = Timer(timeInterval: 3600, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.purge() }
@@ -95,8 +97,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.hotkeyManager.register(preset: self.settings.hotkeyPreset)
                 self.refreshOpenMenuItemTitle()
-                self.refreshCapturePausedState()
+                self.refreshCaptureIndicatorState()
             }
+        }
+    }
+
+    private func observeFrontmostAppChanges() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshCaptureIndicatorState() }
         }
     }
 
@@ -105,14 +117,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
-        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
-        let image = NSImage(systemSymbolName: "snowflake", accessibilityDescription: "Permafrost")?
-            .withSymbolConfiguration(config)
-        image?.isTemplate = true
+        let image = statusIconImage(for: .normal)
         statusItem.button?.image = image
         statusItem.button?.imagePosition = .imageOnly
         statusItem.isVisible = true
         Log.app.info("status item set up; image loaded: \(image != nil)")
+        refreshCaptureIndicatorState()
 
         let menu = NSMenu()
         let openItem = NSMenuItem(
@@ -162,6 +172,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(clearEverythingItem)
 
         menu.addItem(.separator())
+        let restartItem = NSMenuItem(
+            title: "Restart Permafrost", action: #selector(restartApp), keyEquivalent: "r")
+        restartItem.target = self
+        menu.addItem(restartItem)
+
         menu.addItem(
             NSMenuItem(
                 title: "Quit Permafrost",
@@ -175,24 +190,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case capturePaused = 2
     }
 
+    private enum StatusIconState: Equatable {
+        case normal
+        case paused
+        case excluded
+
+        var tint: NSColor? {
+            switch self {
+            case .normal: nil
+            case .paused: .systemOrange
+            case .excluded: .systemPurple
+            }
+        }
+    }
+
     private func refreshOpenMenuItemTitle() {
         statusItem?.menu?.item(withTag: MenuTag.open.rawValue)?.title =
             "Open Permafrost  (\(settings.hotkeyPreset.display))"
     }
 
-    private func refreshCapturePausedState() {
+    private func refreshCaptureIndicatorState() {
         statusItem?.menu?.item(withTag: MenuTag.capturePaused.rawValue)?.state =
             settings.capturePaused ? .on : .off
-        statusItem?.button?.contentTintColor = settings.capturePaused ? .systemOrange : nil
+
+        let newState: StatusIconState
+        if settings.capturePaused {
+            newState = .paused
+        } else if settings.isExcluded(
+            bundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        {
+            newState = .excluded
+        } else {
+            newState = .normal
+        }
+
+        guard newState != statusIconState else { return }
+        statusIconState = newState
+        statusItem?.button?.image = statusIconImage(for: newState)
+        statusItem?.button?.contentTintColor = newState.tint
+    }
+
+    private func statusIconImage(for state: StatusIconState) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        guard let image = NSImage(systemSymbolName: "snowflake", accessibilityDescription: "Permafrost")?
+            .withSymbolConfiguration(config)
+        else { return nil }
+
+        guard let tint = state.tint else {
+            image.isTemplate = true
+            return image
+        }
+
+        let tinted = NSImage(size: image.size)
+        tinted.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: image.size))
+        tint.set()
+        NSRect(origin: .zero, size: image.size).fill(using: .sourceAtop)
+        tinted.unlockFocus()
+        tinted.isTemplate = false
+        return tinted
     }
 
     @objc private func toggleCapturePaused() {
         settings.capturePaused.toggle()
-        refreshCapturePausedState()
+        refreshCaptureIndicatorState()
     }
 
     @objc private func openPanel() {
         panelController.show()
+    }
+
+    @objc private func restartApp() {
+        let bundleURL = Bundle.main.bundleURL
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [
+            "-c",
+            "sleep 0.4; /usr/bin/open \"$0\"",
+            bundleURL.path,
+        ]
+        do {
+            try process.run()
+            NSApp.terminate(nil)
+        } catch {
+            presentOperationFailure(error)
+        }
     }
 
     @objc private func openSettings() {

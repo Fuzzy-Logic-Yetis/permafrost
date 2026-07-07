@@ -78,6 +78,7 @@ low-friction panel — an accidental keypress there shouldn't be able to wipe hi
 | Clear Unpinned History… | Deletes unpinned entries. Pinned entries are untouched. |
 | Unpin All Items… | Converts every pinned entry back to normal history (not deleted — it now expires per your retention setting like everything else). |
 | Clear Everything… | Deletes all entries, pinned included. Strongest confirmation; irreversible. |
+| Restart Permafrost | Quits and relaunches the app, useful after testing ad-hoc builds or permission resets. |
 
 Note: a status-item menu's key equivalents (e.g. the `,` shown next to Settings) only fire
 while that menu is open — they are not global shortcuts, so they don't compete with the app

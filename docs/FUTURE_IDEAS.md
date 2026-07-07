@@ -21,6 +21,11 @@ requirement.
 ## Possibly
 
 - Markdown-aware preview for text entries
+- Syntax-highlighted code previews for copied source snippets. Prefer native/local
+  highlighting or a tiny grammar subset; adding a dependency would need an ADR because
+  GRDB already spends the dependency budget.
+- Expanded multi-line text preview on hover or selection, so long clips can be inspected
+  without making the default Win+V-style panel feel bulky.
 - Snippet templates with placeholders (danger zone: suite-creep)
 - Developer mode: pretty-print/inspect JSON, JWT decode, hex view (local-only)
 - AppleScript/Shortcuts automation surface ("get latest clipboard entry matching …")
