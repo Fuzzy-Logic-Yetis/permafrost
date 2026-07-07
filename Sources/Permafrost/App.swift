@@ -22,6 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelController: PanelController!
     private let hotkeyManager = HotkeyManager()
     private let settings = AppSettings.shared
+    private lazy var hotkeyRegistrationCoordinator = HotkeyRegistrationCoordinator(
+        settings: settings,
+        registrar: hotkeyManager
+    )
     private var cleanupTimer: Timer?
     private var settingsWindowController: SettingsWindowController?
     private var statusIconState: StatusIconState = .normal
@@ -109,15 +113,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Registers the currently configured hotkey; if Carbon rejects it (review
-    /// M-1 — e.g. a reserved or already-claimed combination), clears the custom
-    /// shortcut, falls back to the default preset, and tells Settings why.
+    /// M-1 — e.g. a reserved or already-claimed combination), rolls back to the
+    /// previous working shortcut and tells Settings why.
     private func registerEffectiveHotkey() {
-        let shortcut = settings.effectiveHotkey
-        if !hotkeyManager.register(shortcut: shortcut) {
-            let failedDisplay = shortcut.display
-            Log.app.error("hotkey \(failedDisplay, privacy: .public) rejected; reverting to default")
-            settings.customHotkey = nil
-            _ = hotkeyManager.register(shortcut: settings.effectiveHotkey)
+        hotkeyRegistrationCoordinator.registerEffectiveHotkey { failedDisplay in
+            Log.app.error("hotkey \(failedDisplay, privacy: .public) rejected; rolling back")
             NotificationCenter.default.post(
                 name: .hotkeyRegistrationFailed,
                 object: nil,

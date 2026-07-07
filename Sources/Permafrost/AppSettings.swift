@@ -15,7 +15,7 @@ struct ExcludedApp: Codable, Identifiable, Equatable {
 /// UserDefaults-backed settings. SwiftUI views bind via @AppStorage on the same keys;
 /// this type is the single place that interprets raw values (e.g. into RetentionPolicy).
 @MainActor
-final class AppSettings {
+final class AppSettings: HotkeySettingsStore {
     static let shared = AppSettings()
 
     enum Keys {
