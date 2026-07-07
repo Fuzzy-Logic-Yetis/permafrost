@@ -225,3 +225,7 @@ outside the app (e.g. CI or a broken build that won't launch):
 - Panel open feels instant (< 100 ms) with 1k+ items
 - Typing in search never drops keystrokes
 - `top`: idle CPU ~0.0 for the Permafrost process
+- Large image capture: copy a 10–25 MB image or full-resolution screenshot, immediately
+  open `⌥⌘V`, and confirm the panel remains responsive while the capture is saved in the
+  background. The image should appear shortly after save completes; later copies should
+  preserve recency order based on capture time, not thumbnail/write completion time.

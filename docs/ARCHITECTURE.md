@@ -92,10 +92,14 @@ alive (ADR-010).
 ## Concurrency
 
 - All AppKit/UI and the pasteboard poll run on the main actor.
-- `ClipboardStore` wraps a GRDB `DatabaseQueue` (serialized writes, Sendable); DB work is
-  cheap (small rows, indexed queries) so MVP calls it synchronously from the main actor.
-  If Instruments ever shows panel jank from large image inserts, move inserts to a
-  background task — backlogged, not needed at current scale.
+- `PasteboardWatcher` snapshots pasteboard/AppKit state on the main actor, then hands
+  accepted captures to `CaptureSaveQueue`, a serial background queue. This keeps hashing,
+  thumbnail generation, SQLite blob writes, and post-insert retention purge off the UI
+  thread while preserving capture order and the policy/settings state observed at copy
+  time.
+- `ClipboardStore` wraps a GRDB `DatabaseQueue` (serialized writes, Sendable). Reads may
+  still happen from UI code when the panel opens/searches; writes are serialized by both
+  `CaptureSaveQueue` and GRDB.
 
 ## Key constraints
 

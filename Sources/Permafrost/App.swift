@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var store: ClipboardStore!
     private var watcher: PasteboardWatcher!
+    private var captureSaveQueue: CaptureSaveQueue!
     private var pasteService: PasteService!
     private var panelController: PanelController!
     private let hotkeyManager = HotkeyManager()
@@ -47,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         purge()
 
+        captureSaveQueue = CaptureSaveQueue(store: store)
         pasteService = PasteService(store: store)
         let model = PanelModel(store: store, pasteService: pasteService)
         model.onAccessibilityNeeded = { [weak self] in self?.showAccessibilityPrompt() }
@@ -55,12 +57,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher = PasteboardWatcher()
         watcher.onCapture = { [weak self] capture in
             guard let self else { return }
-            do {
-                try self.store.save(capture)
-                try self.store.purge(with: self.settings.retentionPolicy)
-            } catch {
-                Log.store.error("save failed: \(error.localizedDescription)")
-            }
+            self.captureSaveQueue.enqueue(
+                CaptureSaveQueue.PendingCapture(
+                    capture: capture,
+                    capturedAt: Date(),
+                    retentionPolicy: self.settings.retentionPolicy
+                )
+            )
         }
         watcher.start()
 

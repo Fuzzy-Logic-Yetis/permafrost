@@ -24,8 +24,11 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    concealed-type check, before touching the pasteboard payload — whenever that app is
    frontmost. Excluded apps are stored as JSON in UserDefaults (`AppSettings.excludedApps`),
    consistent with the existing settings pattern.
-5. **Background inserts for large images** — move image writes off the main actor if
-   Instruments shows panel jank (see ARCHITECTURE.md → Concurrency).
+5. ~~Background inserts for large images~~ — **DONE 2026-07-07.** Captures are now
+   enqueued through a serial `CaptureSaveQueue`; pasteboard/AppKit state is still
+   snapshotted on the main actor, while hashing, thumbnail generation, SQLite blob writes,
+   and retention purge happen off the UI thread with the original capture timestamp and
+   retention-policy snapshot.
 6. ~~Preview pane~~ — **DONE 2026-07-07.** `␣` (search field empty) toggles a Quick
    Look-style overlay of the selected item's full text (unwrapped, scrollable, selectable)
    or full-resolution image, reusing the panel's existing 440×500 footprint. Follows
