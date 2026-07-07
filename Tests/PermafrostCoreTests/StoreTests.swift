@@ -147,6 +147,45 @@ import Testing
         #expect(size.width <= 480 && size.height <= 480)
     }
 
+    @Test func imageCapturePersistsOCRTextWithoutChangingContentHash() throws {
+        let store = try ClipboardStore.inMemory()
+        let png = TestImages.png(width: 800, height: 600)
+        let withoutOCR = ClipboardCapture(imageData: png)
+        let withOCR = ClipboardCapture(imageData: png, ocrText: "Invoice total $42.00")
+
+        let item = try store.save(withOCR, now: now)
+
+        #expect(item.kind == .image)
+        #expect(item.ocrText == "Invoice total $42.00")
+        #expect(withOCR.contentHash == withoutOCR.contentHash)
+    }
+
+    @Test func imageDedupRefreshesOCRTextToLatestCopy() throws {
+        let store = try ClipboardStore.inMemory()
+        let png = TestImages.png(width: 100, height: 100)
+        _ = try store.save(
+            ClipboardCapture(imageData: png, ocrText: "old recognition"), now: now)
+
+        let second = try store.save(
+            ClipboardCapture(imageData: png, ocrText: "new recognition"),
+            now: now.addingTimeInterval(5))
+
+        #expect(try store.count() == 1)
+        #expect(second.ocrText == "new recognition")
+    }
+
+    @Test func imageDedupDoesNotClearOCRTextWhenLatestCaptureHasNone() throws {
+        let store = try ClipboardStore.inMemory()
+        let png = TestImages.png(width: 100, height: 100)
+        _ = try store.save(
+            ClipboardCapture(imageData: png, ocrText: "recognized text"), now: now)
+
+        let second = try store.save(ClipboardCapture(imageData: png), now: now.addingTimeInterval(5))
+
+        #expect(try store.count() == 1)
+        #expect(second.ocrText == "recognized text")
+    }
+
     @Test func largeImageCaptureStoresOriginalAndBoundedThumbnail() throws {
         let store = try ClipboardStore.inMemory()
         let png = TestImages.png(width: 4096, height: 3072)

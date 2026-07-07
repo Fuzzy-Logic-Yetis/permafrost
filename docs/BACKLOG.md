@@ -81,6 +81,10 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 
 ## Later
 
+- **OCR execution/UI follow-up for screen snips** — storage/search now has an `ocr_text`
+  image metadata column and import/export support, but Vision execution and UI affordances
+  for copying recognized text are intentionally left to the app/UI branch for GitHub issue
+  #6.
 - **Optional at-rest encryption** — CryptoKit AES-GCM blobs, key in Keychain (ADR-008 has
   the constraint analysis; FUTURE_IDEAS.md has the design sketch).
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).

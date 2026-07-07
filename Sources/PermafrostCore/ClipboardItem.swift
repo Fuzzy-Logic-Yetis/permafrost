@@ -13,6 +13,7 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
     public var contentHash: String
     public var kind: ClipboardItemKind
     public var text: String?
+    public var ocrText: String?
     public var richData: Data?
     public var imageData: Data?
     public var thumbnail: Data?
@@ -25,6 +26,7 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, kind, text, thumbnail
+        case ocrText = "ocr_text"
         case contentHash = "content_hash"
         case richData = "rich_data"
         case imageData = "image_data"
@@ -34,6 +36,38 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
         case isPinned = "is_pinned"
         case pinOrder = "pin_order"
         case isConcealed = "is_concealed"
+    }
+
+    public init(
+        id: Int64? = nil,
+        contentHash: String,
+        kind: ClipboardItemKind,
+        text: String? = nil,
+        ocrText: String? = nil,
+        richData: Data? = nil,
+        imageData: Data? = nil,
+        thumbnail: Data? = nil,
+        sourceApp: String? = nil,
+        createdAt: Date,
+        lastUsedAt: Date,
+        isPinned: Bool = false,
+        pinOrder: Int? = nil,
+        isConcealed: Bool = false
+    ) {
+        self.id = id
+        self.contentHash = contentHash
+        self.kind = kind
+        self.text = text
+        self.ocrText = ocrText
+        self.richData = richData
+        self.imageData = imageData
+        self.thumbnail = thumbnail
+        self.sourceApp = sourceApp
+        self.createdAt = createdAt
+        self.lastUsedAt = lastUsedAt
+        self.isPinned = isPinned
+        self.pinOrder = pinOrder
+        self.isConcealed = isConcealed
     }
 }
 
@@ -49,6 +83,7 @@ extension ClipboardItem: FetchableRecord, MutablePersistableRecord {
 public struct ClipboardCapture: Sendable {
     public var kind: ClipboardItemKind
     public var text: String?
+    public var ocrText: String?
     public var richData: Data?
     public var imageData: Data?
     public var sourceApp: String?
@@ -62,9 +97,10 @@ public struct ClipboardCapture: Sendable {
         self.isConcealed = isConcealed
     }
 
-    public init(imageData: Data, sourceApp: String? = nil, isConcealed: Bool = false) {
+    public init(imageData: Data, ocrText: String? = nil, sourceApp: String? = nil, isConcealed: Bool = false) {
         self.kind = .image
         self.imageData = imageData
+        self.ocrText = ocrText
         self.sourceApp = sourceApp
         self.isConcealed = isConcealed
     }
