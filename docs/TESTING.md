@@ -34,6 +34,44 @@ Required coverage (these are the product's guarantees):
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).
 
+## Scripted verification (osascript / screencapture / cliclick)
+
+When driving the running app from a terminal instead of by hand (useful for a Claude
+session to self-verify a fix), a few environment-specific gotchas from doing this on a dev
+machine running inside VS Code, learned the hard way on 2026-07-06/07:
+
+- **Never synthesize `Escape` system-wide** (`osascript -e 'tell application "System
+  Events" to key code 53'`, or `cliclick kp:esc`) to dismiss a menu/panel during a scripted
+  check. `Escape` is a real, system-wide key event — it does not stay scoped to whatever
+  app you're aiming at. If the host editor (VS Code, with the Claude Code extension) has
+  Escape bound to "interrupt the current agent request" — which it does — that synthetic
+  keystroke lands there too and silently cancels the very session that sent it, producing a
+  confusing loop of "tool use rejected" with no actual human action behind it. Dismiss
+  UI some other way instead: click elsewhere, let the panel's own auto-dismiss (loses key
+  status) handle it, or just leave a test artifact open — it's not destructive.
+- Sending other synthetic keystrokes (`⌥⌘V` to trigger the hotkey, plain text via
+  `keystroke`) and mouse moves (`cliclick m:x,y`) are fine — this was only ever about
+  Escape specifically colliding with an IDE-level shortcut.
+- The **terminal/editor process itself** needs its own Accessibility and Screen Recording
+  grants (System Settings → Privacy & Security) before `osascript keystroke`,
+  `screencapture`, or `cliclick` will work at all — separate from whatever Permafrost's own
+  Accessibility grant is. Granting these requires restarting the host app (VS Code) for the
+  new permission to take effect.
+- `screencapture -R x,y,w,h` takes **points**, not the pixel dimensions `sips -g
+  pixelWidth` reports — on a scaled-resolution Retina display these differ (e.g. a
+  2940×1912-pixel capture on a display whose actual logical width is ~1470pt). Requesting
+  an out-of-range region fails with "does not intersect any displays"; requesting more
+  than the real width from `x=0` silently clamps rather than erroring, which can look like
+  success while quietly not being the region you meant. When in doubt, capture the full
+  screen unregioned and crop the saved file, or verify against a known-good coordinate
+  (e.g. a window's own position/size via `System Events`) rather than assuming pixel dims.
+- Modern macOS collapses many third-party menu-bar icons into Control Center's own
+  aggregated list, where they show up as unlabeled `"status menu"` entries via
+  accessibility queries and don't expose their `NSMenu` the classic
+  `menu 1 of menu bar item N` way. Don't rely on identifying a specific app's status icon
+  this way — trigger the app's actual global hotkey and confirm its own panel/window
+  directly instead; that's both more reliable and closer to what a real user experiences.
+
 ## Manual smoke checklist (before every tag)
 
 Environment note: ad-hoc signed builds get a **new identity every re-sign** — macOS will
@@ -42,7 +80,10 @@ Security → Accessibility (remove stale entry, re-add). To reset for testing:
 `tccutil reset Accessibility com.fuzzylogicyetis.Permafrost`.
 
 1. **Launch**: `./scripts/make-app.sh && open dist/Permafrost.app` → snowflake appears in
-   menu bar; no Dock icon; no window.
+   menu bar; no Dock icon; no window. If your menu bar is auto-hidden (fullscreen apps,
+   or the global auto-hide preference), you have to reveal it first — don't mistake a
+   hidden menu bar for a missing icon. See ADR-013 if the icon still isn't there once the
+   bar is actually visible.
 2. **Capture text**: copy three different strings in another app → `⌥⌘V` → all three
    present, newest first.
 3. **Capture snip**: `⌃⇧⌘4`, snip a region → `⌥⌘V` → thumbnail card present → `⏎` into

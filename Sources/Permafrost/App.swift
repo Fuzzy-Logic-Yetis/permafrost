@@ -102,8 +102,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(
-            systemSymbolName: "snowflake", accessibilityDescription: "Permafrost")
+        Log.app.info("status item created; button is nil: \(self.statusItem.button == nil)")
+        let image = NSImage(systemSymbolName: "snowflake", accessibilityDescription: "Permafrost")
+        Log.app.info("snowflake image loaded: \(image != nil)")
+        image?.isTemplate = true
+        statusItem.button?.image = image
+        statusItem.isVisible = true
+        Log.app.info("status item isVisible: \(self.statusItem.isVisible)")
 
         let menu = NSMenu()
         let openItem = NSMenuItem(

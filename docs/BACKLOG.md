@@ -23,6 +23,13 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    bounds, section transitions, hover action wiring) is currently verified only by the
    manual checklist (docs/TESTING.md) and store-level invariant tests. Investigate a
    lightweight harness once the interaction surface stabilizes (2026-07-06 review M-5).
+9. **Confirm status item icon visibility** (ADR-013) — `isTemplate = true` + explicit
+   `isVisible = true` were applied as a plausible fix for a reported invisible menu-bar
+   icon, but never conclusively re-confirmed visually (the core `⌥⌘V` panel was confirmed
+   working throughout, so this is cosmetic/discoverability, not functional). If still not
+   visible after this fix: check whether `NSStatusBar` is silently refusing additional
+   items on a crowded bar; consider a distinctive custom icon instead of the SF Symbol as
+   a way to rule out symbol-specific rendering quirks.
 
 ## Later
 

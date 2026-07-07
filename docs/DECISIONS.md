@@ -185,3 +185,37 @@ to match (recent-first, pinned-at-bottom). A store-level test
 (`unpinnedAlwaysPrecedePinnedRegardlessOfRecency`) protects the invariant the UI-layer
 quick-paste logic depends on, since the app target has no automated test harness of its
 own (executable is a thin shell over `PermafrostCore` by design).
+
+## ADR-013: Status item image set to template mode; explicit isVisible
+
+**Context.** Project owner reported "my menu isn't opening" after a routine rebuild
+(2026-07-06/07). Investigation (see docs/TESTING.md → Scripted verification for the tooling
+detour this took) confirmed via `os.Logger` that `setupStatusItem()` completes normally —
+`statusItem.button` is non-nil, the SF Symbol image loads, and `isVisible` reads `true` —
+yet no snowflake icon was visible in a genuinely-revealed (non-fullscreen) menu bar.
+Separately, `⌥⌘V` was confirmed, via a real screenshot showing actual captured clipboard
+history in the panel, to work correctly — the core feature was never broken, only the
+status-bar icon's visibility was in question. The original code
+(`NSImage(systemSymbolName:accessibilityDescription:)` assigned directly to
+`statusItem.button?.image`) never set `isTemplate`, meaning the OS was never told to treat
+it as a monochrome icon that adapts to the menu bar's own tinting/vibrancy — a known class
+of bug where a status item can be fully present in the object model while rendering as
+effectively invisible against certain menu bar backgrounds.
+
+**Decision.** Set `image?.isTemplate = true` before assigning it, and set
+`statusItem.isVisible = true` explicitly rather than relying on the default. Added
+temporary-but-retained `Log.app.info` calls around status item creation (button-nil check,
+image-load check, isVisible check) since this class of bug produces no error path to catch
+otherwise — the object model reports success at every step regardless of what's actually
+on screen.
+
+**Consequences.** This is recorded honestly as a **plausible, applied fix, not a
+visually-confirmed one** — a post-fix screenshot still didn't unambiguously show the icon,
+though that screenshot session was also fighting an unrelated menu-bar-visibility/Control
+Center-aggregation investigation (see docs/TESTING.md) that made positive identification
+hard regardless of whether the fix worked. `isTemplate = true` is correct regardless of
+whether it was the root cause — it's how every other well-behaved status item image on
+macOS is supposed to be configured — so it stays either way. If the icon is still not
+visible after this, the next place to look is whether `NSStatusBar.system` is silently
+declining to render additional items when the bar is already crowded (no overflow chevron
+was observed, but behavior here varies by macOS version) — tracked in docs/BACKLOG.md.
