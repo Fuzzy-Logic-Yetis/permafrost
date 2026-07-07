@@ -26,7 +26,13 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    consistent with the existing settings pattern.
 5. **Background inserts for large images** — move image writes off the main actor if
    Instruments shows panel jank (see ARCHITECTURE.md → Concurrency).
-6. **Preview pane** — space bar quick-look of full text/image for the selected item.
+6. ~~Preview pane~~ — **DONE 2026-07-07.** `␣` (search field empty) toggles a Quick
+   Look-style overlay of the selected item's full text (unwrapped, scrollable, selectable)
+   or full-resolution image, reusing the panel's existing 440×500 footprint. Follows
+   selection while open; `Esc` closes it before falling back to its existing
+   clear-search/close-panel behavior. Deferred: a hover/mouse trigger for the preview — the
+   hover row (pin/share/delete) is already at a natural width for three icons, and a fourth
+   felt like it'd crowd it more than it'd help, so this stayed keyboard-only for now.
 7. ~~Monospace-aware text rendering~~ — **DONE 2026-07-07.** Code-like text
    clips are detected in the panel and rendered with a monospaced font plus subtle
    leading/trailing whitespace markers.

@@ -19,6 +19,9 @@ final class PanelModel: ObservableObject {
     @Published private(set) var selectedIndex = 0
     /// Bumped on every show so the view can re-focus the search field.
     @Published private(set) var focusToken = UUID()
+    /// Quick-look style: shows the full text/image of `selectedItem`. Follows
+    /// selection changes rather than pinning to one item.
+    @Published private(set) var isPreviewShown = false
 
     var onCommit: () -> Void = {}
     var onAccessibilityNeeded: () -> Void = {}
@@ -37,8 +40,18 @@ final class PanelModel: ObservableObject {
 
     func prepareForShow() {
         query = ""
+        isPreviewShown = false
         reload(resetSelection: true)
         focusToken = UUID()
+    }
+
+    func togglePreview() {
+        guard selectedItem != nil else { return }
+        isPreviewShown.toggle()
+    }
+
+    func closePreview() {
+        isPreviewShown = false
     }
 
     /// The panel loads at most this many rows; `countLabel` reflects that cap

@@ -31,7 +31,8 @@ If an interaction needs the mouse, it's a bug in the design.
 │ │ 555-0123 – office door code      │ │
 │ └──────────────────────────────────┘ │
 ├──────────────────────────────────────┤
-│ ⏎ paste  ⌥P pin  ⌫ delete  esc close │
+│ ⏎ paste  ␣ preview  ⌥P pin  ⌫ delete │
+│ esc close                            │
 ╰──────────────────────────────────────╯
 ```
 
@@ -53,6 +54,19 @@ you just copied, and must never steal the `⌘1` slot from it either.
   `NSSharingServicePicker`, the same one macOS's own screenshot panel uses), and delete.
   Lets a mouse user manage an item without touching the keyboard; the keyboard shortcuts
   remain the fast path for everyone else.
+- **Preview pane** (`␣`): a Quick Look-style overlay for the selected item — full text
+  (unwrapped, scrollable, selectable/copyable, same monospace + whitespace-marker treatment
+  as the card) or the full-resolution image, not the card's thumbnail. It reuses the panel's
+  existing 440×500 footprint instead of growing the window, so the default panel stays
+  compact and this stays opt-in. It follows the selection as you move `↑`/`↓` while open, and
+  closes on a second `␣` or `Esc` (which closes the preview first, before its usual
+  clear-search/close-panel behavior). Deliberately keyboard-first only for now — the
+  hover-action row is already at its natural width (pin/share/delete); a fourth icon there
+  was deferred rather than crowding it (see BACKLOG item 6).
+
+  Space only opens/closes the preview while the search field is empty, matching the
+  existing `⌫`-delete gating — otherwise a search query containing a literal space
+  (e.g. "hello world") couldn't be typed.
 
 ## Keyboard map
 
@@ -60,12 +74,13 @@ you just copied, and must never steal the `⌘1` slot from it either.
 |---|---|
 | `⌥⌘V` | Open/close panel (global default; configurable in Settings) |
 | type | Filter (search field always live) |
-| `↑` / `↓` | Move selection (moves through Recent, then Pinned) |
+| `↑` / `↓` | Move selection (moves through Recent, then Pinned); updates an open preview |
 | `⏎` | Paste selected into previous app, close |
 | `⌘1`–`⌘9` | Paste Nth **recent** item instantly — never addresses a pinned item, so pinning something never hijacks a quick-paste slot |
 | `⌥P` | Pin/unpin selected |
+| `␣` (field empty) | Toggle full preview of selected item |
 | `⌫` (field empty) | Delete selected entry |
-| `Esc` | Clear search → close |
+| `Esc` | Close preview if open, else clear search → close |
 
 ## Bulk history actions
 

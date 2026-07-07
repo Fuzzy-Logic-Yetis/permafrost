@@ -7,16 +7,21 @@ struct PanelView: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            searchBar
-            Divider()
-            if model.items.isEmpty {
-                emptyState
-            } else {
-                itemList
+        ZStack {
+            VStack(spacing: 0) {
+                searchBar
+                Divider()
+                if model.items.isEmpty {
+                    emptyState
+                } else {
+                    itemList
+                }
+                Divider()
+                footer
             }
-            Divider()
-            footer
+            if model.isPreviewShown, let item = model.selectedItem {
+                PreviewPane(item: item)
+            }
         }
         .frame(width: 440, height: 500)
         .background(.regularMaterial)
@@ -108,6 +113,7 @@ struct PanelView: View {
     private var footer: some View {
         HStack(spacing: 14) {
             KeyHint(key: "⏎", label: "paste")
+            KeyHint(key: "␣", label: "preview")
             KeyHint(key: "⌥P", label: "pin")
             KeyHint(key: "⌫", label: "delete")
             KeyHint(key: "esc", label: "close")
@@ -263,18 +269,25 @@ private struct ItemCard: View {
 
 private struct TextPreview: View {
     let text: String
+    var lineLimit: Int? = 3
+    var selectable: Bool = false
 
     private var isCodeLike: Bool {
         TextPreviewClassifier.isCodeLike(text)
     }
 
     var body: some View {
-        Text(displayText)
+        let text = Text(displayText)
             .font(isCodeLike ? .system(.body, design: .monospaced) : .body)
             .foregroundStyle(.primary)
-            .lineLimit(3)
+            .lineLimit(lineLimit)
             .multilineTextAlignment(.leading)
             .truncationMode(.tail)
+        if selectable {
+            text.textSelection(.enabled)
+        } else {
+            text
+        }
     }
 
     private var displayText: AttributedString {
@@ -282,6 +295,63 @@ private struct TextPreview: View {
             return AttributedString(text)
         }
         return WhitespaceVisualizer.attributedPreview(for: text)
+    }
+}
+
+/// Space-bar quick look (docs/UX.md): the full text or full-resolution image of
+/// the selected item, reusing the same 440×500 panel footprint rather than
+/// growing the window — the default panel stays compact, this is opt-in.
+private struct PreviewPane: View {
+    let item: ClipboardItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(captionText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                KeyHint(key: "␣ / esc", label: "close")
+            }
+            .padding(12)
+            Divider()
+            ScrollView {
+                content
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.regularMaterial)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch item.kind {
+        case .text:
+            TextPreview(text: item.text ?? "", lineLimit: nil, selectable: true)
+        case .image:
+            if let data = item.imageData, let nsImage = NSImage(data: data) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Label("Image unavailable", systemImage: "photo")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var captionText: String {
+        var parts: [String] = []
+        if let app = item.sourceApp { parts.append(app) }
+        parts.append(item.lastUsedAt.formatted(.relative(presentation: .named)))
+        if item.kind == .image, let data = item.imageData,
+            let size = Thumbnailer.pixelSize(of: data)
+        {
+            parts.append("\(size.width)×\(size.height)")
+        }
+        return parts.joined(separator: " · ")
     }
 }
 

@@ -130,7 +130,9 @@ final class PanelController: NSObject, NSWindowDelegate {
             model.commitSelection()
             return true
         case kVKEscape:
-            if model.query.isEmpty {
+            if model.isPreviewShown {
+                model.closePreview()
+            } else if model.query.isEmpty {
                 hide()
             } else {
                 model.query = ""
@@ -138,6 +140,9 @@ final class PanelController: NSObject, NSWindowDelegate {
             return true
         case kVKDelete where model.query.isEmpty:
             model.deleteSelected()
+            return true
+        case kVKSpace where model.query.isEmpty:
+            model.togglePreview()
             return true
         default:
             break
@@ -165,3 +170,4 @@ private let kVKEscape = 53
 private let kVKDelete = 51
 private let kVKUpArrow = 126
 private let kVKDownArrow = 125
+private let kVKSpace = 49
