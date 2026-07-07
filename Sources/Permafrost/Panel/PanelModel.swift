@@ -2,6 +2,13 @@ import Foundation
 import PermafrostCore
 import SwiftUI
 
+@MainActor
+protocol PanelPasteServing {
+    func paste(_ item: ClipboardItem) -> Bool
+}
+
+extension PasteService: PanelPasteServing {}
+
 /// View state for the panel. All mutations funnel through here; the view is dumb.
 @MainActor
 final class PanelModel: ObservableObject {
@@ -17,9 +24,9 @@ final class PanelModel: ObservableObject {
     var onAccessibilityNeeded: () -> Void = {}
 
     private let store: ClipboardStore
-    private let pasteService: PasteService
+    private let pasteService: any PanelPasteServing
 
-    init(store: ClipboardStore, pasteService: PasteService) {
+    init(store: ClipboardStore, pasteService: any PanelPasteServing) {
         self.store = store
         self.pasteService = pasteService
     }
@@ -112,14 +119,13 @@ final class PanelModel: ObservableObject {
     }
 
     func deleteItem(id: Int64) {
+        let previousSelection = selectedIndex
         do {
             try store.delete(id: id)
         } catch {
             Log.store.error("delete failed: \(error.localizedDescription)")
         }
         reload()
-        if selectedIndex >= items.count {
-            selectedIndex = max(items.count - 1, 0)
-        }
+        selectedIndex = min(previousSelection, max(items.count - 1, 0))
     }
 }

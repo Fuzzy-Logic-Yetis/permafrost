@@ -25,5 +25,9 @@ let package = Package(
             name: "PermafrostCoreTests",
             dependencies: ["PermafrostCore"]
         ),
+        .testTarget(
+            name: "PermafrostTests",
+            dependencies: ["Permafrost"]
+        ),
     ]
 )
