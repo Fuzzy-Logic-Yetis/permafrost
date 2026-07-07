@@ -76,6 +76,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full story.
 | [docs/UX.md](docs/UX.md) | Interaction spec and keyboard map |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Where this is going |
 | [docs/FUTURE_IDEAS.md](docs/FUTURE_IDEAS.md) | Deferred ideas and explicitly unscheduled possibilities |
+| [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) | Baseline prompt and process for independent engineering reviews |
 
 ## Status
 
