@@ -30,10 +30,21 @@ final class PanelModel: ObservableObject {
 
     private let store: ClipboardStore
     private let pasteService: any PanelPasteServing
+    private var ocrTextSavedObserver: NSObjectProtocol?
 
     init(store: ClipboardStore, pasteService: any PanelPasteServing) {
         self.store = store
         self.pasteService = pasteService
+        ocrTextSavedObserver = NotificationCenter.default.addObserver(
+            forName: .ocrTextSaved,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let refreshedItemID = notification.userInfo?["itemID"] as? Int64
+            Task { @MainActor [weak self, refreshedItemID] in
+                self?.reloadPreservingSelection(prefer: refreshedItemID)
+            }
+        }
     }
 
     var selectedItem: ClipboardItem? {
@@ -69,6 +80,20 @@ final class PanelModel: ObservableObject {
         }
         if resetSelection || selectedIndex >= items.count {
             selectedIndex = 0
+        }
+    }
+
+    private func reloadPreservingSelection(prefer preferredItemID: Int64? = nil) {
+        let previousID = selectedItem?.id
+        reload()
+        if let preferredItemID,
+            let index = items.firstIndex(where: { $0.id == preferredItemID })
+        {
+            selectedIndex = index
+        } else if let previousID,
+            let index = items.firstIndex(where: { $0.id == previousID })
+        {
+            selectedIndex = index
         }
     }
 

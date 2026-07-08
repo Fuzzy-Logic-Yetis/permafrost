@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.Keys.capturePaused) private var capturePaused = false
     @AppStorage(AppSettings.Keys.recordConcealed) private var recordConcealed = false
     @AppStorage(AppSettings.Keys.maxImageMegabytes) private var maxImageMegabytes = 10
+    @AppStorage(AppSettings.Keys.recognizeTextInImages) private var recognizeTextInImages = true
 
     @State private var launchAtLogin = AppSettings.shared.launchAtLogin
     @State private var showConcealedWarning = false
@@ -34,6 +35,26 @@ struct SettingsView: View {
     private let trustPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
     private let hotkeyRegistrationFailed = NotificationCenter.default.publisher(
         for: .hotkeyRegistrationFailed)
+
+    private var imagesSection: some View {
+        Section {
+            Picker("Skip images larger than", selection: $maxImageMegabytes) {
+                Text("5 MB").tag(5)
+                Text("10 MB").tag(10)
+                Text("25 MB").tag(25)
+                Text("50 MB").tag(50)
+            }
+            Toggle("Recognize text in images", isOn: $recognizeTextInImages)
+        } header: {
+            Text("Images")
+        } footer: {
+            Text(
+                "OCR runs locally with Apple's Vision framework. Recognized text is stored, searchable, shown in preview, and included in exports with the image."
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
 
     var body: some View {
         Form {
@@ -162,14 +183,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Images") {
-                Picker("Skip images larger than", selection: $maxImageMegabytes) {
-                    Text("5 MB").tag(5)
-                    Text("10 MB").tag(10)
-                    Text("25 MB").tag(25)
-                    Text("50 MB").tag(50)
-                }
-            }
+            imagesSection
 
             Section {
                 Toggle("Record concealed content (passwords)", isOn: concealedBinding)

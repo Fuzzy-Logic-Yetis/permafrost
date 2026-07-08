@@ -39,6 +39,19 @@ Residual risk the user accepts: shoulder-surfing of the panel, plain-text storag
 by this macOS user account (and by admins/forensics on an unencrypted disk — enable
 FileVault), and password presence in export archives.
 
+## OCR text in images
+
+Settings → Images → "Recognize text in images" controls local OCR for screenshots and
+copied images. When enabled, Permafrost uses Apple's on-device Vision framework; no image
+data or recognized text leaves the Mac. Recognized text is stored as plaintext metadata on
+the image row, participates in search, appears in preview, can be copied/pasted as text,
+and is included in exports with the image manifest. It follows the parent image's retention
+and pinning behavior.
+
+Disable image OCR if you want screenshots stored only as images without searchable/plaintext
+recognized text. Existing OCR metadata is not automatically deleted when the setting is
+turned off.
+
 ## Threat model (MVP, honest version)
 
 | Threat | Mitigation |

@@ -78,23 +78,15 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
     Covered by Tests/PermafrostTests/PasteboardCapturePolicyTests.swift (paused, excluded
     app, concealed default-skip, concealed opt-in, transient/auto-generated, normal capture,
     and pause-takes-priority-over-other-reasons).
-13. **OCR on screen snips (Vision, on-device)** — issue #6, scaffold landed 2026-07-07,
-    UI/storage wiring still open. `VisionTextRecognizer` (`Sources/Permafrost/OCR`) runs
-    Apple's on-device `VNRecognizeTextRequest` against captured image data and returns
-    normalized, reading-order text; `TextRecognizing` is the fake-able protocol seam and
-    `OCRTextNormalizer` (pure, no Vision types) handles line ordering + blank-line
-    collapsing, covered by Tests/PermafrostTests/OCRTextNormalizerTests.swift. Deliberately
-    not wired into `CaptureSaveQueue` or `ClipboardItem` yet — a sibling branch owns adding
-    somewhere to persist recognized text (no schema/model changes here, per this branch's
-    scope). See docs/UX.md's "Future OCR insertion points" note for where the Preview
-    pane/hover-row/PanelModel wiring should land once storage exists.
+13. ~~OCR on screen snips (Vision, on-device)~~ — **DONE 2026-07-08.** Image
+    captures can run Apple's on-device Vision OCR on the background capture queue when
+    Settings → Images → "Recognize text in images" is enabled. Recognized text is stored
+    as image metadata (`ocr_text`), included in search/import/export, shown in the image
+    preview, selectable, and available through Copy Text / Paste Text actions. OCR
+    completion posts a panel refresh notification so searches/previews update after the
+    background job finishes.
 
 ## Later
-
-- **OCR execution/UI follow-up for screen snips** — storage/search now has an `ocr_text`
-  image metadata column and import/export support, but Vision execution and UI affordances
-  for copying recognized text are intentionally left to the app/UI branch for GitHub issue
-  #6.
 - **Optional at-rest encryption** — CryptoKit AES-GCM blobs, key in Keychain (ADR-008 has
   the constraint analysis; FUTURE_IDEAS.md has the design sketch).
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).

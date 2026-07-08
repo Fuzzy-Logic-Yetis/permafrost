@@ -26,6 +26,25 @@ import PermafrostCore
         #expect(try store.items(matching: "invoice").map(\.id) == [item.id])
     }
 
+    @Test func imageCaptureSkipsOCRWhenDisabled() throws {
+        let store = try ClipboardStore.inMemory()
+        let recognizer = FakeQueueTextRecognizer(result: "should not run")
+        let queue = CaptureSaveQueue(store: store, textRecognizer: recognizer)
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy(),
+                recognizeTextInImages: false
+            )
+        )
+        queue.waitUntilIdle()
+
+        #expect(recognizer.callCount == 0)
+        #expect(try store.allItems().first?.ocrText == nil)
+    }
+
     @Test func textCaptureDoesNotInvokeOCR() throws {
         let store = try ClipboardStore.inMemory()
         let recognizer = FakeQueueTextRecognizer(result: "should not run")

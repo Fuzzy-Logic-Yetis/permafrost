@@ -196,6 +196,25 @@ import PermafrostCore
         #expect(model.selectedIndex == 1)
     }
 
+    @Test func ocrCompletionNotificationReloadsCurrentSearch() async throws {
+        let (store, model, _) = try makeModel()
+        let item = try store.save(ClipboardCapture(imageData: Data([1, 2, 3])), now: now)
+        model.prepareForShow()
+        model.query = "invoice"
+        #expect(model.items.isEmpty)
+
+        try store.setOCRText("invoice total 42", id: try #require(item.id))
+        NotificationCenter.default.post(
+            name: .ocrTextSaved,
+            object: nil,
+            userInfo: ["itemID": try #require(item.id)]
+        )
+        await Task.yield()
+
+        #expect(model.items.map(\.id) == [item.id])
+        #expect(model.selectedItem?.ocrText == "invoice total 42")
+    }
+
     @Test func copySelectedOCRTextCopiesRecognizedTextWithoutClosingPreview() throws {
         let (store, model, pasteService) = try makeModel()
         try store.save(

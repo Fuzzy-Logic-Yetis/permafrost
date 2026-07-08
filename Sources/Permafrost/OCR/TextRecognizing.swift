@@ -8,8 +8,8 @@ import Vision
 /// synchronous and blocks the calling thread until recognition finishes, so this must
 /// never be called on the main actor: a large screen snip must not jank pasteboard
 /// snapshotting or panel UI (docs/ARCHITECTURE.md Concurrency). The intended caller is a
-/// background context such as `CaptureSaveQueue`'s serial queue, once the storage side
-/// (issue #7 / a sibling branch) has a place to persist the result.
+/// background context such as `CaptureSaveQueue`'s serial queue, which persists recognized
+/// text as image metadata after the original capture has been saved.
 protocol TextRecognizing: Sendable {
     /// Normalized recognized text, or nil if nothing was recognized or the image data
     /// couldn't be decoded.

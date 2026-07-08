@@ -10,6 +10,7 @@ extension Notification.Name {
     /// preset (review M-1). userInfo["failedShortcut"] is the display string
     /// of the shortcut that failed to register.
     static let hotkeyRegistrationFailed = Notification.Name("PermafrostHotkeyRegistrationFailed")
+    static let ocrTextSaved = Notification.Name("PermafrostOCRTextSaved")
 }
 
 @main
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cleanupTimer: Timer?
     private var settingsWindowController: SettingsWindowController?
     private var statusIconState: StatusIconState = .normal
+    private var lastRegisteredHotkey: HotkeyShortcut?
 
     static func main() {
         let app = NSApplication.shared
@@ -49,6 +51,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         purge()
 
         captureSaveQueue = CaptureSaveQueue(store: store)
+        captureSaveQueue.onOCRTextSaved = { itemID in
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .ocrTextSaved,
+                    object: nil,
+                    userInfo: ["itemID": itemID]
+                )
+            }
+        }
         pasteService = PasteService(store: store)
         let model = PanelModel(store: store, pasteService: pasteService)
         model.onAccessibilityNeeded = { [weak self] in self?.showAccessibilityPrompt() }
@@ -61,7 +72,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 CaptureSaveQueue.PendingCapture(
                     capture: capture,
                     capturedAt: Date(),
-                    retentionPolicy: self.settings.retentionPolicy
+                    retentionPolicy: self.settings.retentionPolicy,
+                    recognizeTextInImages: self.settings.recognizeTextInImages
                 )
             )
         }
@@ -84,9 +96,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.app.info("Permafrost \(PermafrostVersion.string, privacy: .public) started")
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        prepareForShutdown()
+    }
+
     static func databaseURL() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Permafrost/store.sqlite")
+    }
+
+    private func prepareForShutdown() {
+        watcher?.stop()
+        guard let captureSaveQueue else { return }
+        if !captureSaveQueue.waitUntilIdle(timeout: 2.0) {
+            Log.capture.error("timed out waiting for pending captures before shutdown")
+        }
     }
 
     private func purge() {
@@ -109,7 +133,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.registerEffectiveHotkey()
+                if self.settings.effectiveHotkey != self.lastRegisteredHotkey {
+                    self.registerEffectiveHotkey()
+                }
                 self.refreshCaptureIndicatorState()
             }
         }
@@ -127,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 userInfo: ["failedShortcut": failedDisplay]
             )
         }
+        lastRegisteredHotkey = settings.effectiveHotkey
         refreshOpenMenuItemTitle()
     }
 
@@ -298,6 +325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             bundleURL.path,
         ]
         do {
+            prepareForShutdown()
             try process.run()
             NSApp.terminate(nil)
         } catch {

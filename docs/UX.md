@@ -45,9 +45,9 @@ you just copied, and must never steal the `⌘1` slot from it either.
   caption. Code-like content (for example indented snippets, structured data, shell
   commands, SQL, or source-language keywords/punctuation) renders in a monospaced font
   with subtle markers for leading/trailing spaces and tabs.
-- Image cards: thumbnail (max ~120 pt tall) + dimensions caption. OCR text stored for an
-  image is searchable, but the image still pastes as the original image; UI affordances for
-  copying recognized text are deferred to the OCR UI branch.
+- Image cards: thumbnail (max ~120 pt tall) + dimensions caption. When OCR finds text,
+  the card shows a small text-viewfinder badge; search matches the recognized text while
+  the default paste still pastes the original image.
 - Concealed items (passwords, only when opt-in is enabled): shown with a 🔑 marker so the
   user always knows a secret is on screen. Otherwise identical behavior — visible,
   searchable, pinnable (owner's explicit decision; see SECURITY.md).
@@ -79,17 +79,11 @@ you just copied, and must never steal the `⌘1` slot from it either.
   row for. Flagged by the 2026-07-07 review (L-1); documenting instead of gating, since
   gating would remove the ability to pin/delete/paste without first closing the preview.
 
-  **Future OCR insertion points** (issue #6, scaffold only — `VisionTextRecognizer` in
-  `Sources/Permafrost/OCR` has no UI wiring yet, pending a sibling branch's storage work):
-  the natural place for a "Recognized Text" section is inside `PreviewPane`'s `content`
-  switch in `PanelView.swift` (Sources/Permafrost/Panel/PanelView.swift), added below the
-  full-resolution image for `.image` items, in a `ScrollView`-friendly `TextPreview` block
-  (selectable, like the existing text-item preview) — collapsed/absent when recognition
-  found nothing. "Copy OCR Text" and "Paste OCR Text" would sit as two new actions
-  alongside the existing pin/share/delete hover row in `ItemCard` (only relevant for
-  `.image` items with recognized text), and as new `PanelModel` methods parallel to
-  `togglePinSelected()`/`commitSelection()` once `ClipboardItem` has somewhere to hold the
-  recognized string.
+  For image items with OCR text, the preview adds a **Recognized Text** section below the
+  image. The text is selectable and has **Copy Text** / **Paste Text** buttons. Copy Text
+  puts only the recognized text on the clipboard; Paste Text closes the panel and pastes
+  that text into the previous app. If recognition is still running, the panel refreshes
+  after the background OCR job stores text.
 
 ## Keyboard map
 

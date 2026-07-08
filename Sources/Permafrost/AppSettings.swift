@@ -27,6 +27,7 @@ final class AppSettings: HotkeySettingsStore {
         static let recordConcealed = "recordConcealed"
         static let capturePaused = "capturePaused"
         static let maxImageMegabytes = "maxImageMegabytes"
+        static let recognizeTextInImages = "recognizeTextInImages"
         static let didShowWelcome = "didShowWelcome"
         static let excludedApps = "excludedApps"  // JSON-encoded [ExcludedApp]
     }
@@ -41,6 +42,7 @@ final class AppSettings: HotkeySettingsStore {
             Keys.recordConcealed: false,
             Keys.capturePaused: false,
             Keys.maxImageMegabytes: 10,
+            Keys.recognizeTextInImages: true,
         ])
     }
 
@@ -100,6 +102,10 @@ final class AppSettings: HotkeySettingsStore {
 
     var maxImageBytes: Int {
         max(1, defaults.integer(forKey: Keys.maxImageMegabytes)) * 1024 * 1024
+    }
+
+    var recognizeTextInImages: Bool {
+        defaults.bool(forKey: Keys.recognizeTextInImages)
     }
 
     var didShowWelcome: Bool {

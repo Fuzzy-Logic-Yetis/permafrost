@@ -11,6 +11,7 @@ final class CaptureSaveQueue {
         var capture: ClipboardCapture
         var capturedAt: Date
         var retentionPolicy: RetentionPolicy
+        var recognizeTextInImages = true
     }
 
     private let store: ClipboardStore
@@ -22,11 +23,14 @@ final class CaptureSaveQueue {
         self.textRecognizer = textRecognizer
     }
 
+    var onOCRTextSaved: @Sendable (Int64) -> Void = { _ in }
+
     func enqueue(_ pending: PendingCapture) {
-        queue.async { [store, textRecognizer] in
+        queue.async { [store, textRecognizer, onOCRTextSaved] in
             do {
                 let item = try store.save(pending.capture, now: pending.capturedAt)
-                if pending.capture.kind == .image,
+                if pending.recognizeTextInImages,
+                    pending.capture.kind == .image,
                     pending.capture.ocrText == nil,
                     let id = item.id,
                     let imageData = pending.capture.imageData,
@@ -35,6 +39,7 @@ final class CaptureSaveQueue {
                 {
                     try store.setOCRText(recognizedText, id: id)
                     Log.capture.info("OCR text saved for image item \(id)")
+                    onOCRTextSaved(id)
                 }
                 try store.purge(with: pending.retentionPolicy, now: pending.capturedAt)
             } catch {
@@ -43,7 +48,15 @@ final class CaptureSaveQueue {
         }
     }
 
-    func waitUntilIdle() {
+    @discardableResult
+    func waitUntilIdle(timeout: TimeInterval? = nil) -> Bool {
+        if let timeout {
+            let group = DispatchGroup()
+            group.enter()
+            queue.async { group.leave() }
+            return group.wait(timeout: .now() + timeout) == .success
+        }
         queue.sync {}
+        return true
     }
 }

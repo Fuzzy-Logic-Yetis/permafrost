@@ -104,11 +104,12 @@ alive (ADR-010).
   `CaptureSaveQueue` and GRDB.
 - `VisionTextRecognizer` (`Sources/Permafrost/OCR`, issue #6) follows the same rule: Vision's
   `VNImageRequestHandler.perform` is synchronous and blocks the calling thread for the
-  duration of recognition, so it must only ever be called from a background context (the
-  intended caller is `CaptureSaveQueue`'s serial queue once a sibling branch adds somewhere
-  to persist the result), never the main actor. `TextRecognizing` is the protocol seam
-  (mirrors `PanelPasteServing`) so recognition-dependent code can be tested with a fake
-  recognizer instead of real Vision calls.
+  duration of recognition, so it runs from `CaptureSaveQueue` only when the image-OCR
+  setting was enabled at capture time. The recognized text is saved back to the image row's
+  `ocr_text` metadata and an app notification asks the panel model to refresh any visible
+  search/preview. `TextRecognizing` is the protocol seam (mirrors `PanelPasteServing`) so
+  recognition-dependent code can be tested with a fake recognizer instead of real Vision
+  calls.
 
 ## Key constraints
 
