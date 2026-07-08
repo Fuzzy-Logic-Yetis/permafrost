@@ -219,6 +219,15 @@ public final class ClipboardStore: Sendable {
         }
     }
 
+    public func setOCRText(_ ocrText: String?, id: Int64) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE clipboard_item SET ocr_text = ? WHERE id = ? AND kind = ?",
+                arguments: [ocrText, id, ClipboardItemKind.image.rawValue]
+            )
+        }
+    }
+
     public func delete(id: Int64) throws {
         try dbQueue.write { db in
             _ = try ClipboardItem.deleteOne(db, key: id)

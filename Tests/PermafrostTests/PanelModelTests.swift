@@ -215,6 +215,8 @@ import PermafrostCore
 private final class FakePasteService: PanelPasteServing {
     var result: Bool
     var pastedTexts: [String] = []
+    var copiedOCRTexts: [String] = []
+    var pastedOCRTexts: [String] = []
     var onPaste: () -> Void = {}
 
     init(result: Bool) {
@@ -223,6 +225,16 @@ private final class FakePasteService: PanelPasteServing {
 
     func paste(_ item: ClipboardItem) -> Bool {
         pastedTexts.append(item.text ?? "")
+        onPaste()
+        return result
+    }
+
+    func copyOCRTextToPasteboard(_ item: ClipboardItem) {
+        copiedOCRTexts.append(item.ocrText ?? "")
+    }
+
+    func pasteOCRText(_ item: ClipboardItem) -> Bool {
+        pastedOCRTexts.append(item.ocrText ?? "")
         onPaste()
         return result
     }

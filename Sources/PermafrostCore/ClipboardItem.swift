@@ -74,6 +74,10 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
 extension ClipboardItem: FetchableRecord, MutablePersistableRecord {
     public static let databaseTableName = "clipboard_item"
 
+    public var hasOCRText: Bool {
+        !(ocrText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }

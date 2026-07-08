@@ -31,6 +31,31 @@ final class PasteService {
                 pasteboard.setData(data, forType: .png)
             }
         }
+        markUsed(item)
+    }
+
+    func copyOCRTextToPasteboard(_ item: ClipboardItem) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(item.ocrText ?? "", forType: .string)
+        markUsed(item)
+    }
+
+    /// Returns false when Accessibility is missing — the item is on the pasteboard
+    /// (copy-only fallback) but no keystroke was sent.
+    @discardableResult
+    func paste(_ item: ClipboardItem) -> Bool {
+        copyToPasteboard(item)
+        return sendPasteKeystrokeIfTrusted()
+    }
+
+    @discardableResult
+    func pasteOCRText(_ item: ClipboardItem) -> Bool {
+        copyOCRTextToPasteboard(item)
+        return sendPasteKeystrokeIfTrusted()
+    }
+
+    private func markUsed(_ item: ClipboardItem) {
         if let id = item.id {
             do {
                 try store.markUsed(id: id)
@@ -40,11 +65,7 @@ final class PasteService {
         }
     }
 
-    /// Returns false when Accessibility is missing — the item is on the pasteboard
-    /// (copy-only fallback) but no keystroke was sent.
-    @discardableResult
-    func paste(_ item: ClipboardItem) -> Bool {
-        copyToPasteboard(item)
+    private func sendPasteKeystrokeIfTrusted() -> Bool {
         guard Self.isTrusted else { return false }
         // Give the panel a beat to close so key focus is back in the target app.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {

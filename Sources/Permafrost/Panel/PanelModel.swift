@@ -5,6 +5,8 @@ import SwiftUI
 @MainActor
 protocol PanelPasteServing {
     func paste(_ item: ClipboardItem) -> Bool
+    func copyOCRTextToPasteboard(_ item: ClipboardItem)
+    func pasteOCRText(_ item: ClipboardItem) -> Bool
 }
 
 extension PasteService: PanelPasteServing {}
@@ -93,6 +95,19 @@ final class PanelModel: ObservableObject {
         let item = items[index]
         onCommit()  // close the panel first so focus is back in the target app
         if !pasteService.paste(item) {
+            onAccessibilityNeeded()
+        }
+    }
+
+    func copySelectedOCRText() {
+        guard let item = selectedItem, item.hasOCRText else { return }
+        pasteService.copyOCRTextToPasteboard(item)
+    }
+
+    func pasteSelectedOCRText() {
+        guard let item = selectedItem, item.hasOCRText else { return }
+        onCommit()  // close the panel first so focus is back in the target app
+        if !pasteService.pasteOCRText(item) {
             onAccessibilityNeeded()
         }
     }

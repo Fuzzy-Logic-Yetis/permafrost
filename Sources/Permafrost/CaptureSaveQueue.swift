@@ -14,16 +14,28 @@ final class CaptureSaveQueue {
     }
 
     private let store: ClipboardStore
+    private let textRecognizer: any TextRecognizing
     private let queue = DispatchQueue(label: "com.fuzzylogicyetis.Permafrost.capture-save")
 
-    init(store: ClipboardStore) {
+    init(store: ClipboardStore, textRecognizer: any TextRecognizing = VisionTextRecognizer()) {
         self.store = store
+        self.textRecognizer = textRecognizer
     }
 
     func enqueue(_ pending: PendingCapture) {
-        queue.async { [store] in
+        queue.async { [store, textRecognizer] in
             do {
-                try store.save(pending.capture, now: pending.capturedAt)
+                let item = try store.save(pending.capture, now: pending.capturedAt)
+                if pending.capture.kind == .image,
+                    pending.capture.ocrText == nil,
+                    let id = item.id,
+                    let imageData = pending.capture.imageData,
+                    let recognizedText = textRecognizer.recognizeText(in: imageData),
+                    !recognizedText.isEmpty
+                {
+                    try store.setOCRText(recognizedText, id: id)
+                    Log.capture.info("OCR text saved for image item \(id)")
+                }
                 try store.purge(with: pending.retentionPolicy, now: pending.capturedAt)
             } catch {
                 Log.store.error("save failed: \(error.localizedDescription)")

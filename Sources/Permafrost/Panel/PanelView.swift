@@ -20,7 +20,11 @@ struct PanelView: View {
                 footer
             }
             if model.isPreviewShown, let item = model.selectedItem {
-                PreviewPane(item: item)
+                PreviewPane(
+                    item: item,
+                    onCopyOCRText: { model.copySelectedOCRText() },
+                    onPasteOCRText: { model.pasteSelectedOCRText() }
+                )
             }
         }
         .frame(width: 440, height: 500)
@@ -217,6 +221,13 @@ private struct ItemCard: View {
                         .font(.caption2)
                         .foregroundStyle(.yellow)
                 }
+                if item.hasOCRText {
+                    Label("OCR", systemImage: "text.viewfinder")
+                        .labelStyle(.iconOnly)
+                        .font(.caption2)
+                        .foregroundStyle(.blue)
+                        .help("Recognized text")
+                }
                 if let quickPasteIndex {
                     Text("⌘\(quickPasteIndex)")
                         .font(.caption2)
@@ -303,6 +314,8 @@ private struct TextPreview: View {
 /// growing the window — the default panel stays compact, this is opt-in.
 private struct PreviewPane: View {
     let item: ClipboardItem
+    let onCopyOCRText: () -> Void
+    let onPasteOCRText: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -331,13 +344,32 @@ private struct PreviewPane: View {
         case .text:
             TextPreview(text: item.text ?? "", lineLimit: nil, selectable: true)
         case .image:
-            if let data = item.imageData, let nsImage = NSImage(data: data) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } else {
-                Label("Image unavailable", systemImage: "photo")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 12) {
+                if let data = item.imageData, let nsImage = NSImage(data: data) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    Label("Image unavailable", systemImage: "photo")
+                        .foregroundStyle(.secondary)
+                }
+                if item.hasOCRText, let ocrText = item.ocrText {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Label("Recognized Text", systemImage: "text.viewfinder")
+                                .font(.headline)
+                            Spacer()
+                            Button("Copy Text", action: onCopyOCRText)
+                            Button("Paste Text", action: onPasteOCRText)
+                        }
+                        TextPreview(text: ocrText, lineLimit: nil, selectable: true)
+                    }
+                } else {
+                    Text("OCR text will appear here after recognition finishes.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
