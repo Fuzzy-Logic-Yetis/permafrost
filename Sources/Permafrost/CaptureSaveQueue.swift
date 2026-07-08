@@ -42,4 +42,8 @@ final class CaptureSaveQueue {
             }
         }
     }
+
+    func waitUntilIdle() {
+        queue.sync {}
+    }
 }

@@ -196,6 +196,50 @@ import PermafrostCore
         #expect(model.selectedIndex == 1)
     }
 
+    @Test func copySelectedOCRTextCopiesRecognizedTextWithoutClosingPreview() throws {
+        let (store, model, pasteService) = try makeModel()
+        try store.save(
+            ClipboardCapture(imageData: Data([1, 2, 3]), ocrText: "serial number 123"),
+            now: now)
+        model.prepareForShow()
+        model.togglePreview()
+
+        model.copySelectedOCRText()
+
+        #expect(pasteService.copiedOCRTexts == ["serial number 123"])
+        #expect(model.isPreviewShown == true)
+    }
+
+    @Test func pasteSelectedOCRTextClosesAndReportsAccessibilityFallback() throws {
+        let (store, model, pasteService) = try makeModel(pasteResult: false)
+        var commitCount = 0
+        var accessibilityPromptCount = 0
+        model.onCommit = { commitCount += 1 }
+        model.onAccessibilityNeeded = { accessibilityPromptCount += 1 }
+        try store.save(
+            ClipboardCapture(imageData: Data([1, 2, 3]), ocrText: "paste me"),
+            now: now)
+        model.prepareForShow()
+
+        model.pasteSelectedOCRText()
+
+        #expect(pasteService.pastedOCRTexts == ["paste me"])
+        #expect(commitCount == 1)
+        #expect(accessibilityPromptCount == 1)
+    }
+
+    @Test func ocrActionsIgnoreImagesWithoutRecognizedText() throws {
+        let (store, model, pasteService) = try makeModel()
+        try store.save(ClipboardCapture(imageData: Data([1, 2, 3])), now: now)
+        model.prepareForShow()
+
+        model.copySelectedOCRText()
+        model.pasteSelectedOCRText()
+
+        #expect(pasteService.copiedOCRTexts.isEmpty)
+        #expect(pasteService.pastedOCRTexts.isEmpty)
+    }
+
     @Test func deleteWhilePreviewShownRemovesPreviewedItemAndClosesPreview() throws {
         let (store, model, _) = try makeModel()
         try store.save(ClipboardCapture(text: "older"), now: now)
