@@ -787,12 +787,25 @@ lands (v1.0 gate), same as the TCC situation, not something to over-engineer aro
 mechanism (`Security` framework; `CryptoKit` for AES-GCM is already imported in
 `PermafrostCore` for content hashing) — the risk is real but bounded to ad-hoc dev builds,
 and the fix is about *when and where* the key is fetched, not avoiding Keychain. The key is
-retrieved/created exactly **once, at app launch, on a background queue** — never lazily on
-first concealed-paste, and never on the main actor. This means: (a) if a re-authorization
-prompt is ever needed, it surfaces at a predictable moment (launch) rather than mid-action;
-(b) even if unanswered, only concealed-item encrypt/decrypt is blocked — search, paste, and
-everything else for non-concealed history keeps working normally, since it never depended
-on this key in the first place.
+retrieved/created exactly **once, at app launch**, never lazily on first concealed-paste —
+so if a re-authorization prompt is ever needed, it surfaces at a predictable moment
+(launch) rather than mid-action, the one outcome this ADR most needed to prevent.
+
+*Revised during implementation* from the original "background queue, never touches the
+main actor" framing above: `ClipboardStore` needs a concrete key *value* to even construct
+(nearly everything in the app depends on the store being ready at launch), so pushing the
+fetch to a background queue while the rest of launch proceeds isn't actually available
+without either blocking store construction anyway or accepting an ephemeral placeholder key
+that would later need swapping — the latter risks a small window where a concealed item
+gets sealed with a key that's then discarded, which is worse than a bounded wait. Landed on
+a middle path instead: the fetch runs on a background queue, but the calling (launch)
+thread waits for it with a **hard 2-second timeout** (`DispatchSemaphore.wait(timeout:)`).
+Matching signature (the overwhelming common case) resolves near-instantly, well under the
+bound; if the bound is hit — the ad-hoc-reauthorization scenario this ADR's spike found —
+launch proceeds with a session-only ephemeral key rather than waiting indefinitely on a
+dialog most users won't recognize. Net effect is the same as originally intended (nothing
+can freeze indefinitely, and only ever at launch, never mid-paste), reached by a simpler
+route once the store's synchronous-construction constraint became clear.
 
 **Decision — scope: `.text` items only.** `org.nspasteboard.ConcealedType` is a marker
 password managers set on *text* copies; an `.image` capture carrying it is a scenario this
