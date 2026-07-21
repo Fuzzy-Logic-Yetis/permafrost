@@ -625,3 +625,23 @@ are ~2.5ms) — acceptable given docs/TESTING.md's precedent of not chasing perf
 latency for background capture work (OCR's Vision framework has a similar cold-start cost
 today). Fidelity is intentionally best-effort; not chasing perfect HTML/CSS→RTF fidelity is
 a deliberate non-goal, not an oversight.
+
+**Deliberation recorded 2026-07-21 (this ADR was nearly rejected, then reinstated).**
+Project owner initially pushed back hard on this ADR after it was first written: "if I copy
+text on a website I'm not looking for anything other than the text" — a fair challenge,
+since *today*, with no HTML capture, a web copy has no rich data at all, so `⏎` and `⇧⏎`
+already paste identical plain text for it. Building this ADR would change that: a plain `⏎`
+paste of web content would start carrying recovered formatting instead of the plain text
+that currently happens automatically. First response was to recommend scrapping this ADR
+entirely on that basis.
+
+Reconsidered once more, and the reconsideration is what actually settled it: the choice
+isn't "rich by default vs. plain by default" in the abstract — Permafrost **already** treats
+rich-by-default-with-plain-as-the-explicit-alternative as the norm for every other source
+(Word/Notes/Pages content pastes rich on `⏎` today; `⇧⏎` is the deliberate opt-out), matching
+how mainstream apps like Word and Excel already work (paste carries formatting; "paste as
+plain text" is the secondary, explicit action). Web content is the only source that's
+*silently* forced into plain-only — not by a deliberate decision, but by a capture gap. This
+ADR closes that inconsistency rather than introducing new default behavior: nothing new is
+asked of the user, since `⇧⏎` was already the reach-for-plain-text habit regardless of
+source. Decision stands: implement as designed above.
