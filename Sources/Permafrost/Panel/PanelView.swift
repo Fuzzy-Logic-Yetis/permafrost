@@ -74,7 +74,7 @@ struct PanelView: View {
                                 .padding(.top, index == 0 ? 2 : 8)
                                 .padding(.leading, 6)
                         }
-                        ItemCard(
+                        let card = ItemCard(
                             item: item,
                             isSelected: index == model.selectedIndex,
                             quickPasteIndex: index < recentCount && index < 9 ? index + 1 : nil,
@@ -83,6 +83,19 @@ struct PanelView: View {
                             onPreviewOCR: { model.showPreview(index: index) },
                             onPasteAsPlainText: { model.commit(index: index, asPlainText: true) }
                         )
+                        // ADR-020: drag as plain text/PNG, mirroring the existing
+                        // shareableItems/share-sheet precedent rather than carrying RTF.
+                        // Verified via spike that .draggable() needs no custom gesture code
+                        // to coexist with the onTapGesture commit below.
+                        Group {
+                            if item.kind == .text {
+                                card.draggable(item.text ?? "")
+                            } else if let imageData = item.imageData {
+                                card.draggable(DraggableImageData(data: imageData))
+                            } else {
+                                card
+                            }
+                        }
                         .id(item.id)
                         .onTapGesture {
                             guard canCommitCardTap else { return }
