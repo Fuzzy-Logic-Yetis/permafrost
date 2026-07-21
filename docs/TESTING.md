@@ -253,16 +253,21 @@ outside the app (e.g. CI or a broken build that won't launch):
     pastes the rich version. Confirm the 📄 icon does **not** appear when hovering an
     `.image` card, and that `⇧⏎` on a selected image card falls back to a normal (rich)
     paste rather than doing nothing.
-22a. **HTML→RTF rich capture (ADR-019)**: copy formatted text from a browser (bold/italic/
-    strikethrough — a product page with a sale-price strikethrough works well) → paste
-    rich (`⏎`) into a rich-text app (TextEdit in Rich Text mode, Word, Pages) → confirm
-    *some* formatting survives (bold/italic at minimum; exact fidelity isn't guaranteed,
-    RTF can't represent everything CSS can). Paste as plain text (`⇧⏎`) on the same item →
-    confirm it's still fully stripped. Separately, copy from Word/Pages/Notes (native
-    `.rtf` present) → confirm behavior is bit-for-bit unchanged from before this ADR (the
-    native-RTF path never touches the HTML conversion code — check
+22a. **HTML→RTF rich capture (ADR-019)**: copy formatted text from a browser — a product
+    page with a strikethrough sale price and a colored "Sale"/"Best Seller" badge is a good
+    real-world test (Amazon and most e-commerce product pages qualify) — → paste rich
+    (`⏎`) into a rich-text app (TextEdit in Rich Text mode, Word, Pages) → confirm bold/
+    italic/strikethrough survive, **and confirm no background color/highlight box and no
+    colored text comes through** (found 2026-07-21 testing against a real product page and
+    Amazon: the badge's background color was carrying over as an opaque gray/tan box, and
+    link text kept its color — both intentionally stripped now; only the *style*
+    (bold/italic/strikethrough/underline) survives, not color). Paste as plain text (`⇧⏎`)
+    on the same item → confirm it's still fully stripped. Separately, copy from
+    Word/Pages/Notes (native `.rtf` present) → confirm behavior is bit-for-bit unchanged
+    from before this ADR, background color and text color included — the sanitization only
+    runs on the HTML-derived path, never on native RTF (check
     `~/Library/Application Support/Permafrost/store.sqlite`'s `rich_data` length matches
-    what was on the pasteboard, not a converted/re-encoded version).
+    what was on the pasteboard for a native-RTF item, not a converted/re-encoded version).
     **Critical regression check** (found 2026-07-21: this silently destroyed the source
     item once already): after a plain-text paste, re-open the panel and confirm the
     **same item still shows its rich content** (or check

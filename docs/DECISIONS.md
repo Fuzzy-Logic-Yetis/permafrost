@@ -645,3 +645,22 @@ plain text" is the secondary, explicit action). Web content is the only source t
 ADR closes that inconsistency rather than introducing new default behavior: nothing new is
 asked of the user, since `⇧⏎` was already the reach-for-plain-text habit regardless of
 source. Decision stands: implement as designed above.
+
+**Amendment 2026-07-21: strip color, keep character-level emphasis.** Manually testing the
+implementation against real product pages (a firearms-parts site, then Amazon) surfaced a
+follow-on issue: the naive HTML→RTF round-trip faithfully carries over *everything* RTF can
+represent, including background-color (a page's colored badge — "Sale," "#1 Best Seller" —
+became an opaque gray/tan box in Word) and foreground text color (link blue). Project
+owner's reaction: "I'm looking to copy the text and not the page formatting, just the
+text" — page decoration, not content. Resolution: `HTMLRichTextConverter` now builds the
+attributed string as before, then explicitly strips `.backgroundColor`, `.foregroundColor`,
+`.strikethroughColor`, and `.underlineColor` before the RTF conversion, while deliberately
+keeping `.font` (bold/italic traits), `.strikethroughStyle`, and `.underlineStyle` — the
+*style*, not whatever color happened to be attached to it. Verified with a spike before
+implementing (2026-07-21): converting HTML with a background-colored span and a colored
+strikethrough price, the resulting RTF has no `\cb`/`\highlight` control words but keeps
+`\b`/`\strike`. New test `stripsBackgroundColorButKeepsStrikethroughAndBold` in
+`HTMLRichTextConverterTests.swift` asserts exactly that. This changes what "rich paste"
+means for HTML-sourced content specifically (native `.rtf` from Word/Pages/Notes is
+untouched — the sanitization only runs on the HTML-derived path) — worth remembering if a
+future session wonders why converted RTF looks "less rich" than the source page.

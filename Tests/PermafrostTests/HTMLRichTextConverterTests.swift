@@ -3,8 +3,6 @@ import Testing
 
 @testable import Permafrost
 
-// ADR-019: HTMLRichTextConverter doesn't exist yet — intentionally red on this branch
-// (feat/html-rich-capture) until implemented.
 @Suite struct HTMLRichTextConverterTests {
     @Test func convertsBoldHTMLToRTFContainingBoldMarker() throws {
         let html = "<html><body><p><b>Backfire</b></p></body></html>"
@@ -13,6 +11,29 @@ import Testing
         let rtf = try #require(converter.rtfData(fromHTML: Data(html.utf8)))
 
         let rtfString = try #require(String(data: rtf, encoding: .ascii))
+        #expect(rtfString.contains("\\b"))
+    }
+
+    @Test func stripsBackgroundColorButKeepsStrikethroughAndBold() throws {
+        // Found 2026-07-21 testing against a real product page: the HTML importer
+        // faithfully carries over background-color and link color as-is, which reads as
+        // "page decoration" once pasted somewhere else (a colored badge became a gray box
+        // in Word) rather than "the text." Character-level emphasis stays; color doesn't.
+        let html = """
+            <html><body>
+            <span style="background-color: blue; color: white;"><b>BACKFIRE</b></span>
+            <p><s style="color:red;">$79.99 USD</s> <b>$69.99 USD</b></p>
+            <p><a href="https://example.com" style="color:blue;">Shipping</a></p>
+            </body></html>
+            """
+        let converter = HTMLRichTextConverter()
+
+        let rtf = try #require(converter.rtfData(fromHTML: Data(html.utf8)))
+
+        let rtfString = try #require(String(data: rtf, encoding: .ascii))
+        #expect(!rtfString.contains("\\cb"))
+        #expect(!rtfString.contains("\\highlight"))
+        #expect(rtfString.contains("\\strike"))
         #expect(rtfString.contains("\\b"))
     }
 

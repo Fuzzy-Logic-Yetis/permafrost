@@ -11,6 +11,15 @@ protocol HTMLRichTextConverting: Sendable {
 }
 
 struct HTMLRichTextConverter: HTMLRichTextConverting {
+    /// Attributes stripped before conversion — page/site decoration, not "the text" (found
+    /// 2026-07-21: converting a real product page carried its colored badge background
+    /// through as a gray box in Word, and its link color, neither of which the project
+    /// owner wanted). Character-level emphasis (bold/italic via `.font`, `.strikethroughStyle`,
+    /// `.underlineStyle`) is deliberately kept — only the *color* attached to it goes.
+    private static let strippedAttributes: [NSAttributedString.Key] = [
+        .backgroundColor, .foregroundColor, .strikethroughColor, .underlineColor,
+    ]
+
     func rtfData(fromHTML html: Data) -> Data? {
         // The HTML importer is lenient — it never throws, even for empty or garbage input,
         // producing a degenerate zero-length result instead (verified 2026-07-21). Checking
@@ -23,8 +32,15 @@ struct HTMLRichTextConverter: HTMLRichTextConverting {
             ),
             attributed.length > 0
         else { return nil }
-        return try? attributed.data(
-            from: NSRange(location: 0, length: attributed.length),
+
+        let sanitized = NSMutableAttributedString(attributedString: attributed)
+        let fullRange = NSRange(location: 0, length: sanitized.length)
+        for key in Self.strippedAttributes {
+            sanitized.removeAttribute(key, range: fullRange)
+        }
+
+        return try? sanitized.data(
+            from: NSRange(location: 0, length: sanitized.length),
             documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
         )
     }
