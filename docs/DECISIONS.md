@@ -664,3 +664,91 @@ strikethrough price, the resulting RTF has no `\cb`/`\highlight` control words b
 means for HTML-sourced content specifically (native `.rtf` from Word/Pages/Notes is
 untouched — the sanitization only runs on the HTML-derived path) — worth remembering if a
 future session wonders why converted RTF looks "less rich" than the source page.
+
+## ADR-020: Drag-and-drop out of the panel
+
+**Context.** BACKLOG "Later," deferred behind ADR-018/019 since it shares the same
+underlying question ("what does interacting with the card body mean now that a click isn't
+just commit-on-tap") but needed its own technical spike first: does SwiftUI's
+`.draggable(_:)` coexist with the existing `onTapGesture`-based click-to-paste on
+`ItemCard`, without a custom gesture-recognizer or minimum-drag-distance threshold to build?
+
+**Spike (2026-07-21), and a real limitation found along the way.** Built a throwaway
+standalone SwiftUI app (`ScrollView` + `LazyVStack` + cards, each with both
+`.onTapGesture` and `.draggable(_:)`, mirroring `PanelView`'s actual structure) to test this
+in isolation before touching real code. Automated verification via `cliclick`'s synthetic
+mouse events (press/move/release) turned out to be unreliable: neither the tap nor the drag
+fired for a synthetic drag sequence, while a synthetic plain click correctly logged a tap —
+strongly suggesting AppKit's drag-session recognition needs real hardware-event
+characteristics that `CGEventPost`-based synthetic events don't fully replicate. Documented
+here so a future session doesn't waste time trying to script this the same way ADR-018/019's
+mouse/keyboard checks were scripted — **this specific gesture needs a human**, every time.
+
+Handed off to project owner for a real mouse/trackpad test on the same throwaway app: a
+plain click produced no visible change (expected — the spike had no visual tap feedback,
+only a log file), and dragging a card produced a visible drag-preview highlight
+(`.draggable()`'s preview activating) with **no** tap firing — confirming click-to-paste
+and drag-out cleanly disambiguate with zero custom gesture code. Dragging the card onto a
+native document (Word) actually inserted its payload text at the cursor — the full round
+trip (initiate → preview → drop → deliver) works. Dropping onto a non-native drop target
+(a webview-based chat input) didn't insert anything, but that's a property of that specific
+target's own drop handling, not evidence against the mechanism — native macOS apps
+(TextEdit, Word, Finder, Mail) are the real bar and that one passed.
+
+**Decision — data offered.** Mirrors the existing `shareableItems` precedent
+(`ClipboardItem+Sharing.swift`) deliberately rather than introducing a new multi-format
+negotiation: `.text` items drag as plain `String` (already `Transferable` — no custom type
+needed); `.image` items drag as PNG `Data` via a small `Transferable`-conforming wrapper
+(`DataRepresentation(contentType: .png)`, same shape as `Thumbnailer`'s existing PNG
+handling elsewhere in the codebase). **Not** carrying RTF on the drag, even for items that
+have it — the share sheet already made this same simplicity call for the identical reason
+(no dependency, no format-negotiation complexity, ships something useful now rather than
+something maximal later). Can be revisited if it turns out to matter in practice.
+
+**Decision — where `.draggable()` attaches.** On the same outer wrapper in
+`PanelView.swift`'s `itemList` that already carries `.onTapGesture` (not inside `ItemCard`'s
+own body) — keeps the drag source and the tap-to-commit gesture on the identical view,
+matching the spike's structure exactly. The pin/share/delete/paste-as-plain-text hover
+buttons are nested `Button`s inside `ItemCard`'s own hierarchy, more specific than the outer
+gesture, the same relationship that already lets them coexist with `onTapGesture` today
+(ADR-012, ADR-018) — expected to extend the same way to `.draggable()`, but **not yet
+verified** and called out explicitly in the test plan below rather than assumed.
+
+**Decision — panel behavior during/after a drag.** Panel stays open for the duration of a
+drag and does **not** auto-close on a successful drop. Closing-on-drop would require
+detecting drop completion, which plain SwiftUI `.draggable()` doesn't surface a callback
+for (would mean dropping to lower-level `NSItemProvider` completion handling for one
+signal) — not worth the complexity for a first version. Matches how the panel already
+behaves if you open it and do nothing: still there until `Esc`/click-away. Revisit only if
+this turns out to feel wrong in practice.
+
+**Decision — keyboard equivalent: none, and none needed.** Drag-and-drop is inherently a
+mouse/trackpad gesture; `⏎`/`⇧⏎` already serve the keyboard-first path this is meant to
+supplement, per docs/UX.md's keyboard-first mandate. Nothing to add to the keyboard map.
+
+**Test plan.** Unlike ADR-018/019, this feature has no extractable pure decision logic to
+give Swift Testing coverage — confirmed by precedent: `shareableItems`, the closest existing
+analog (same "what does this item become for an external consumer" shape), has never had
+unit tests either (checked: no `ShareButtonTests`/`shareableItems` test exists in this
+repo). This is manual-checklist-only, honestly, not a gap being cut for time. Manual
+checklist to add once implemented (docs/TESTING.md):
+
+- Quick click on a text/image card still pastes-and-closes exactly as before (regression
+  check — confirms `.draggable()` didn't quietly change tap behavior for the common case).
+- Press-and-drag a text card onto TextEdit/Notes/Mail compose → plain text lands at the
+  drop point; panel remains open throughout and after.
+- Press-and-drag an image card onto Finder/Mail compose → image lands as a real image
+  (PNG), not a broken/empty file.
+- **Explicitly verify** (flagged above as not yet confirmed): hovering a card to reveal
+  pin/share/delete/paste-as-plain-text, then clicking one of those buttons, still performs
+  that action and does **not** instead start a drag of the whole card.
+- Drag a card partway and release over empty desktop / an app that doesn't accept the drop
+  → nothing pastes anywhere, panel is still open and unchanged, no crash/hang.
+
+**Consequences.** No dependency, no schema change (drag data is derived from
+`ClipboardItem` at drag time, nothing new stored). Smaller in scope than it might have
+sounded going in, now that the spike answered the one question that mattered: `.draggable()`
+needs no custom gesture-disambiguation code at all, it already coexists with
+`onTapGesture` cleanly. Deliberately conservative on data richness (plain text/PNG only,
+matching the share-sheet precedent) and on panel lifecycle (no auto-close) — both are easy
+to revisit later, hard to un-ship if the first version overreaches.

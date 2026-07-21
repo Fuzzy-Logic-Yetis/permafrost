@@ -102,13 +102,17 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    `HTMLRichTextConverter` now strips color specifically while keeping character-level
    emphasis (bold/italic/strikethrough/underline) intact. Native `.rtf` from Word/Pages/
    Notes is completely unaffected.
-3. **Drag-and-drop out of the panel** — drag an item card into a document. **Not planned in
-   detail yet.** ADR-018 explicitly scoped this out: it shares the "what does interacting
-   with the card body mean" question with items 1–2 above, but needs its own throwaway
-   technical spike first (does SwiftUI's `.draggable`/`onDrag` coexist with the existing
-   `LazyVStack` + `ScrollView` + `onTapGesture` without regressing click-to-paste?) before a
-   real design/test plan can be written with confidence. Comes after item 2 ships, not in
-   parallel with it — one interaction-model change in flight at a time.
+3. **Drag-and-drop out of the panel** (ADR-020) — in progress, on branch
+   `feat/drag-and-drop`. Spike done: built a throwaway SwiftUI app to test whether
+   `.draggable()` coexists with the existing `onTapGesture`-based click-to-paste — it does,
+   with zero custom gesture code needed (confirmed by real mouse/trackpad testing; `cliclick`
+   automation couldn't reliably trigger AppKit's drag recognition, so this one needed a human
+   from the start). Design: text items drag as plain `String`, image items as PNG `Data`,
+   mirroring the existing `shareableItems`/share-sheet precedent rather than carrying RTF.
+   Panel stays open during/after a drag (no auto-close — no drop-completion callback in
+   plain SwiftUI `.draggable()` worth chasing for v1). No unit-test seam (same as
+   `shareableItems`, its closest analog) — manual checklist only, recorded in ADR-020.
+   Implementation not yet started.
 
 ## Later
 
