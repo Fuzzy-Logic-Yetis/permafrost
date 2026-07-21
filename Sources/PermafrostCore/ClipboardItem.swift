@@ -15,6 +15,9 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
     public var text: String?
     public var ocrText: String?
     public var richData: Data?
+    /// AES-GCM sealed box (nonce+ciphertext+tag combined) for concealed `.text` items only
+    /// (ADR-021) — never populated alongside `text`/`richData` for the same row.
+    public var encryptedData: Data?
     public var imageData: Data?
     public var thumbnail: Data?
     public var sourceApp: String?
@@ -29,6 +32,7 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
         case ocrText = "ocr_text"
         case contentHash = "content_hash"
         case richData = "rich_data"
+        case encryptedData = "encrypted_data"
         case imageData = "image_data"
         case sourceApp = "source_app"
         case createdAt = "created_at"
@@ -45,6 +49,7 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
         text: String? = nil,
         ocrText: String? = nil,
         richData: Data? = nil,
+        encryptedData: Data? = nil,
         imageData: Data? = nil,
         thumbnail: Data? = nil,
         sourceApp: String? = nil,
@@ -60,6 +65,7 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
         self.text = text
         self.ocrText = ocrText
         self.richData = richData
+        self.encryptedData = encryptedData
         self.imageData = imageData
         self.thumbnail = thumbnail
         self.sourceApp = sourceApp

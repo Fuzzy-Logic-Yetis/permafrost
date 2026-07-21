@@ -1,18 +1,25 @@
+import CryptoKit
 import Foundation
 import GRDB
 
 /// The single gateway to persistence. No SQL exists outside this module (CLAUDE.md).
 public final class ClipboardStore: Sendable {
     private let dbQueue: DatabaseQueue
+    private let cipher: ConcealedContentCipher
 
-    public init(dbQueue: DatabaseQueue) {
+    public init(dbQueue: DatabaseQueue, concealedContentKey: SymmetricKey) {
         self.dbQueue = dbQueue
+        self.cipher = ConcealedContentCipher(key: concealedContentKey)
     }
 
     // MARK: - Opening
 
     /// Opens (creating if needed) the on-disk store with owner-only permissions.
-    public static func onDisk(at url: URL) throws -> ClipboardStore {
+    /// `concealedContentKey` is required (not defaulted) deliberately (ADR-021) — the real
+    /// app must be explicit about passing its persistent, Keychain-backed key here, so a
+    /// missing key can't silently fall back to something ephemeral and lose future
+    /// decryptability of already-recorded concealed items.
+    public static func onDisk(at url: URL, concealedContentKey: SymmetricKey) throws -> ClipboardStore {
         let fm = FileManager.default
         let dir = url.deletingLastPathComponent()
         try fm.createDirectory(
@@ -25,13 +32,18 @@ public final class ClipboardStore: Sendable {
         for suffix in ["", "-wal", "-shm", "-journal"] {
             try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path + suffix)
         }
-        return ClipboardStore(dbQueue: dbQueue)
+        return ClipboardStore(dbQueue: dbQueue, concealedContentKey: concealedContentKey)
     }
 
-    public static func inMemory() throws -> ClipboardStore {
+    /// Test/throwaway stores don't need a persistent key — an ephemeral one is generated
+    /// by default so existing call sites that don't care about concealed-content
+    /// encryption need no changes.
+    public static func inMemory(concealedContentKey: SymmetricKey = SymmetricKey(size: .bits256))
+        throws -> ClipboardStore
+    {
         let dbQueue = try DatabaseQueue()
         try migrator.migrate(dbQueue)
-        return ClipboardStore(dbQueue: dbQueue)
+        return ClipboardStore(dbQueue: dbQueue, concealedContentKey: concealedContentKey)
     }
 
     static var migrator: DatabaseMigrator {
@@ -74,6 +86,11 @@ public final class ClipboardStore: Sendable {
             }
             try db.execute(sql: "INSERT INTO clipboard_item_fts(clipboard_item_fts) VALUES ('rebuild')")
         }
+        migrator.registerMigration("v3_concealed_encryption") { db in
+            try db.alter(table: "clipboard_item") { t in
+                t.add(column: "encrypted_data", .blob)
+            }
+        }
         return migrator
     }
 
@@ -85,6 +102,12 @@ public final class ClipboardStore: Sendable {
     /// indefinitely), and `isConcealed` is OR'd rather than replaced — once content
     /// has been recorded as sensitive, a later coincidental non-concealed copy of the
     /// same text must not un-mark it.
+    ///
+    /// ADR-021: whenever a `.text` row is (or becomes) concealed, its content is sealed
+    /// into `encrypted_data` and `text`/`rich_data` are never populated in cleartext — this
+    /// applies identically whether the row is brand new or was previously stored as
+    /// plaintext and only just became concealed, so old plaintext can never linger under a
+    /// newly-true flag.
     @discardableResult
     public func save(_ capture: ClipboardCapture, now: Date = Date()) throws -> ClipboardItem {
         let hash = capture.contentHash
@@ -101,21 +124,30 @@ public final class ClipboardStore: Sendable {
             {
                 existing.lastUsedAt = now
                 existing.sourceApp = capture.sourceApp
-                existing.richData = capture.richData
+                let isConcealed = existing.isConcealed || capture.isConcealed
+                if capture.kind == .text, isConcealed {
+                    existing.encryptedData = try cipher.seal(capture.text ?? "")
+                    existing.text = nil
+                    existing.richData = nil
+                } else {
+                    existing.richData = capture.richData
+                }
                 if capture.ocrText != nil {
                     existing.ocrText = capture.ocrText
                 }
-                existing.isConcealed = existing.isConcealed || capture.isConcealed
+                existing.isConcealed = isConcealed
                 try existing.update(db)
                 return existing
             }
+            let sealForConcealment = capture.kind == .text && capture.isConcealed
             var item = ClipboardItem(
                 id: nil,
                 contentHash: hash,
                 kind: capture.kind,
-                text: capture.text,
+                text: sealForConcealment ? nil : capture.text,
                 ocrText: capture.ocrText,
-                richData: capture.richData,
+                richData: sealForConcealment ? nil : capture.richData,
+                encryptedData: sealForConcealment ? try cipher.seal(capture.text ?? "") : nil,
                 imageData: capture.imageData,
                 thumbnail: thumbnail,
                 sourceApp: capture.sourceApp,
@@ -131,6 +163,16 @@ public final class ClipboardStore: Sendable {
     }
 
     // MARK: - Reading
+
+    /// Decrypts a concealed item's content for display/paste (ADR-021). A no-op passthrough
+    /// for anything that isn't concealed-and-encrypted, so callers (panel reveal toggle,
+    /// paste) can call this uniformly without checking `isConcealed` first.
+    public func revealText(for item: ClipboardItem) throws -> String? {
+        guard item.kind == .text, item.isConcealed, let encryptedData = item.encryptedData else {
+            return item.text
+        }
+        return try cipher.open(encryptedData)
+    }
 
     /// Unpinned entries first (by recency), pinned entries in their own section at
     /// the bottom (most-recently-pinned first). This ordering is a product

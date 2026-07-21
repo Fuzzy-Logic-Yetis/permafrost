@@ -43,7 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
-            store = try ClipboardStore.onDisk(at: Self.databaseURL())
+            let concealedContentKey = ConcealedContentKeychain.loadOrCreateKey()
+            store = try ClipboardStore.onDisk(
+                at: Self.databaseURL(), concealedContentKey: concealedContentKey)
         } catch {
             presentFatalError(error)
             return

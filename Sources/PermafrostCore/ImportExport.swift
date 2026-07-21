@@ -43,6 +43,9 @@ public enum ImportExport {
         var imageFile: String?
         var thumbnailFile: String?
         var richDataFile: String?
+        /// ADR-021: concealed items export their ciphertext here, `text`/`richDataFile`
+        /// stay nil for them — the manifest must never carry a concealed item's plaintext.
+        var encryptedDataFile: String?
     }
 
     // MARK: - Export
@@ -67,7 +70,8 @@ public enum ImportExport {
                 isConcealed: item.isConcealed,
                 imageFile: nil,
                 thumbnailFile: nil,
-                richDataFile: nil
+                richDataFile: nil,
+                encryptedDataFile: nil
             )
             if let imageData = item.imageData {
                 let name = "\(item.contentHash).png"
@@ -83,6 +87,11 @@ public enum ImportExport {
                 let name = "\(item.contentHash).rich"
                 try richData.write(to: blobs.appendingPathComponent(name))
                 entry.richDataFile = "blobs/\(name)"
+            }
+            if let encryptedData = item.encryptedData {
+                let name = "\(item.contentHash).encrypted"
+                try encryptedData.write(to: blobs.appendingPathComponent(name))
+                entry.encryptedDataFile = "blobs/\(name)"
             }
             manifestItems.append(entry)
         }
@@ -146,6 +155,49 @@ public enum ImportExport {
             let richData = try blob(entry.richDataFile)
             let imageData = try blob(entry.imageFile)
             let thumbnail = try blob(entry.thumbnailFile)
+            let encryptedData = try blob(entry.encryptedDataFile)
+
+            // ADR-021: a concealed text item was exported as ciphertext, never plaintext
+            // — it needs its own path entirely, since content-hash verification (M-2,
+            // below) has to happen against the *decrypted* text, and decryption can
+            // legitimately fail (a different Keychain key — e.g. a cross-machine import)
+            // rather than indicating a hostile/malformed archive. When that happens, skip
+            // just this one item rather than failing the whole import.
+            if entry.kind == .text, entry.isConcealed, let encryptedData {
+                guard entry.text == nil, entry.ocrText == nil, imageData == nil else {
+                    throw ImportError.kindFieldMismatch(entry.contentHash)
+                }
+                let placeholder = ClipboardItem(
+                    contentHash: entry.contentHash, kind: .text, encryptedData: encryptedData,
+                    createdAt: entry.createdAt, lastUsedAt: entry.lastUsedAt, isConcealed: true)
+                guard let plaintext = try? store.revealText(for: placeholder) else {
+                    continue
+                }
+                guard ClipboardCapture(text: plaintext).contentHash == entry.contentHash else {
+                    throw ImportError.contentHashMismatch(entry.contentHash)
+                }
+                let item = ClipboardItem(
+                    id: nil,
+                    contentHash: entry.contentHash,
+                    kind: .text,
+                    text: nil,
+                    ocrText: nil,
+                    richData: nil,
+                    encryptedData: encryptedData,
+                    imageData: nil,
+                    thumbnail: nil,
+                    sourceApp: entry.sourceApp,
+                    createdAt: entry.createdAt,
+                    lastUsedAt: entry.lastUsedAt,
+                    isPinned: entry.isPinned,
+                    pinOrder: entry.pinOrder,
+                    isConcealed: true
+                )
+                if try store.insertPreservingMetadata(item) {
+                    imported += 1
+                }
+                continue
+            }
 
             // Review M-2: don't trust the manifest's kind/hash claims — recompute
             // the hash from the actual content using the same logic that produced
