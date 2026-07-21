@@ -28,7 +28,11 @@ final class PasteService {
         pasteboard.clearContents()
         switch item.kind {
         case .text:
-            pasteboard.setString(item.text ?? "", forType: .string)
+            // ADR-021: concealed items store ciphertext, never plaintext, in `item.text` —
+            // decrypt on demand right before writing to the pasteboard. Concealed items
+            // never have `richData` (by design), so the rich-paste branch below is a no-op
+            // for them regardless.
+            pasteboard.setString(revealedText(for: item) ?? "", forType: .string)
             if let rich = item.richData {
                 pasteboard.setData(rich, forType: .rtf)
             }
@@ -53,9 +57,20 @@ final class PasteService {
     func copyPlainTextToPasteboard(_ item: ClipboardItem) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(item.text ?? "", forType: .string)
+        pasteboard.setString(revealedText(for: item) ?? "", forType: .string)
         onPasteboardWritten()
         markUsed(item)
+    }
+
+    /// ADR-021: decrypts a concealed item's text for pasting; a plain passthrough for
+    /// anything that isn't concealed, so both paste paths above can call this uniformly.
+    private func revealedText(for item: ClipboardItem) -> String? {
+        do {
+            return try store.revealText(for: item)
+        } catch {
+            Log.store.error("reveal-for-paste failed: \(error.localizedDescription)")
+            return item.text
+        }
     }
 
     /// Returns false when Accessibility is missing — the item is on the pasteboard

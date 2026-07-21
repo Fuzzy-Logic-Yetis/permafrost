@@ -306,6 +306,33 @@ outside the app (e.g. CI or a broken build that won't launch):
     using plain `String`/PNG `Data` as the drag payload, not something specifically built,
     but a nice one). Drag and release somewhere that won't accept it → nothing pastes
     anywhere, panel unaffected, no crash/hang.
+26. **Concealed-content encryption (ADR-021)**: with "Record concealed content" enabled
+    (Settings), copy a password from a password manager's copy-password button → the card
+    shows `••••••••••••` by default, both in the list and in preview (`␣`). Hover the card
+    → an eye icon appears in the hover row alongside pin/share/delete/📄 → click it → the
+    actual text appears in place, monospaced; click again (or the eye-slash icon) → re-
+    redacts. In the preview pane, a "Reveal"/"Hide" button does the same. A plain click on
+    the card, or `⏎`, still pastes the real content (decrypted transparently) without
+    requiring reveal first — reveal is a display-only toggle, independent of paste.
+    Directly inspect `~/Library/Application Support/Permafrost/store.sqlite` for that row:
+    `text`/`rich_data` must be NULL, `encrypted_data` must be non-NULL and non-empty.
+    Confirm it's genuinely unsearchable: type a fragment of the actual password into the
+    search field → no match; the item still appears in the unfiltered list. Export History,
+    then check the exported `manifest.json` directly → the password's plaintext must not
+    appear anywhere in that file (it should only be reachable via the separate
+    `.encrypted` blob file). Import that same archive back in → the item reappears and
+    still decrypts/pastes correctly. Copy an *ordinary* (non-concealed) password-shaped
+    string for contrast → confirm it behaves completely normally (visible, searchable, no
+    eye icon) — nothing about this feature should affect non-concealed content.
+
+    **Ad-hoc rebuild scenario** (found via spike, 2026-07-21, see ADR-021): after rebuilding
+    Permafrost (new ad-hoc signature) with concealed items already recorded from a prior
+    build, launch it and confirm the app still opens and works normally within a couple of
+    seconds — even if macOS shows a Keychain authorization prompt for the concealed-content
+    key in the background, launch must not hang waiting on it indefinitely (bounded ~2s
+    timeout, falls back to a session-only key). If that happens, previously-recorded
+    concealed items won't decrypt correctly *this session* — expected and specific to
+    ad-hoc dev signing, not a bug; resolves permanently once Developer ID signing lands.
 
 ## Performance spot checks
 

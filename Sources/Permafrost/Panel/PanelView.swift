@@ -27,7 +27,8 @@ struct PanelView: View {
                     item: item,
                     onCopyOCRText: { model.copySelectedOCRText() },
                     onPasteOCRText: { model.pasteSelectedOCRText() },
-                    onCopyOCRSelection: { model.scheduleReloadAfterExternalCopy() }
+                    onCopyOCRSelection: { model.scheduleReloadAfterExternalCopy() },
+                    revealConcealedText: { model.revealConcealedText(for: item) }
                 )
             }
         }
@@ -81,7 +82,8 @@ struct PanelView: View {
                             onTogglePin: { if let id = item.id { model.togglePin(id: id) } },
                             onDelete: { if let id = item.id { model.deleteItem(id: id) } },
                             onPreviewOCR: { model.showPreview(index: index) },
-                            onPasteAsPlainText: { model.commit(index: index, asPlainText: true) }
+                            onPasteAsPlainText: { model.commit(index: index, asPlainText: true) },
+                            revealConcealedText: { model.revealConcealedText(for: item) }
                         )
                         // ADR-020: drag as plain text/PNG, mirroring the existing
                         // shareableItems/share-sheet precedent rather than carrying RTF.
@@ -200,9 +202,13 @@ private struct ItemCard: View {
     let onDelete: () -> Void
     let onPreviewOCR: () -> Void
     let onPasteAsPlainText: () -> Void
+    let revealConcealedText: () -> String?
 
     @State private var isHovering = false
     @State private var isSharing = false
+    /// ADR-021: redacted by default, not persisted across panel sessions — a fresh
+    /// `ItemCard` (new panel open) always starts back at `false`.
+    @State private var revealedText: String?
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -252,6 +258,19 @@ private struct ItemCard: View {
                     }
                     .buttonStyle(.plain)
                     .help("Paste as Plain Text")
+                }
+
+                // ADR-021: redact-by-default, reveal-on-demand — a dedicated toggle so
+                // revealing is a deliberate click, never a side effect of hovering or of
+                // the card's own click-to-paste.
+                if item.kind == .text, item.isConcealed {
+                    Button {
+                        revealedText = (revealedText == nil) ? revealConcealedText() : nil
+                    } label: {
+                        Image(systemName: revealedText == nil ? "eye" : "eye.slash")
+                    }
+                    .buttonStyle(.plain)
+                    .help(revealedText == nil ? "Reveal" : "Hide")
                 }
 
                 Button(action: onTogglePin) {
@@ -311,7 +330,12 @@ private struct ItemCard: View {
         VStack(alignment: .leading, spacing: 4) {
             switch item.kind {
             case .text:
-                TextPreview(text: item.text ?? "")
+                if item.isConcealed {
+                    Text(revealedText ?? "••••••••••••")
+                        .font(revealedText == nil ? .body : .system(.body, design: .monospaced))
+                } else {
+                    TextPreview(text: item.text ?? "")
+                }
             case .image:
                 if let thumbnail = item.thumbnail, let nsImage = NSImage(data: thumbnail) {
                     Image(nsImage: nsImage)
@@ -498,8 +522,12 @@ private struct PreviewPane: View {
     let onCopyOCRText: () -> Void
     let onPasteOCRText: () -> Void
     let onCopyOCRSelection: () -> Void
+    let revealConcealedText: () -> String?
 
     @State private var copiedSelectionMessage: String?
+    /// ADR-021: redacted by default, same as the card — a fresh preview open (new
+    /// selection, or the panel reopening) always starts back at `nil`.
+    @State private var revealedText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -508,6 +536,11 @@ private struct PreviewPane: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
+                if item.kind == .text, item.isConcealed {
+                    Button(revealedText == nil ? "Reveal" : "Hide") {
+                        revealedText = (revealedText == nil) ? revealConcealedText() : nil
+                    }
+                }
                 KeyHint(key: "␣ / esc", label: "close")
             }
             .padding(12)
@@ -526,7 +559,12 @@ private struct PreviewPane: View {
     private var content: some View {
         switch item.kind {
         case .text:
-            TextPreview(text: item.text ?? "", lineLimit: nil, selectable: true)
+            if item.isConcealed {
+                TextPreview(
+                    text: revealedText ?? "••••••••••••", lineLimit: nil, selectable: revealedText != nil)
+            } else {
+                TextPreview(text: item.text ?? "", lineLimit: nil, selectable: true)
+            }
         case .image:
             VStack(alignment: .leading, spacing: 12) {
                 if let data = item.imageData, let nsImage = NSImage(data: data) {

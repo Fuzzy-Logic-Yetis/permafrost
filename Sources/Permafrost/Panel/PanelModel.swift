@@ -155,6 +155,18 @@ final class PanelModel: ObservableObject {
         }
     }
 
+    /// ADR-021: decrypts a concealed item's text for the reveal toggle. Logged, not
+    /// surfaced as an alert — a failed reveal (corrupt/foreign-key data) just shows the
+    /// redacted placeholder a beat longer, not worth interrupting the panel for.
+    func revealConcealedText(for item: ClipboardItem) -> String? {
+        do {
+            return try store.revealText(for: item)
+        } catch {
+            Log.store.error("reveal failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     func copySelectedOCRText() {
         guard let item = selectedItem, item.hasOCRText else { return }
         pasteService.copyOCRTextToPasteboard(item)
