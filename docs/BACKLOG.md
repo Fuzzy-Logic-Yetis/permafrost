@@ -108,17 +108,21 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    zero custom gesture code to coexist with click-to-paste (spike-verified). All 5 manual
    checklist items passed, including a nice emergent bonus: dragging onto the Desktop with
    nothing to receive the drop makes Finder materialize it as a real `.txt`/`.png` file.
-4. **At-rest encryption for concealed (password) items** (ADR-021) — in progress, on
-   branch `feat/concealed-encryption`. Scoped to just the opt-in concealed category
-   (ADR-011), not the whole store, which is what makes it tractable — losing full-text
-   search over the rare, already-flagged concealed subset is an acceptable trade instead of
-   the blocker ADR-008's original "encrypt everything" framing ran into. Paired with
-   redact-by-default/reveal-on-demand display. Spike done before planning: a Keychain-held
-   key does **not** fail cleanly across this project's ad-hoc rebuild cycle — it triggers a
-   blocking, modal system authorization prompt that can hang the calling thread; the key is
-   fetched once at launch, off the main actor, specifically because of this finding. See
-   ADR-021 for the full design, including a pre-existing plaintext-export leak this happens
-   to fix along the way. Plan and red tests written; implementation next.
+4. ~~At-rest encryption for concealed (password) items~~ (ADR-021) — **DONE 2026-07-21.**
+   Scoped to just the opt-in concealed category (ADR-011), not the whole store — losing
+   full-text search over the rare, already-flagged concealed subset was the trade that made
+   this tractable where ADR-008's original "encrypt everything" framing stalled. Paired
+   with redact-by-default/reveal-on-demand display; also fixed a pre-existing plaintext
+   leak in Export History along the way. Verified live end-to-end, including the ad-hoc
+   rebuild scenario the pre-implementation spike found (a Keychain authorization prompt
+   appeared exactly as predicted; launch stayed responsive, bounded 2s timeout worked).
+   **Follow-up same day**: found that `isConcealed` is entirely capture-time/source-app-
+   driven — passwords typed-and-⌘C'd or copied from apps that don't set the concealed
+   pasteboard marker showed no protection at all, confirmed against a real pinned password
+   with no 🔑 badge. Added `ClipboardStore.markConcealed(id:)` + a right-click "Mark as
+   Concealed" context-menu action to retroactively encrypt existing plaintext items
+   (one-way, text-only). Verified against that exact real item: encrypted, excluded from
+   search, redacted with the 🔑 badge in the list.
 
 ## Later
 
