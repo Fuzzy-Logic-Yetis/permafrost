@@ -362,6 +362,50 @@ checks already performed elsewhere (Settings' `@State` init, the 2-second poll) 
 sufficient to get Permafrost listed in System Settings, so the explicit prompt call was
 redundant. `PasteService.requestTrust()` had no remaining callers and was deleted.
 
+**Follow-up 2026-07-20: silent reset failures, and permanently visible Settings nav.**
+`resetAccessibilityAndInputMonitoring()` only treated `Process.run()` throwing (e.g. the
+`tccutil` binary missing) as failure; a non-zero exit from `tccutil` itself — no matching
+TCC record, or any other internal failure — was indistinguishable from a real reset, so
+Settings would just silently re-poll the same status and look like the button had done
+nothing. Fixed by capturing `tccutil`'s stderr and checking `terminationStatus`, returning
+a `(service, message)` failure list that Settings now surfaces through the existing
+"Operation failed" alert (previously only used by history-management operations) instead of
+assuming success.
+
+Separately, confirmed there is no supported way to grant, deny, or otherwise flip these two
+permissions from inside Permafrost — only reset (clear to undetermined), request (native
+prompt, but only fires from the undetermined state, see docs/TESTING.md), and navigate
+(open the pane) exist as levers; actually checking the box is necessarily a user action or
+the native OS dialog, by design (an app self-granting Accessibility/Input Monitoring would
+defeat TCC entirely). Given that, made the "Open System Settings" button on both
+Accessibility and Input Monitoring rows permanently visible instead of only showing when
+not-granted — the previous gating hid the button exactly when a user needed to re-check
+(or revoke) a stale/misbehaving grant, since the row's own status text was already stale in
+the scenario the button exists to fix.
+
+**Follow-up 2026-07-21: reset indicator flips back to "Granted" on the very next poll.**
+The reset handler's follow-up fix above (force `accessibilityTrusted`/`inputMonitoringGranted`
+to `false` on a successful reset instead of re-querying immediately) was still not enough:
+confirmed live that the dot flips back to green within one 2-second poll tick even though
+the TCC record was genuinely gone. Root cause: `AXIsProcessTrusted()`/`IOHIDCheckAccess`
+only update live for the transition this app had previously verified (undetermined →
+granted, ADR-016's original repro) — that transition goes through the same System Settings
+UI machinery that broadcasts a cache-invalidation. `tccutil reset`, run headlessly, does not
+broadcast that invalidation, so a process that has already observed `true` once keeps
+returning the stale cached `true` indefinitely, with no way to distinguish "still granted"
+from "reset out from under a process that already latched onto true." Confirmed as a
+same-process-only limitation, not a persistent one: once *any* System Settings interaction
+(e.g. the "Open System Settings" button flow) triggers a fresh broadcast, the poll observes
+the real state again, false first (matching the reset) and then true if/when re-granted.
+
+**Decision.** Added a per-permission "awaiting reconfirm" gate (`accessibilityAwaitingReconfirm`,
+`inputMonitoringAwaitingReconfirm`) armed whenever a reset succeeds for that service. While
+armed, the poll's live "true" reads are ignored (kept at the forced `false`); the first live
+`false` observed disarms the gate and resumes normal live tracking, including a genuine
+subsequent re-grant. No fixed timer or deadline — this self-corrects on the first System
+Settings interaction, which the existing "Open System Settings" button already directs the
+user toward next, so no dead-end state is introduced.
+
 ## ADR-017: Independent review fixes (2026-07-07 review, M-1 through M-4, L-1 through L-3)
 
 **Context.** `docs/2026-07-07_codex_review.md`, a read-only independent review following

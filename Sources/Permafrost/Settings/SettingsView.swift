@@ -19,6 +19,14 @@ struct SettingsView: View {
     @State private var showConcealedWarning = false
     @State private var accessibilityTrusted = PasteService.isTrusted
     @State private var inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
+    // `tccutil reset` doesn't go through the System Settings UI path that invalidates
+    // AXIsProcessTrusted()/IOHIDCheckAccess's cached answer (found 2026-07-21): once either
+    // has returned true in this process, a poll immediately after a reset can still read back
+    // the stale "granted" value. While awaiting, live "true" reads are ignored until a live
+    // "false" is observed — proving the cache has actually resynced to the real TCC state —
+    // at which point normal live tracking (including a genuine re-grant) resumes.
+    @State private var accessibilityAwaitingReconfirm = false
+    @State private var inputMonitoringAwaitingReconfirm = false
     @State private var showUnpinAllConfirm = false
     @State private var showClearUnpinnedConfirm = false
     @State private var showClearEverythingConfirm = false
@@ -228,42 +236,48 @@ struct SettingsView: View {
 
             Section {
                 LabeledContent("Accessibility (paste-on-select)") {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(accessibilityTrusted ? Color.green : Color.orange)
-                            .frame(width: 8, height: 8)
-                        Text(accessibilityTrusted ? "Granted" : "Not granted")
-                            .foregroundStyle(.secondary)
-                        if !accessibilityTrusted {
-                            // Navigate only — don't also call requestTrust() here, or the
-                            // native system prompt and this navigation both fire at once
-                            // (confusing double-popup, found 2026-07-07). The passive
-                            // isTrusted check elsewhere already gets Permafrost listed.
-                            Button("Open System Settings") {
-                                NSWorkspace.shared.open(
-                                    URL(
-                                        string:
-                                            "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                                    )!)
-                            }
+                    // Status above the button, both trailing-aligned (found 2026-07-21): a
+                    // single wide HStack left a large horizontal gap under LabeledContent's
+                    // flexible spacing. Stacking narrows the trailing content and reads as one
+                    // grouped status+action instead of two things sharing a line.
+                    VStack(alignment: .trailing, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(accessibilityTrusted ? Color.green : Color.orange)
+                                .frame(width: 8, height: 8)
+                            Text(accessibilityTrusted ? "Granted" : "Not granted")
+                                .foregroundStyle(.secondary)
+                        }
+                        // Always visible, not just when not-granted (found 2026-07-20): revoking
+                        // or re-checking a stale grant needs the same pane, and gating the
+                        // button on the very state it's meant to help fix made it disappear
+                        // right when it was needed most. Navigate only — don't also call
+                        // requestTrust() here, or the native system prompt and this navigation
+                        // both fire at once (confusing double-popup, found 2026-07-07).
+                        Button("Open System Settings") {
+                            NSWorkspace.shared.open(
+                                URL(
+                                    string:
+                                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+                                )!)
                         }
                     }
                 }
                 LabeledContent("Input Monitoring (global hotkey)") {
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(inputMonitoringGranted ? Color.green : Color.orange)
-                            .frame(width: 8, height: 8)
-                        Text(inputMonitoringGranted ? "Granted" : "Not granted")
-                            .foregroundStyle(.secondary)
-                        if !inputMonitoringGranted {
-                            Button("Open System Settings") {
-                                NSWorkspace.shared.open(
-                                    URL(
-                                        string:
-                                            "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
-                                    )!)
-                            }
+                    VStack(alignment: .trailing, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(inputMonitoringGranted ? Color.green : Color.orange)
+                                .frame(width: 8, height: 8)
+                            Text(inputMonitoringGranted ? "Granted" : "Not granted")
+                                .foregroundStyle(.secondary)
+                        }
+                        Button("Open System Settings") {
+                            NSWorkspace.shared.open(
+                                URL(
+                                    string:
+                                        "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+                                )!)
                         }
                     }
                 }
@@ -300,8 +314,8 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 480)
         .onReceive(trustPoll) { _ in
-            accessibilityTrusted = PasteService.isTrusted
-            inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
+            updateAccessibilityStatus(PasteService.isTrusted)
+            updateInputMonitoringStatus(HotkeyManager.isInputMonitoringGranted)
         }
         .onReceive(hotkeyRegistrationFailed) { notification in
             let failedDisplay = notification.userInfo?["failedShortcut"] as? String ?? "that shortcut"
@@ -356,9 +370,28 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Reset") {
                 Task {
-                    await PermissionReset.resetAccessibilityAndInputMonitoring()
-                    accessibilityTrusted = PasteService.isTrusted
-                    inputMonitoringGranted = HotkeyManager.isInputMonitoringGranted
+                    let failures = await PermissionReset.resetAccessibilityAndInputMonitoring()
+                    let failedServices = Set(failures.map(\.service))
+                    // Force the indicators rather than re-querying live (found 2026-07-21):
+                    // tccutil's DB write doesn't go through the System Settings UI path that
+                    // the live poll relies on, so AXIsProcessTrusted()/IOHIDCheckAccess can
+                    // still hand back the old "granted" answer immediately after a successful
+                    // reset — we already know the true state without asking. Also arm the
+                    // reconfirm gate so the next poll ticks can't immediately clobber this
+                    // back to the stale "granted" reading.
+                    if !failedServices.contains("Accessibility") {
+                        accessibilityTrusted = false
+                        accessibilityAwaitingReconfirm = true
+                    }
+                    if !failedServices.contains("Input Monitoring") {
+                        inputMonitoringGranted = false
+                        inputMonitoringAwaitingReconfirm = true
+                    }
+                    if !failures.isEmpty {
+                        operationErrorMessage = failures
+                            .map { "\($0.service): \($0.message)" }
+                            .joined(separator: "\n")
+                    }
                 }
             }
         } message: {
@@ -373,6 +406,22 @@ struct SettingsView: View {
     private func refreshCounts() {
         totalCount = (try? store.count()) ?? 0
         pinnedCount = (try? store.pinnedCount()) ?? 0
+    }
+
+    private func updateAccessibilityStatus(_ live: Bool) {
+        if accessibilityAwaitingReconfirm {
+            guard !live else { return }
+            accessibilityAwaitingReconfirm = false
+        }
+        accessibilityTrusted = live
+    }
+
+    private func updateInputMonitoringStatus(_ live: Bool) {
+        if inputMonitoringAwaitingReconfirm {
+            guard !live else { return }
+            inputMonitoringAwaitingReconfirm = false
+        }
+        inputMonitoringGranted = live
     }
 
     /// Shared error path for destructive history actions (review M-3) — matches

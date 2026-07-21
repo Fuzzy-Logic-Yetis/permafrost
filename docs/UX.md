@@ -116,6 +116,13 @@ Note: a status-item menu's key equivalents (e.g. the `,` shown next to Settings)
 while that menu is open — they are not global shortcuts, so they don't compete with the app
 hotkey or risk firing by accident.
 
+Note: macOS auto-decorates menu items whose title/selector match standard system commands
+(e.g. "Settings…" + `⌘,`, "Quit …" + `terminate:`) with a system glyph even when no `.image`
+was ever set — found 2026-07-21 when only those two rows got an icon and the rest of the
+menu read as misaligned as a result. Every item in this menu is given an explicit blank
+placeholder image (`App.swift`'s `setupStatusItem()`) so the icon gutter is either present
+and empty everywhere or absent everywhere, rather than fighting that decoration item by item.
+
 ## Capture controls
 
 The status-bar menu includes **Pause Capture**. When checked, Permafrost continues running

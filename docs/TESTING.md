@@ -92,6 +92,15 @@ machine running inside VS Code, learned the hard way on 2026-07-06/07:
   `screencapture`, or `cliclick` will work at all — separate from whatever Permafrost's own
   Accessibility grant is. Granting these requires restarting the host app (VS Code) for the
   new permission to take effect.
+- Always relaunch `dist/Permafrost.app` with `open dist/Permafrost.app`, never by exec'ing
+  the raw binary (`./dist/Permafrost.app/Contents/MacOS/Permafrost`) from a shell (found
+  2026-07-21). TCC's "responsible process" attribution can credit a directly-exec'd child
+  with its launching process's own grants instead of the child's — if the host terminal/IDE
+  already has Accessibility (as VS Code/Claude typically do on this dev machine), a
+  raw-exec'd Permafrost read `AXIsProcessTrusted() == true` with **zero** TCC record under
+  Permafrost's own identity, and no corresponding row in System Settings at all. `open`
+  launches through LaunchServices like a real user double-click, giving Permafrost its own
+  independent identity and an honest read.
 - `screencapture -R x,y,w,h` takes **points**, not the pixel dimensions `sips -g
   pixelWidth` reports — on a scaled-resolution Retina display these differ (e.g. a
   2940×1912-pixel capture on a display whose actual logical width is ~1470pt). Requesting
@@ -119,6 +128,14 @@ machine running inside VS Code, learned the hard way on 2026-07-06/07:
   Permafrost's own Settings window, even though the two often happen close together during
   a test cycle and can look related. A real end user would only see this once, on their
   genuine first launch.
+- Checking Permafrost's box directly in System Settings → Input Monitoring while it's
+  already running pops up **macOS's own** "Quit Now / Later" dialog (found 2026-07-21,
+  confusable with a Permafrost bug) — Input Monitoring only takes effect after the process
+  restarts, so the OS forces that choice itself; Permafrost's code has no part in it. "Quit
+  Now" quits the app, and since this is an ad-hoc-signed dev build launched manually (not a
+  registered Login Item), macOS does **not** reliably auto-relaunch it afterward — you need
+  to relaunch by hand (`open dist/Permafrost.app`). A real notarized/signed release may
+  behave better here, but don't assume it during ad-hoc dev testing.
 - Modern macOS collapses many third-party menu-bar icons into Control Center's own
   aggregated list, where they show up as unlabeled `"status menu"` entries via
   accessibility queries and don't expose their `NSMenu` the classic
@@ -192,7 +209,19 @@ outside the app (e.g. CI or a broken build that won't launch):
 17. **Reset Permissions (ADR-016)**: with Accessibility granted, rebuild (new signature) →
     Settings shows Not granted despite the System Settings checkbox still appearing
     checked → Settings → Permissions → Reset Permissions… → re-grant via the row's "Open
-    System Settings" button → status flips to Granted within ~2s with no relaunch needed.
+    System Settings" button (now always visible, granted or not) → status flips to Granted
+    within ~2s with no relaunch needed. Also confirm both rows' "Open System Settings"
+    buttons show up while already Granted, and that a reset failure (hard to force manually,
+    but confirm in code review: non-zero `tccutil` exit) surfaces via the "Operation failed"
+    alert instead of failing silently.
+17a. **Reset Permissions on an already-granted, same-session process**: with Accessibility
+    (or Input Monitoring) already Granted in the *current* running session (no rebuild),
+    click Reset Permissions… → the dot flips to orange immediately and **stays orange** —
+    it must not flip back to green on its own within the next few 2-second poll ticks, even
+    though the live `AXIsProcessTrusted()`/`IOHIDCheckAccess` read is known to still report
+    stale "granted" in this scenario (found 2026-07-21). Then re-grant via "Open System
+    Settings" → confirm it correctly flips back to Granted once you check the box (proving
+    the reconfirm gate disarms itself rather than getting stuck).
 18. **Settings window fits on screen**: open Settings → entire window (through History
     Management) is visible and none of it is hidden behind the Dock or off-screen; window
     is draggable via its title bar and resizable via its edges (found 2026-07-07: it had

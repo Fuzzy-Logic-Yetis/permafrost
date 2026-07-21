@@ -5,12 +5,11 @@ before promotion to docs/BACKLOG.md. Permafrost is a clipboard manager; the mome
 becomes a suite, it has failed (see docs/RESEARCH.md).
 
 Note: image/screen-snip history is **not** on this list — it shipped in the MVP by owner
-requirement.
+requirement. OCR on snips (Vision framework, on-device) is also no longer on this list —
+it shipped 2026-07-08, see docs/BACKLOG.md item 13.
 
 ## Likely someday
 
-- **OCR on snips** (Vision framework, on-device) — search inside screenshots. High value,
-  fully local, native API. Strongest candidate here.
 - **Optional at-rest encryption** — CryptoKit AES-GCM per-blob, key in Keychain
   (`kSecAttrAccessibleWhenUnlocked`). Design constraint from ADR-008: FTS5 can't search
   ciphertext, so encrypted items are searchable by metadata only, or the FTS index moves

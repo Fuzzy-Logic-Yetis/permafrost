@@ -232,11 +232,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         restartItem.target = self
         menu.addItem(restartItem)
 
-        menu.addItem(
-            NSMenuItem(
-                title: "Quit Permafrost",
-                action: #selector(NSApplication.terminate(_:)),
-                keyEquivalent: "q"))
+        let quitItem = NSMenuItem(
+            title: "Quit Permafrost",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q")
+        menu.addItem(quitItem)
+
+        // macOS auto-decorates items whose title/selector match standard system commands
+        // (found 2026-07-21: "Settings…"+⌘, and "Quit …"+terminate: silently got a gear/power
+        // glyph neither of us set) while every other item stays icon-less, so the reserved
+        // icon gutter only shows up under some rows and the menu reads as misaligned. Claiming
+        // every item's image slot with an explicit blank placeholder overrides that decoration
+        // menu-wide instead of fighting it item by item.
+        let blankIcon = NSImage(size: NSSize(width: 16, height: 16))
+        for item in menu.items where !item.isSeparatorItem {
+            item.image = blankIcon
+        }
+
         statusItem.menu = menu
     }
 

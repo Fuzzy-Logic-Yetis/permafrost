@@ -23,7 +23,7 @@ flag), import path-traversal validation, and error surfacing on destructive acti
 - Performance pass with Instruments at 10k+ items — deferred until Instruments is available
   (no Xcode installed yet, see docs/PROJECT_PLAN.md environment notes).
 
-## v0.3.1 — Hardening (now)
+## v0.3.1 — Hardening (done 2026-07-07)
 
 Driven by the 2026-07-07 review (`docs/2026-07-07_codex_review.md`): custom hotkey
 registration failure now rolls back to a working preset and surfaces the failure in
@@ -46,6 +46,9 @@ Gate: project owner joins the Apple Developer Program ($99/yr) — deliberately 
 
 ## Beyond (unscheduled, see FUTURE_IDEAS.md)
 
-OCR on snips, optional at-rest encryption, snippet templates, collections, automation
-hooks. Each idea must survive the CLAUDE.md decision framework — Permafrost stays a
-clipboard manager, not a suite.
+Optional at-rest encryption, snippet templates, collections, automation hooks. Each idea
+must survive the CLAUDE.md decision framework — Permafrost stays a clipboard manager, not
+a suite.
+
+(OCR on snips shipped 2026-07-08 — see docs/BACKLOG.md item 13 — and is no longer on this
+list.)
