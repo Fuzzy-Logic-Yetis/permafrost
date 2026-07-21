@@ -111,8 +111,14 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 
 ## Later
 
-- **Optional at-rest encryption** — CryptoKit AES-GCM blobs, key in Keychain (ADR-008 has
-  the constraint analysis; FUTURE_IDEAS.md has the design sketch).
+- **At-rest encryption for concealed (password) items** — refined 2026-07-21: scoped to
+  just the opt-in concealed category rather than the whole store, which is what makes it
+  tractable (ADR-008's original "encrypt everything" framing stalled on FTS5 not being
+  able to search ciphertext at all; losing search over only the rare, already-flagged
+  concealed subset is an acceptable trade instead of a blocker). Paired with
+  redact-by-default/reveal-on-demand display for those items — see FUTURE_IDEAS.md for the
+  full design sketch and motivating use case. Still needs its own ADR (new column for
+  ciphertext is a real schema change) before planning in ADR-018/019/020 style.
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).
 - **Homebrew cask** — requires notarized artifact (v1.0).
 - **Localization scaffolding** — English-only for MVP.
