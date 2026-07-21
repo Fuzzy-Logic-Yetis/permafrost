@@ -53,19 +53,29 @@ you just copied, and must never steal the `⌘1` slot from it either.
   searchable, pinnable (owner's explicit decision; see SECURITY.md).
 - Selected card: accent-tinted border/background, follows system accent color.
 - **Hover actions** (mouse-first, ADR-012): hovering a card swaps its trailing badges for
-  three buttons — pin/unpin, share (opens the system share sheet via
-  `NSSharingServicePicker`, the same one macOS's own screenshot panel uses), and delete.
-  Lets a mouse user manage an item without touching the keyboard; the keyboard shortcuts
-  remain the fast path for everyone else.
+  buttons — pin/unpin, share (opens the system share sheet via `NSSharingServicePicker`, the
+  same one macOS's own screenshot panel uses), and delete, plus a **Paste as Plain Text**
+  icon (📄, ADR-018) on `.text` cards only. Clicking any of these does not trigger the
+  card's own click-to-paste gesture — proven by pin/share/delete first, extended to the
+  plain-text button the same way. Lets a mouse user manage an item without touching the
+  keyboard; the keyboard shortcuts remain the fast path for everyone else.
+- **Paste as plain text** (`⇧⏎`, ADR-018): pastes the selected item stripped of rich
+  data (no `.rtf`) instead of the normal `⏎` rich paste. Text-only — pressing `⇧⏎` on an
+  `.image` card falls back to a normal paste rather than doing nothing, since images have
+  no plain-text representation of their own (OCR text, when present, is the separate,
+  pre-existing preview-pane action). The hover icon above is the mouse-reachable
+  equivalent, since a card click already commits-and-closes with no intermediate
+  "selected but not yet pasted" state to hang a second click off of.
 - **Preview pane** (`␣`): a Quick Look-style overlay for the selected item — full text
   (unwrapped, scrollable, selectable/copyable, same monospace + whitespace-marker treatment
   as the card) or the full-resolution image, not the card's thumbnail. It reuses the panel's
   existing 440×500 footprint instead of growing the window, so the default panel stays
   compact and this stays opt-in. It follows the selection as you move `↑`/`↓` while open, and
   closes on a second `␣` or `Esc` (which closes the preview first, before its usual
-  clear-search/close-panel behavior). Deliberately keyboard-first only for now — the
-  hover-action row is already at its natural width (pin/share/delete); a fourth icon there
-  was deferred rather than crowding it (see BACKLOG item 6).
+  clear-search/close-panel behavior). Deliberately keyboard-first only — a preview toggle
+  is a passive view option, not an alternate commit action, so the crowding objection that
+  originally deferred a fourth hover icon (BACKLOG item 6) still applies to *this* one even
+  though it no longer applies to Paste as Plain Text (ADR-018).
 
   Space only opens/closes the preview while the search field is empty, matching the
   existing `⌫`-delete gating — otherwise a search query containing a literal space
@@ -93,6 +103,7 @@ you just copied, and must never steal the `⌘1` slot from it either.
 | type | Filter (search field always live) |
 | `↑` / `↓` | Move selection (moves through Recent, then Pinned); updates an open preview |
 | `⏎` | Paste selected into previous app, close |
+| `⇧⏎` | Paste selected **as plain text** (strips rich data); falls back to a normal paste on `.image` items (ADR-018) |
 | `⌘1`–`⌘9` | Paste Nth **recent** item instantly — never addresses a pinned item, so pinning something never hijacks a quick-paste slot |
 | `⌥P` | Pin/unpin selected |
 | `␣` (field empty) | Toggle full preview of selected item |

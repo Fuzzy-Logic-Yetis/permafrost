@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 protocol PanelPasteServing {
     func paste(_ item: ClipboardItem) -> Bool
+    func pasteAsPlainText(_ item: ClipboardItem) -> Bool
     func copyOCRTextToPasteboard(_ item: ClipboardItem)
     func pasteOCRText(_ item: ClipboardItem) -> Bool
 }
@@ -129,11 +130,27 @@ final class PanelModel: ObservableObject {
         commit(index: selectedIndex)
     }
 
-    func commit(index: Int) {
+    /// ADR-018: `.image` items have no plain-text representation of their own (OCR text,
+    /// if any, is a separate, already-existing action) — never gated in the caller, so a
+    /// stray `⇧⏎` or hover click on an image card falls back to a normal paste instead of
+    /// doing nothing.
+    var canPasteSelectedAsPlainText: Bool {
+        selectedItem?.kind == .text
+    }
+
+    func commitSelectionAsPlainText() {
+        commit(index: selectedIndex, asPlainText: true)
+    }
+
+    func commit(index: Int, asPlainText: Bool = false) {
         guard items.indices.contains(index) else { return }
         let item = items[index]
         onCommit()  // close the panel first so focus is back in the target app
-        if !pasteService.paste(item) {
+        let pasted =
+            asPlainText && item.kind == .text
+            ? pasteService.pasteAsPlainText(item)
+            : pasteService.paste(item)
+        if !pasted {
             onAccessibilityNeeded()
         }
     }

@@ -242,7 +242,17 @@ outside the app (e.g. CI or a broken build that won't launch):
     `Esc` or Cancel → the old shortcut remains. Use Selected Preset → the chosen preset
     works again. Reset to Default → `⌥⌘V` works again. Quit/relaunch → the last custom
     shortcut persists if one was active.
-22. **Preview pane**: `⌥⌘V`, select a long multi-line text item, press `␣` → full text
+22. **Paste as plain text (ADR-018)**: copy some rich text (e.g. bold text from a web page
+    or Notes.app, so `.rtf` is on the pasteboard alongside plain string data) → open the
+    panel → hover the card → confirm a 📄 "Paste as Plain Text" icon appears alongside
+    pin/share/delete, and hovering/clicking it does **not** trigger the card's own
+    click-to-paste (no premature commit). Click it → pastes into the target app with
+    formatting stripped (plain text only), panel closes. Repeat via keyboard: select the
+    same kind of item, press `⇧⏎` → identical stripped-formatting result, vs. plain `⏎`
+    which still pastes the rich version. Confirm the 📄 icon does **not** appear when
+    hovering an `.image` card, and that `⇧⏎` on a selected image card falls back to a
+    normal (rich) paste rather than doing nothing.
+23. **Preview pane**: `⌥⌘V`, select a long multi-line text item, press `␣` → full text
     appears in an overlay (unwrapped, scrollable if long), replacing the list within the same
     panel size; select some of the text with the mouse to confirm it's copyable. Press `↑`/
     `↓` → preview updates to the newly selected item without closing. Press `␣` again → closes,
@@ -252,7 +262,7 @@ outside the app (e.g. CI or a broken build that won't launch):
     scaled to fit. Type a character while the field is empty and preview is closed → confirm
     it goes into the search field rather than toggling preview (only an *empty* field treats
     `␣` as the preview key).
-23. **Custom hotkey conflict/rollback (review M-1)**: pick a chord already claimed
+24. **Custom hotkey conflict/rollback (review M-1)**: pick a chord already claimed
     system-wide (a reliable one: `⌘Space`'s modifier alone won't register since it needs a
     letter/number/etc. — instead bind Permafrost's custom hotkey to the same chord already
     used by e.g. a running app's global shortcut, such as a screenshot tool's capture key,

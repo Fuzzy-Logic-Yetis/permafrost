@@ -41,11 +41,25 @@ final class PasteService {
         markUsed(item)
     }
 
+    /// Unlike `copyToPasteboard(_:)`, never writes `.rtf` — ADR-018's "paste as plain text".
+    func copyPlainTextToPasteboard(_ item: ClipboardItem) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(item.text ?? "", forType: .string)
+        markUsed(item)
+    }
+
     /// Returns false when Accessibility is missing — the item is on the pasteboard
     /// (copy-only fallback) but no keystroke was sent.
     @discardableResult
     func paste(_ item: ClipboardItem) -> Bool {
         copyToPasteboard(item)
+        return sendPasteKeystrokeIfTrusted()
+    }
+
+    @discardableResult
+    func pasteAsPlainText(_ item: ClipboardItem) -> Bool {
+        copyPlainTextToPasteboard(item)
         return sendPasteKeystrokeIfTrusted()
     }
 

@@ -80,7 +80,8 @@ struct PanelView: View {
                             quickPasteIndex: index < recentCount && index < 9 ? index + 1 : nil,
                             onTogglePin: { if let id = item.id { model.togglePin(id: id) } },
                             onDelete: { if let id = item.id { model.deleteItem(id: id) } },
-                            onPreviewOCR: { model.showPreview(index: index) }
+                            onPreviewOCR: { model.showPreview(index: index) },
+                            onPasteAsPlainText: { model.commit(index: index, asPlainText: true) }
                         )
                         .id(item.id)
                         .onTapGesture {
@@ -182,6 +183,7 @@ private struct ItemCard: View {
     let onTogglePin: () -> Void
     let onDelete: () -> Void
     let onPreviewOCR: () -> Void
+    let onPasteAsPlainText: () -> Void
 
     @State private var isHovering = false
     @State private var isSharing = false
@@ -224,6 +226,16 @@ private struct ItemCard: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.blue)
                     .help("Open recognized text")
+                }
+
+                // ADR-018: text-only — `.image` items have no plain-text representation
+                // of their own (OCR text is the separate, already-existing action above).
+                if item.kind == .text {
+                    Button(action: onPasteAsPlainText) {
+                        Image(systemName: "doc.plaintext")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Paste as Plain Text")
                 }
 
                 Button(action: onTogglePin) {

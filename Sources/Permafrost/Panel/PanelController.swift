@@ -155,6 +155,15 @@ final class PanelController: NSObject, NSWindowDelegate {
             }
         }
 
+        // ADR-018: plain-text paste. Checked ahead of the plain-⏎ case in the switch below
+        // so it isn't shadowed by it; the OCR-preview shift-⏎ case above still wins when
+        // both apply (it never does in practice — OCR text only exists on `.image` items,
+        // ADR-018's plain-text paste only acts on `.text` items).
+        if input.modifiers == .shift, input.keyCode == kVKReturn || input.keyCode == kVKKeypadEnter {
+            model.commitSelectionAsPlainText()
+            return true
+        }
+
         switch input.keyCode {
         case kVKUpArrow:
             model.moveSelection(by: -1)
