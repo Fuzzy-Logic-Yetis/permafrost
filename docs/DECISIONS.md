@@ -910,3 +910,51 @@ this code: dragging a concealed card (ADR-020) was dragging an empty string, sin
 consistent with paste already doing the same. Covered by
 `markConcealedEncryptsAnExistingPlaintextItem`, `markConcealedIsANoOpForImageItems`,
 `markConcealedIsANoOpForAlreadyConcealedItems`.
+
+**Critical follow-up 2026-07-21: the bounded-timeout key fetch destroyed a real item —
+removed the fallback key entirely, not just documented the risk.** The "mitigate, don't
+avoid" design above (background fetch, 2s timeout, fall back to a session-only
+`SymmetricKey` if hit) was exercised for real, not just in the lab: marking the project
+owner's actual pinned password concealed happened to run during a session where the
+2-second bound was hit (confirmed live — a `SecurityAgent` prompt for
+`concealedContentKey` was genuinely pending), so it was sealed with a fresh, **never
+persisted** key. A later rebuild (the project owner independently ran the same
+quit/rebuild/relaunch cycle used throughout this session) put a *different* key in play —
+either the real persistent one or another one-off fallback — and the original session's
+key, along with anything it sealed, was gone. Confirmed directly: the reveal toggle
+returned nothing for that item, exactly as AES-GCM decryption with the wrong key should
+behave (silent failure, not garbage output). **The plaintext is unrecoverable.**
+
+This was a real design flaw, not an acceptable residual risk: a fallback key that is
+*never persisted* means anything encrypted with it cannot survive that one process's
+lifetime, full stop — there is no "eventually consistent" story once the process exits.
+Documenting this as a known limitation, as the original entry above did, was insufficient;
+the design had to change so this class of failure cannot recur.
+
+**Decision: no more fallback key, ever, for real encryption.** `ClipboardStore` no longer
+requires a concealed-content key at construction (`onDisk(at:)` dropped the parameter).
+The key is set later, whenever it becomes available, via
+`ClipboardStore.setConcealedContentKey(_:)` — called from
+`ConcealedContentKeychain.loadOrCreateKey(completion:)`, which now has **no timeout and no
+fallback**: it runs entirely on a background queue and calls back whenever the fetch
+resolves, however long that takes. Until then, `_cipher` is `nil` (`NSLock`-protected,
+`nonisolated(unsafe)`, since it's now set from a background queue after construction) and
+every concealed-content operation — `save` of a concealed capture, `markConcealed`,
+`revealText` — checks for its absence explicitly: `save`/`markConcealed` throw
+`ConcealedContentError.keyNotYetAvailable` (propagating to `CaptureSaveQueue`'s existing
+log-and-drop handling for `save`, so an ill-timed concealed capture is dropped rather than
+ever stored insecurely or under a doomed key); `revealText` returns `nil`, matching its
+existing "can't show this right now" contract. This trades a narrow window right after
+launch where concealed-content actions are simply unavailable (self-resolving, typically
+within milliseconds — the ad-hoc-signature mismatch is the only realistic case where it
+takes longer) for the guarantee that **nothing is ever sealed with anything but the one
+real, persistent key.** No automatic retry/re-encryption UI was built for the
+briefly-unavailable window — deliberately out of scope; the failure mode is now "try
+again in a moment," not data loss, and that's enough for a first pass.
+
+New tests lock in the fix directly: `savingConcealedCaptureThrowsWhenKeyNotYetAvailable`,
+`markConcealedThrowsWhenKeyNotYetAvailable` (and confirms the item is left completely
+untouched, not half-converted), `revealTextReturnsNilRatherThanThrowingWhenKeyNotYetAvailable`,
+`settingKeyLaterEnablesConcealedOperations`. `ClipboardStore.inMemoryWithoutConcealedContentKey()`
+(test-only) constructs a store with no cipher at all, matching the real app's state
+between launch and its background fetch resolving.

@@ -113,16 +113,22 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    full-text search over the rare, already-flagged concealed subset was the trade that made
    this tractable where ADR-008's original "encrypt everything" framing stalled. Paired
    with redact-by-default/reveal-on-demand display; also fixed a pre-existing plaintext
-   leak in Export History along the way. Verified live end-to-end, including the ad-hoc
-   rebuild scenario the pre-implementation spike found (a Keychain authorization prompt
-   appeared exactly as predicted; launch stayed responsive, bounded 2s timeout worked).
+   leak in Export History along the way.
    **Follow-up same day**: found that `isConcealed` is entirely capture-time/source-app-
    driven — passwords typed-and-⌘C'd or copied from apps that don't set the concealed
    pasteboard marker showed no protection at all, confirmed against a real pinned password
    with no 🔑 badge. Added `ClipboardStore.markConcealed(id:)` + a right-click "Mark as
    Concealed" context-menu action to retroactively encrypt existing plaintext items
-   (one-way, text-only). Verified against that exact real item: encrypted, excluded from
-   search, redacted with the 🔑 badge in the list.
+   (one-way, text-only).
+   **Critical follow-up, also same day**: the bounded-timeout/fallback-key mitigation the
+   pre-implementation spike designed was exercised for real, not just in the lab — marking
+   that exact real pinned password concealed happened to run during a session where the
+   key fetch hit its 2-second bound, sealing it with a key that was never persisted. A
+   later rebuild put a different key in play, and that item's plaintext is now
+   unrecoverable. The design was wrong, not just risky as documented: removed the fallback
+   key entirely (see ADR-021's critical follow-up) — the key is now set whenever it
+   becomes available, no timeout, no placeholder, ever. Concealed-content actions are
+   simply unavailable (fails safe, not silently insecure) until then.
 
 ## Later
 

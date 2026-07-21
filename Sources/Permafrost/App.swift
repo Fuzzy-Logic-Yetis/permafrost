@@ -43,12 +43,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
-            let concealedContentKey = ConcealedContentKeychain.loadOrCreateKey()
-            store = try ClipboardStore.onDisk(
-                at: Self.databaseURL(), concealedContentKey: concealedContentKey)
+            store = try ClipboardStore.onDisk(at: Self.databaseURL())
         } catch {
             presentFatalError(error)
             return
+        }
+        // ADR-021 follow-up: never blocks launch, never falls back to a throwaway key —
+        // concealed-content encryption stays unavailable (not silently insecure) until
+        // this resolves, however long that takes.
+        ConcealedContentKeychain.loadOrCreateKey { [weak store] key in
+            store?.setConcealedContentKey(key)
         }
         purge()
 

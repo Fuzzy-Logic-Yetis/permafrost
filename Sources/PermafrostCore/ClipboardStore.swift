@@ -5,21 +5,51 @@ import GRDB
 /// The single gateway to persistence. No SQL exists outside this module (CLAUDE.md).
 public final class ClipboardStore: Sendable {
     private let dbQueue: DatabaseQueue
-    private let cipher: ConcealedContentCipher
+    /// Concealed-content encryption key, set once it's available (ADR-021 follow-up,
+    /// 2026-07-21). Deliberately **not** required at construction and never defaulted to
+    /// an ephemeral placeholder for `onDisk` — an earlier design did that, and a session
+    /// that fell back to a throwaway key (because the real Keychain-backed key hit this
+    /// project's ad-hoc-signature-mismatch prompt) silently encrypted real content with a
+    /// key that could never survive that process exiting, destroying it permanently.
+    /// `NSLock`-protected since it's now mutated after construction, from a background
+    /// queue (`Permafrost`'s launch code), while `dbQueue.write`/`.read` may run
+    /// concurrently on other threads.
+    private let cipherLock = NSLock()
+    // Manually synchronized via `cipherLock` (get/set both go through it below) — the
+    // compiler can't verify that itself, hence `nonisolated(unsafe)`.
+    nonisolated(unsafe) private var _cipher: ConcealedContentCipher?
+    private var cipher: ConcealedContentCipher? {
+        cipherLock.withLock { _cipher }
+    }
 
-    public init(dbQueue: DatabaseQueue, concealedContentKey: SymmetricKey) {
+    public enum ConcealedContentError: Error {
+        /// The concealed-content key hasn't been set yet — thrown rather than silently
+        /// using a placeholder, so concealed content is never encrypted (or decrypted)
+        /// with anything but the one real, persistent key.
+        case keyNotYetAvailable
+    }
+
+    public init(dbQueue: DatabaseQueue, concealedContentKey: SymmetricKey? = nil) {
         self.dbQueue = dbQueue
-        self.cipher = ConcealedContentCipher(key: concealedContentKey)
+        if let concealedContentKey {
+            self._cipher = ConcealedContentCipher(key: concealedContentKey)
+        }
+    }
+
+    /// Called once the persistent key becomes available — however long that takes.
+    /// Thread-safe: intended to be called from a background queue once a Keychain fetch
+    /// resolves, with no bound on how long that may take (ADR-021 follow-up).
+    public func setConcealedContentKey(_ key: SymmetricKey) {
+        cipherLock.withLock { _cipher = ConcealedContentCipher(key: key) }
     }
 
     // MARK: - Opening
 
-    /// Opens (creating if needed) the on-disk store with owner-only permissions.
-    /// `concealedContentKey` is required (not defaulted) deliberately (ADR-021) — the real
-    /// app must be explicit about passing its persistent, Keychain-backed key here, so a
-    /// missing key can't silently fall back to something ephemeral and lose future
-    /// decryptability of already-recorded concealed items.
-    public static func onDisk(at url: URL, concealedContentKey: SymmetricKey) throws -> ClipboardStore {
+    /// Opens (creating if needed) the on-disk store with owner-only permissions. Does
+    /// **not** take a concealed-content key — the real app sets one later via
+    /// `setConcealedContentKey` once its background Keychain fetch resolves, so opening
+    /// the store is never gated on that (ADR-021 follow-up).
+    public static func onDisk(at url: URL) throws -> ClipboardStore {
         let fm = FileManager.default
         let dir = url.deletingLastPathComponent()
         try fm.createDirectory(
@@ -32,18 +62,26 @@ public final class ClipboardStore: Sendable {
         for suffix in ["", "-wal", "-shm", "-journal"] {
             try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path + suffix)
         }
-        return ClipboardStore(dbQueue: dbQueue, concealedContentKey: concealedContentKey)
+        return ClipboardStore(dbQueue: dbQueue)
     }
 
-    /// Test/throwaway stores don't need a persistent key — an ephemeral one is generated
-    /// by default so existing call sites that don't care about concealed-content
-    /// encryption need no changes.
+    /// Test/throwaway stores get a key immediately by default, so existing call sites
+    /// that don't care about concealed-content encryption need no changes.
     public static func inMemory(concealedContentKey: SymmetricKey = SymmetricKey(size: .bits256))
         throws -> ClipboardStore
     {
         let dbQueue = try DatabaseQueue()
         try migrator.migrate(dbQueue)
         return ClipboardStore(dbQueue: dbQueue, concealedContentKey: concealedContentKey)
+    }
+
+    /// Test-only: a store with no concealed-content key at all, matching the real app's
+    /// state between launch and its background Keychain fetch resolving — exercises the
+    /// key-not-yet-available paths (ADR-021 follow-up).
+    static func inMemoryWithoutConcealedContentKey() throws -> ClipboardStore {
+        let dbQueue = try DatabaseQueue()
+        try migrator.migrate(dbQueue)
+        return ClipboardStore(dbQueue: dbQueue)
     }
 
     static var migrator: DatabaseMigrator {
@@ -126,6 +164,12 @@ public final class ClipboardStore: Sendable {
                 existing.sourceApp = capture.sourceApp
                 let isConcealed = existing.isConcealed || capture.isConcealed
                 if capture.kind == .text, isConcealed {
+                    // Never seal with anything but the one real key — if it isn't ready
+                    // yet, this throws (propagates to CaptureSaveQueue's existing
+                    // log-and-drop handling) rather than ever using a placeholder.
+                    guard let cipher = self.cipher else {
+                        throw ConcealedContentError.keyNotYetAvailable
+                    }
                     existing.encryptedData = try cipher.seal(capture.text ?? "")
                     existing.text = nil
                     existing.richData = nil
@@ -140,6 +184,13 @@ public final class ClipboardStore: Sendable {
                 return existing
             }
             let sealForConcealment = capture.kind == .text && capture.isConcealed
+            var encryptedData: Data?
+            if sealForConcealment {
+                guard let cipher = self.cipher else {
+                    throw ConcealedContentError.keyNotYetAvailable
+                }
+                encryptedData = try cipher.seal(capture.text ?? "")
+            }
             var item = ClipboardItem(
                 id: nil,
                 contentHash: hash,
@@ -147,7 +198,7 @@ public final class ClipboardStore: Sendable {
                 text: sealForConcealment ? nil : capture.text,
                 ocrText: capture.ocrText,
                 richData: sealForConcealment ? nil : capture.richData,
-                encryptedData: sealForConcealment ? try cipher.seal(capture.text ?? "") : nil,
+                encryptedData: encryptedData,
                 imageData: capture.imageData,
                 thumbnail: thumbnail,
                 sourceApp: capture.sourceApp,
@@ -171,6 +222,10 @@ public final class ClipboardStore: Sendable {
         guard item.kind == .text, item.isConcealed, let encryptedData = item.encryptedData else {
             return item.text
         }
+        // Key not ready yet: nil, same as "nothing to show" rather than throwing — the
+        // caller (reveal toggle, paste) already treats nil as "can't display this right
+        // now," no special-casing needed.
+        guard let cipher = self.cipher else { return nil }
         return try cipher.open(encryptedData)
     }
 
@@ -263,6 +318,9 @@ public final class ClipboardStore: Sendable {
     /// `.image` items (concealed encryption is scoped to text, ADR-021) and for items
     /// already concealed.
     public func markConcealed(id: Int64) throws {
+        guard let cipher = self.cipher else {
+            throw ConcealedContentError.keyNotYetAvailable
+        }
         try dbQueue.write { db in
             guard var item = try ClipboardItem.fetchOne(db, key: id),
                 item.kind == .text, !item.isConcealed

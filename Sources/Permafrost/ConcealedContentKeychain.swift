@@ -9,32 +9,27 @@ import Security
 /// ADR-021's spike found that reading a Keychain item whose access control doesn't
 /// recognize the calling binary's exact code signature (any ad-hoc rebuild, in this
 /// project's dev cycle) triggers a blocking, modal `SecurityAgent` authorization prompt
-/// with **no built-in timeout** — it can hang the calling thread indefinitely. The actual
-/// read/write always happens on a background queue with a bounded wait, so a launch is
-/// never stuck indefinitely on a dialog most users won't recognize; if the bound is hit,
-/// this session falls back to an ephemeral, session-only key rather than freezing.
+/// with **no built-in timeout** — it can hang the calling thread indefinitely.
+///
+/// *Revised 2026-07-21* (found live, not just in the lab): the original design bounded
+/// that wait with a timeout and fell back to a fresh, never-persisted `SymmetricKey` if it
+/// was hit — which meant a session that fell back silently encrypted real content with a
+/// key that could never survive that process exiting. It destroyed a real concealed item
+/// this way. There is now **no timeout and no fallback key** — the fetch runs entirely on
+/// a background queue and calls back whenever it resolves, however long that takes, so
+/// nothing is ever sealed with anything but the one real, persistent key. Until the
+/// completion fires, `ClipboardStore` has no cipher at all and concealed-content
+/// operations simply aren't available yet (`ClipboardStore.ConcealedContentError
+/// .keyNotYetAvailable`) — never silently insecure, never silently unrecoverable.
 enum ConcealedContentKeychain {
     private static let service = "com.fuzzylogicyetis.Permafrost.concealedContentKey"
     private static let account = "concealedContentKey"
 
-    static func loadOrCreateKey(timeout: TimeInterval = 2.0) -> SymmetricKey {
-        let semaphore = DispatchSemaphore(value: 0)
-        let box = ResultBox()
+    static func loadOrCreateKey(completion: @escaping @Sendable (SymmetricKey) -> Void) {
         DispatchQueue.global(qos: .utility).async {
-            box.key = loadKey() ?? generateAndStoreKey()
-            semaphore.signal()
+            let key = loadKey() ?? generateAndStoreKey()
+            completion(key)
         }
-        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
-            Log.store.error(
-                "Concealed-content Keychain key fetch exceeded \(timeout, privacy: .public)s (likely a stale ad-hoc signature awaiting reauthorization) — using a session-only key so launch isn't blocked indefinitely"
-            )
-            return SymmetricKey(size: .bits256)
-        }
-        return box.key ?? SymmetricKey(size: .bits256)
-    }
-
-    private final class ResultBox: @unchecked Sendable {
-        var key: SymmetricKey?
     }
 
     private static func loadKey() -> SymmetricKey? {

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -362,5 +363,60 @@ import Testing
 
         let updated = try #require(try store.items().first)
         #expect(try store.revealText(for: updated) == "already secret")
+    }
+
+    // MARK: - Concealed-content key durability (ADR-021 follow-up)
+    //
+    // Found live 2026-07-21: an earlier design fell back to a fresh, never-persisted key
+    // when the real Keychain-backed key wasn't available yet, silently encrypting real
+    // content with a key that couldn't survive that process exiting — destroying it
+    // permanently. These lock in the fix: concealed-content operations must fail
+    // (not silently use a placeholder) until the real key is set.
+
+    @Test func savingConcealedCaptureThrowsWhenKeyNotYetAvailable() throws {
+        let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
+
+        #expect(throws: ClipboardStore.ConcealedContentError.keyNotYetAvailable) {
+            try store.save(ClipboardCapture(text: "secret", isConcealed: true), now: now)
+        }
+        #expect(try store.count() == 0)
+    }
+
+    @Test func markConcealedThrowsWhenKeyNotYetAvailable() throws {
+        let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
+        let item = try store.save(ClipboardCapture(text: "plain for now"), now: now)
+
+        #expect(throws: ClipboardStore.ConcealedContentError.keyNotYetAvailable) {
+            try store.markConcealed(id: item.id!)
+        }
+        // Untouched — still plain, not left half-converted.
+        let unchanged = try #require(try store.items().first)
+        #expect(unchanged.text == "plain for now")
+        #expect(!unchanged.isConcealed)
+    }
+
+    @Test func revealTextReturnsNilRatherThanThrowingWhenKeyNotYetAvailable() throws {
+        // A concealed item saved earlier (with a key), then read back by a store that
+        // doesn't have one yet -- e.g. the real app, right after launch, before its
+        // background Keychain fetch resolves.
+        let key = SymmetricKey(size: .bits256)
+        let seededStore = try ClipboardStore.inMemory(concealedContentKey: key)
+        let item = try seededStore.save(
+            ClipboardCapture(text: "secret", isConcealed: true), now: now)
+
+        let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
+        #expect(try store.revealText(for: item) == nil)
+    }
+
+    @Test func settingKeyLaterEnablesConcealedOperations() throws {
+        let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
+        let item = try store.save(ClipboardCapture(text: "plain for now"), now: now)
+
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))
+        try store.markConcealed(id: item.id!)
+
+        let updated = try #require(try store.items().first)
+        #expect(updated.isConcealed)
+        #expect(try store.revealText(for: updated) == "plain for now")
     }
 }

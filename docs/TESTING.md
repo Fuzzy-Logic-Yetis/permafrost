@@ -325,14 +325,18 @@ outside the app (e.g. CI or a broken build that won't launch):
     string for contrast → confirm it behaves completely normally (visible, searchable, no
     eye icon) — nothing about this feature should affect non-concealed content.
 
-    **Ad-hoc rebuild scenario** (found via spike, 2026-07-21, see ADR-021): after rebuilding
-    Permafrost (new ad-hoc signature) with concealed items already recorded from a prior
-    build, launch it and confirm the app still opens and works normally within a couple of
-    seconds — even if macOS shows a Keychain authorization prompt for the concealed-content
-    key in the background, launch must not hang waiting on it indefinitely (bounded ~2s
-    timeout, falls back to a session-only key). If that happens, previously-recorded
-    concealed items won't decrypt correctly *this session* — expected and specific to
-    ad-hoc dev signing, not a bug; resolves permanently once Developer ID signing lands.
+    **Ad-hoc rebuild scenario** (found via spike 2026-07-21, corrected same day after a
+    real data-loss incident — see ADR-021's critical follow-up): after rebuilding
+    Permafrost (new ad-hoc signature), launch it and confirm the app still opens and works
+    normally immediately — this must **never** block on the concealed-content key at all,
+    even if macOS shows a Keychain authorization prompt for it in the background. There is
+    **no timeout and no fallback key anymore** — reveal/paste of a *previously* concealed
+    item may briefly show nothing until the background fetch resolves (self-resolving,
+    matching signature = near-instant; only a genuine ad-hoc mismatch takes longer), but
+    once it does, this must be the same real persistent key every time, or the reveal
+    toggle will keep failing. If you ever see a concealed item stop decrypting
+    permanently after a rebuild, that's a regression of this exact fix — check
+    `ConcealedContentKeychain`/`ClipboardStore.cipher` first, not the Keychain item itself.
 27. **Mark as Concealed (ADR-021 follow-up)**: copy a password-shaped string through a
     plain route that doesn't set the source app's concealed marker (type it and ⌘C, or
     copy from Notes/TextEdit) → confirm it shows up as ordinary, unredacted text (no 🔑, no
