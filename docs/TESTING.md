@@ -242,16 +242,27 @@ outside the app (e.g. CI or a broken build that won't launch):
     `Esc` or Cancel → the old shortcut remains. Use Selected Preset → the chosen preset
     works again. Reset to Default → `⌥⌘V` works again. Quit/relaunch → the last custom
     shortcut persists if one was active.
-22. **Paste as plain text (ADR-018)**: copy some rich text (e.g. bold text from a web page
-    or Notes.app, so `.rtf` is on the pasteboard alongside plain string data) → open the
-    panel → hover the card → confirm a 📄 "Paste as Plain Text" icon appears alongside
-    pin/share/delete, and hovering/clicking it does **not** trigger the card's own
-    click-to-paste (no premature commit). Click it → pastes into the target app with
-    formatting stripped (plain text only), panel closes. Repeat via keyboard: select the
-    same kind of item, press `⇧⏎` → identical stripped-formatting result, vs. plain `⏎`
-    which still pastes the rich version. Confirm the 📄 icon does **not** appear when
-    hovering an `.image` card, and that `⇧⏎` on a selected image card falls back to a
-    normal (rich) paste rather than doing nothing.
+22. **Paste as plain text (ADR-018)**: copy some bold/rich text from **Word, Pages, Notes,
+    or TextEdit in Rich Text mode** — found 2026-07-21 that browsers (Chrome/Safari
+    confirmed) copy rich content as `public.html`, never `.rtf`, and Permafrost only ever
+    captures `.rtf`, so a web-copied item has no rich data to strip in the first place and
+    plain-vs-rich will look identical for it (separate gap, docs/BACKLOG.md "Later"). With
+    a genuinely `.rtf`-backed item: open the panel → hover the card → confirm a 📄 "Paste
+    as Plain Text" icon appears alongside pin/share/delete, and hovering/clicking it does
+    **not** trigger the card's own click-to-paste (no premature commit). Click it → pastes
+    into the target app with formatting stripped (plain text only), panel closes. Repeat
+    via keyboard: select the same item, press `⇧⏎` → identical stripped-formatting result,
+    vs. plain `⏎` which still pastes the rich version. Confirm the 📄 icon does **not**
+    appear when hovering an `.image` card, and that `⇧⏎` on a selected image card falls
+    back to a normal (rich) paste rather than doing nothing.
+    **Critical regression check** (found 2026-07-21: this silently destroyed the source
+    item once already): after a plain-text paste, re-open the panel and confirm the
+    **same item still shows its rich content** (or check
+    `~/Library/Application Support/Permafrost/store.sqlite`'s `rich_data` column directly)
+    — it must not have been nulled out or duplicated into a second, plain-only entry.
+    `PasteboardWatcher.ignoreOwnWrite()` exists specifically to prevent Permafrost's own
+    paste writes from being re-captured as if they were a new incoming copy; if this check
+    ever fails again, that's where to look first.
 23. **Preview pane**: `⌥⌘V`, select a long multi-line text item, press `␣` → full text
     appears in an overlay (unwrapped, scrollable if long), replacing the list within the same
     panel size; select some of the text with the mouse to confirm it's copyable. Press `↑`/

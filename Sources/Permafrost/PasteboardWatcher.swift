@@ -67,6 +67,19 @@ final class PasteboardWatcher {
         timer = nil
     }
 
+    /// Call immediately after writing to `NSPasteboard.general` for an outgoing paste/copy
+    /// (`PasteService`). Polling only compares `changeCount`, so without this it can't tell
+    /// "the user copied something new" from "Permafrost itself just wrote the pasteboard to
+    /// paste" — every paste bumps `changeCount` and gets re-captured as if it were incoming.
+    /// That was invisible for a normal rich paste (the re-capture is bit-identical to what's
+    /// already stored, so it just dedups against itself) but not for plain-text paste (found
+    /// 2026-07-21): it deliberately writes less data than the stored item, so the re-capture
+    /// hashed differently, was inserted as a distinct new item, and evicted the original
+    /// rich item under the retention cap.
+    func ignoreOwnWrite() {
+        lastChangeCount = NSPasteboard.general.changeCount
+    }
+
     private func poll() {
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount != lastChangeCount else { return }

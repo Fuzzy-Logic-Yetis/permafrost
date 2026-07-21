@@ -140,8 +140,9 @@ struct PanelView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 8) {
             KeyHint(key: "⏎", label: "paste")
+            KeyHint(key: "⇧⏎", label: "plain")
             KeyHint(key: "␣", label: "preview")
             KeyHint(key: "⌥P", label: "pin")
             KeyHint(key: "⌫", label: "delete")
@@ -164,6 +165,7 @@ private struct KeyHint: View {
         HStack(spacing: 4) {
             Text(key)
                 .font(.caption.weight(.medium))
+                .lineLimit(1)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
                 .background(
@@ -172,6 +174,7 @@ private struct KeyHint: View {
             Text(label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 }

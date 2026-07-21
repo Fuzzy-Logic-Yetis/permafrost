@@ -8,9 +8,15 @@ import PermafrostCore
 @MainActor
 final class PasteService {
     private let store: ClipboardStore
+    /// Notifies `PasteboardWatcher` that this pasteboard write was ours, not an incoming
+    /// user copy — see `PasteboardWatcher.ignoreOwnWrite()` (found 2026-07-21: without this,
+    /// every paste got re-captured as if it were new, which silently self-deduped for a
+    /// normal rich paste but caused real data loss for plain-text paste).
+    private let onPasteboardWritten: () -> Void
 
-    init(store: ClipboardStore) {
+    init(store: ClipboardStore, onPasteboardWritten: @escaping () -> Void = {}) {
         self.store = store
+        self.onPasteboardWritten = onPasteboardWritten
     }
 
     static var isTrusted: Bool {
@@ -31,6 +37,7 @@ final class PasteService {
                 pasteboard.setData(data, forType: .png)
             }
         }
+        onPasteboardWritten()
         markUsed(item)
     }
 
@@ -38,6 +45,7 @@ final class PasteService {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(item.ocrText ?? "", forType: .string)
+        onPasteboardWritten()
         markUsed(item)
     }
 
@@ -46,6 +54,7 @@ final class PasteService {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(item.text ?? "", forType: .string)
+        onPasteboardWritten()
         markUsed(item)
     }
 

@@ -60,7 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 )
             }
         }
-        pasteService = PasteService(store: store)
+        pasteService = PasteService(
+            store: store,
+            onPasteboardWritten: { [weak self] in self?.watcher.ignoreOwnWrite() }
+        )
         let model = PanelModel(store: store, pasteService: pasteService)
         model.onAccessibilityNeeded = { [weak self] in self?.showAccessibilityPrompt() }
         panelController = PanelController(model: model)

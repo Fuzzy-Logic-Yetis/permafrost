@@ -104,6 +104,14 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 
 ## Later
 
+- **Capture/paste `public.html`, not just `.rtf`, as rich data** — found 2026-07-21
+  testing ADR-018 (paste as plain text): `PasteboardWatcher` only ever reads
+  `pasteboard.data(forType: .rtf)` into `richData`; browsers (Chrome/Safari confirmed live)
+  copy rich content as `public.html`, never `.rtf`, so web-sourced rich text is captured
+  with `richData == nil` — indistinguishable from plain text on paste, rich or plain,
+  because there was never anything to restore. Native rich-text apps (Word, Pages, Notes)
+  do write `.rtf`, so this only affects browser-sourced content. Needs a design pass, not a
+  quick fix: whether to store both types, prefer one, or convert between them.
 - **Optional at-rest encryption** — CryptoKit AES-GCM blobs, key in Keychain (ADR-008 has
   the constraint analysis; FUTURE_IDEAS.md has the design sketch).
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).
