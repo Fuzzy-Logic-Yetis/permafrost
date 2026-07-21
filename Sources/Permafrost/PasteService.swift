@@ -23,26 +23,24 @@ final class PasteService {
         AXIsProcessTrusted()
     }
 
-    func copyToPasteboard(_ item: ClipboardItem) {
+    @discardableResult
+    func copyToPasteboard(_ item: ClipboardItem) -> Bool {
+        // Resolve before clearing the pasteboard. A missing Keychain key or corrupt ciphertext
+        // must leave the user's current clipboard intact rather than replacing it with "".
+        let text = item.kind == .text ? revealedText(for: item) : nil
+        if item.kind == .text, text == nil { return false }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         switch item.kind {
         case .text:
-            // ADR-021: concealed items store ciphertext, never plaintext, in `item.text` —
-            // decrypt on demand right before writing to the pasteboard. Concealed items
-            // never have `richData` (by design), so the rich-paste branch below is a no-op
-            // for them regardless.
-            pasteboard.setString(revealedText(for: item) ?? "", forType: .string)
-            if let rich = item.richData {
-                pasteboard.setData(rich, forType: .rtf)
-            }
+            pasteboard.setString(text!, forType: .string)
+            if let rich = item.richData { pasteboard.setData(rich, forType: .rtf) }
         case .image:
-            if let data = item.imageData {
-                pasteboard.setData(data, forType: .png)
-            }
+            if let data = item.imageData { pasteboard.setData(data, forType: .png) }
         }
         onPasteboardWritten()
         markUsed(item)
+        return true
     }
 
     func copyOCRTextToPasteboard(_ item: ClipboardItem) {
@@ -54,12 +52,15 @@ final class PasteService {
     }
 
     /// Unlike `copyToPasteboard(_:)`, never writes `.rtf` — ADR-018's "paste as plain text".
-    func copyPlainTextToPasteboard(_ item: ClipboardItem) {
+    @discardableResult
+    func copyPlainTextToPasteboard(_ item: ClipboardItem) -> Bool {
+        guard let text = revealedText(for: item) else { return false }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(revealedText(for: item) ?? "", forType: .string)
+        pasteboard.setString(text, forType: .string)
         onPasteboardWritten()
         markUsed(item)
+        return true
     }
 
     /// ADR-021: decrypts a concealed item's text for pasting; a plain passthrough for
@@ -77,14 +78,12 @@ final class PasteService {
     /// (copy-only fallback) but no keystroke was sent.
     @discardableResult
     func paste(_ item: ClipboardItem) -> Bool {
-        copyToPasteboard(item)
-        return sendPasteKeystrokeIfTrusted()
+        copyToPasteboard(item) && sendPasteKeystrokeIfTrusted()
     }
 
     @discardableResult
     func pasteAsPlainText(_ item: ClipboardItem) -> Bool {
-        copyPlainTextToPasteboard(item)
-        return sendPasteKeystrokeIfTrusted()
+        copyPlainTextToPasteboard(item) && sendPasteKeystrokeIfTrusted()
     }
 
     @discardableResult

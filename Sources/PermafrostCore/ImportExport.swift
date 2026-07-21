@@ -21,6 +21,9 @@ public enum ImportExport {
         /// Review M-2: recomputing the hash from the entry's actual content didn't
         /// match the manifest's claimed `contentHash` — the archive is malformed or hostile.
         case contentHashMismatch(String)
+        /// Ciphertext from another Keychain key cannot be imported safely. Failing loudly is
+        /// preferable to reporting a misleading successful import with silently skipped secrets.
+        case concealedContentCannotBeImported(String)
     }
 
     struct Manifest: Codable {
@@ -157,12 +160,9 @@ public enum ImportExport {
             let thumbnail = try blob(entry.thumbnailFile)
             let encryptedData = try blob(entry.encryptedDataFile)
 
-            // ADR-021: a concealed text item was exported as ciphertext, never plaintext
-            // — it needs its own path entirely, since content-hash verification (M-2,
-            // below) has to happen against the *decrypted* text, and decryption can
-            // legitimately fail (a different Keychain key — e.g. a cross-machine import)
-            // rather than indicating a hostile/malformed archive. When that happens, skip
-            // just this one item rather than failing the whole import.
+            // ADR-021: a concealed text item is exported as ciphertext, never plaintext.
+            // Verify its decrypted plaintext before inserting. A different-machine/key archive
+            // is reported to the user rather than silently skipping its sensitive entries.
             if entry.kind == .text, entry.isConcealed, let encryptedData {
                 guard entry.text == nil, entry.ocrText == nil, imageData == nil else {
                     throw ImportError.kindFieldMismatch(entry.contentHash)
@@ -170,8 +170,14 @@ public enum ImportExport {
                 let placeholder = ClipboardItem(
                     contentHash: entry.contentHash, kind: .text, encryptedData: encryptedData,
                     createdAt: entry.createdAt, lastUsedAt: entry.lastUsedAt, isConcealed: true)
-                guard let plaintext = try? store.revealText(for: placeholder) else {
-                    continue
+                let plaintext: String?
+                do {
+                    plaintext = try store.revealText(for: placeholder)
+                } catch {
+                    throw ImportError.concealedContentCannotBeImported(entry.contentHash)
+                }
+                guard let plaintext else {
+                    throw ImportError.concealedContentCannotBeImported(entry.contentHash)
                 }
                 guard ClipboardCapture(text: plaintext).contentHash == entry.contentHash else {
                     throw ImportError.contentHashMismatch(entry.contentHash)

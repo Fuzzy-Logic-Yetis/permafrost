@@ -412,7 +412,7 @@ import Testing
         let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
         let item = try store.save(ClipboardCapture(text: "plain for now"), now: now)
 
-        store.setConcealedContentKey(SymmetricKey(size: .bits256))
+        try store.setConcealedContentKey(SymmetricKey(size: .bits256))
         try store.markConcealed(id: item.id!)
 
         let updated = try #require(try store.items().first)

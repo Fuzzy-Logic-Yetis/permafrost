@@ -48,12 +48,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             presentFatalError(error)
             return
         }
-        // ADR-021 follow-up: never blocks launch, never falls back to a throwaway key —
-        // concealed-content encryption stays unavailable (not silently insecure) until
-        // this resolves, however long that takes.
-        ConcealedContentKeychain.loadOrCreateKey { [weak store] key in
-            store?.setConcealedContentKey(key)
-        }
         purge()
 
         captureSaveQueue = CaptureSaveQueue(store: store)
@@ -64,6 +58,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     object: nil,
                     userInfo: ["itemID": itemID]
                 )
+            }
+        }
+        // Never blocks launch or falls back to a throwaway key. Pending concealed captures
+        // are retried only after a successfully persisted Keychain key is installed.
+        ConcealedContentKeychain.loadOrCreateKey { [weak self, weak store] result in
+            switch result {
+            case .success(let key):
+                do {
+                    try store?.setConcealedContentKey(key)
+                    DispatchQueue.main.async { [weak self] in
+                        self?.captureSaveQueue.retryPendingConcealedCaptures()
+                    }
+                } catch {
+                    Log.store.error("concealed-content setup failed: \(error.localizedDescription)")
+                }
+            case .failure(let error):
+                Log.store.error("concealed-content key unavailable: \(error.localizedDescription)")
             }
         }
         pasteService = PasteService(

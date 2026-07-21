@@ -27,6 +27,9 @@ public final class ClipboardStore: Sendable {
         /// using a placeholder, so concealed content is never encrypted (or decrypted)
         /// with anything but the one real, persistent key.
         case keyNotYetAvailable
+        /// A concealed text row must contain either plaintext to be sealed during a legacy
+        /// import, or ciphertext. A metadata-only row cannot safely be recovered.
+        case invalidConcealedContent
     }
 
     public init(dbQueue: DatabaseQueue, concealedContentKey: SymmetricKey? = nil) {
@@ -39,8 +42,32 @@ public final class ClipboardStore: Sendable {
     /// Called once the persistent key becomes available — however long that takes.
     /// Thread-safe: intended to be called from a background queue once a Keychain fetch
     /// resolves, with no bound on how long that may take (ADR-021 follow-up).
-    public func setConcealedContentKey(_ key: SymmetricKey) {
-        cipherLock.withLock { _cipher = ConcealedContentCipher(key: key) }
+    public func setConcealedContentKey(_ key: SymmetricKey) throws {
+        let cipher = ConcealedContentCipher(key: key)
+        // v3 could add the ciphertext column before this asynchronously acquired key was
+        // available. Backfill those legacy concealed rows before exposing the key so a
+        // successful setup establishes the invariant for all concealed text.
+        try migrateLegacyConcealedText(using: cipher)
+        cipherLock.withLock { _cipher = cipher }
+    }
+
+    private func migrateLegacyConcealedText(using cipher: ConcealedContentCipher) throws {
+        try dbQueue.write { db in
+            let legacyRows = try ClipboardItem.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM clipboard_item
+                    WHERE kind = ? AND is_concealed = 1 AND encrypted_data IS NULL AND text IS NOT NULL
+                    """,
+                arguments: [ClipboardItemKind.text.rawValue]
+            )
+            for var item in legacyRows {
+                item.encryptedData = try cipher.seal(item.text ?? "")
+                item.text = nil
+                item.richData = nil
+                try item.update(db)
+            }
+        }
     }
 
     // MARK: - Opening
@@ -415,20 +442,30 @@ public final class ClipboardStore: Sendable {
     // MARK: - Import
 
     /// Inserts an item keeping its original metadata (dates, pin state, flags).
-    /// Returns false when content with the same hash already exists.
+    /// Legacy archives may hold concealed plaintext; seal it here rather than allowing the
+    /// metadata-import path to bypass the storage invariant. Returns false on duplicate hash.
     @discardableResult
     public func insertPreservingMetadata(_ item: ClipboardItem) throws -> Bool {
-        try dbQueue.write { db in
+        var imported = item
+        if imported.kind == .text, imported.isConcealed, imported.encryptedData == nil {
+            guard let plaintext = imported.text else {
+                throw ConcealedContentError.invalidConcealedContent
+            }
+            guard let cipher = cipher else { throw ConcealedContentError.keyNotYetAvailable }
+            imported.encryptedData = try cipher.seal(plaintext)
+            imported.text = nil
+            imported.richData = nil
+        }
+        return try dbQueue.write { db in
             let exists =
                 try Bool.fetchOne(
                     db,
                     sql: "SELECT EXISTS(SELECT 1 FROM clipboard_item WHERE content_hash = ?)",
-                    arguments: [item.contentHash]
+                    arguments: [imported.contentHash]
                 ) ?? false
             if exists { return false }
-            var copy = item
-            copy.id = nil
-            try copy.insert(db)
+            imported.id = nil
+            try imported.insert(db)
             return true
         }
     }

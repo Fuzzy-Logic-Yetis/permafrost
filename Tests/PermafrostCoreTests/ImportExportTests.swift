@@ -98,6 +98,46 @@ import Testing
         #expect(try destination.count() == 2)
     }
 
+    @Test func legacyConcealedPlaintextImportIsSealedBeforeStorage() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let secret = "legacy archive secret"
+        let hash = ClipboardCapture(text: secret).contentHash
+        let manifest = """
+            {"version": 1, "exportedAt": "2026-07-05T00:00:00Z", "items": [
+                {"contentHash": "\(hash)", "kind": "text", "text": "\(secret)",
+                 "ocrText": null, "sourceApp": null, "createdAt": "2026-07-05T00:00:00Z",
+                 "lastUsedAt": "2026-07-05T00:00:00Z", "isPinned": false, "pinOrder": null,
+                 "isConcealed": true, "imageFile": null, "thumbnailFile": null,
+                 "richDataFile": null, "encryptedDataFile": null}
+            ]}
+            """
+        try manifest.write(to: dir.appendingPathComponent(ImportExport.manifestFileName), atomically: true, encoding: .utf8)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(try ImportExport.importArchive(from: dir, into: store) == 1)
+        let imported = try #require(store.allItems().first)
+        #expect(imported.text == nil)
+        #expect(imported.richData == nil)
+        #expect(imported.encryptedData != nil)
+        #expect(try store.revealText(for: imported) == secret)
+    }
+
+    @Test func encryptedArchiveWithDifferentKeyFailsLoudly() throws {
+        let source = try ClipboardStore.inMemory()
+        try source.save(ClipboardCapture(text: "secret", isConcealed: true), now: now)
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try ImportExport.exportArchive(from: source, to: dir)
+
+        let destination = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.concealedContentCannotBeImported(
+            ClipboardCapture(text: "secret").contentHash
+        )) {
+            try ImportExport.importArchive(from: dir, into: destination)
+        }
+    }
+
     @Test func unknownManifestVersionFailsLoudly() throws {
         let dir = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }

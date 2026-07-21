@@ -3,70 +3,89 @@ import Foundation
 import Security
 
 /// Retrieves (or creates, on first use) the persistent Keychain-backed key used to encrypt
-/// concealed items (ADR-021). `kSecAttrAccessibleWhenUnlocked` — decryption only works while
-/// the Mac is unlocked.
-///
-/// ADR-021's spike found that reading a Keychain item whose access control doesn't
-/// recognize the calling binary's exact code signature (any ad-hoc rebuild, in this
-/// project's dev cycle) triggers a blocking, modal `SecurityAgent` authorization prompt
-/// with **no built-in timeout** — it can hang the calling thread indefinitely.
-///
-/// *Revised 2026-07-21* (found live, not just in the lab): the original design bounded
-/// that wait with a timeout and fell back to a fresh, never-persisted `SymmetricKey` if it
-/// was hit — which meant a session that fell back silently encrypted real content with a
-/// key that could never survive that process exiting. It destroyed a real concealed item
-/// this way. There is now **no timeout and no fallback key** — the fetch runs entirely on
-/// a background queue and calls back whenever it resolves, however long that takes, so
-/// nothing is ever sealed with anything but the one real, persistent key. Until the
-/// completion fires, `ClipboardStore` has no cipher at all and concealed-content
-/// operations simply aren't available yet (`ClipboardStore.ConcealedContentError
-/// .keyNotYetAvailable`) — never silently insecure, never silently unrecoverable.
+/// concealed items (ADR-021). `kSecAttrAccessibleWhenUnlocked` means decryption only works
+/// while the Mac is unlocked. Keychain errors are deliberately surfaced instead of falling
+/// back to an in-memory key: ciphertext must never be created with a key that was not stored.
 enum ConcealedContentKeychain {
-    private static let service = "com.fuzzylogicyetis.Permafrost.concealedContentKey"
-    private static let account = "concealedContentKey"
+    enum KeychainError: LocalizedError {
+        case read(OSStatus)
+        case write(OSStatus)
+        case invalidKeyData
 
-    static func loadOrCreateKey(completion: @escaping @Sendable (SymmetricKey) -> Void) {
-        DispatchQueue.global(qos: .utility).async {
-            let key = loadKey() ?? generateAndStoreKey()
-            completion(key)
+        var errorDescription: String? {
+            switch self {
+            case .read(let status): return "Could not read concealed-content key (status \(status))."
+            case .write(let status): return "Could not store concealed-content key (status \(status))."
+            case .invalidKeyData: return "The concealed-content key has invalid data."
+            }
         }
     }
 
-    private static func loadKey() -> SymmetricKey? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-        ]
+    private static let service = "com.fuzzylogicyetis.Permafrost.concealedContentKey"
+    private static let account = "concealedContentKey"
+
+    static func loadOrCreateKey(
+        completion: @escaping @Sendable (Result<SymmetricKey, KeychainError>) -> Void
+    ) {
+        DispatchQueue.global(qos: .utility).async {
+            do {
+                completion(.success(try loadOrCreateKeySynchronously()))
+            } catch let error as KeychainError {
+                completion(.failure(error))
+            } catch {
+                assertionFailure("Unexpected concealed-content Keychain error: \(error)")
+                completion(.failure(.read(errSecInternalError)))
+            }
+        }
+    }
+
+    private static func loadOrCreateKeySynchronously() throws -> SymmetricKey {
+        switch try loadKey() {
+        case .some(let key):
+            return key
+        case nil:
+            return try generateAndStoreKey()
+        }
+    }
+
+    /// `nil` means only "not found". All other statuses are actionable failures, not an
+    /// invitation to generate another key.
+    private static func loadKey() throws -> SymmetricKey? {
+        let query = itemQuery(returnData: true)
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data else {
-            if status != errSecItemNotFound {
-                Log.store.error(
-                    "Concealed-content Keychain read failed: status \(status, privacy: .public)")
-            }
-            return nil
+            Log.store.error("Concealed-content Keychain read failed: status \(status, privacy: .public)")
+            throw KeychainError.read(status)
+        }
+        guard data.count == 32 else {
+            Log.store.error("Concealed-content Keychain contains invalid key data")
+            throw KeychainError.invalidKeyData
         }
         return SymmetricKey(data: data)
     }
 
-    private static func generateAndStoreKey() -> SymmetricKey {
+    private static func generateAndStoreKey() throws -> SymmetricKey {
         let key = SymmetricKey(size: .bits256)
         let keyData = key.withUnsafeBytes { Data($0) }
-        let query: [String: Any] = [
+        var attributes = itemQuery(returnData: false)
+        attributes[kSecValueData as String] = keyData
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
+        let status = SecItemAdd(attributes as CFDictionary, nil)
+        if status == errSecSuccess { return key }
+        if status == errSecDuplicateItem, let existing = try loadKey() { return existing }
+        Log.store.error("Concealed-content Keychain write failed: status \(status, privacy: .public)")
+        throw KeychainError.write(status)
+    }
+
+    private static func itemQuery(returnData: Bool) -> [String: Any] {
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        var attributes = query
-        attributes[kSecValueData as String] = keyData
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        if status != errSecSuccess {
-            Log.store.error(
-                "Concealed-content Keychain write failed: status \(status, privacy: .public)")
-        }
-        return key
+        if returnData { query[kSecReturnData as String] = true }
+        return query
     }
 }

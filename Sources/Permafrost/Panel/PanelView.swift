@@ -296,12 +296,17 @@ private struct ItemCard: View {
                 .buttonStyle(.plain)
                 .help(item.isPinned ? "Unpin" : "Pin")
 
-                ShareButton(
-                    items: item.shareableItems,
-                    onPresentationChanged: { isSharing = $0 }
-                )
-                .frame(width: 15, height: 15)
-                .help("Share")
+                // Sharing a concealed row would otherwise hand an empty `text` field to
+                // AppKit. Keep disclosure explicit: reveal/copy/paste is supported, sharing
+                // is unavailable until a deliberate decrypt-and-share flow exists.
+                if !item.isConcealed {
+                    ShareButton(
+                        items: item.shareableItems,
+                        onPresentationChanged: { isSharing = $0 }
+                    )
+                    .frame(width: 15, height: 15)
+                    .help("Share")
+                }
 
                 Button(action: onDelete) {
                     Image(systemName: "trash")
