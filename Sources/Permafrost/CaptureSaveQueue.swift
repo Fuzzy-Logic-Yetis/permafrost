@@ -16,19 +16,30 @@ final class CaptureSaveQueue {
 
     private let store: ClipboardStore
     private let textRecognizer: any TextRecognizing
+    private let htmlRichTextConverter: any HTMLRichTextConverting
     private let queue = DispatchQueue(label: "com.fuzzylogicyetis.Permafrost.capture-save")
 
-    init(store: ClipboardStore, textRecognizer: any TextRecognizing = VisionTextRecognizer()) {
+    init(
+        store: ClipboardStore, textRecognizer: any TextRecognizing = VisionTextRecognizer(),
+        htmlRichTextConverter: any HTMLRichTextConverting = HTMLRichTextConverter()
+    ) {
         self.store = store
         self.textRecognizer = textRecognizer
+        self.htmlRichTextConverter = htmlRichTextConverter
     }
 
     var onOCRTextSaved: @Sendable (Int64) -> Void = { _ in }
 
     func enqueue(_ pending: PendingCapture) {
-        queue.async { [store, textRecognizer, onOCRTextSaved] in
+        queue.async { [store, textRecognizer, htmlRichTextConverter, onOCRTextSaved] in
             do {
-                let item = try store.save(pending.capture, now: pending.capturedAt)
+                var capture = pending.capture
+                // ADR-019: prefer native .rtf (already in richData); only synthesize from
+                // .html when there's no native rich data to lose fidelity from.
+                if capture.kind == .text, capture.richData == nil, let html = capture.htmlData {
+                    capture.richData = htmlRichTextConverter.rtfData(fromHTML: html)
+                }
+                let item = try store.save(capture, now: pending.capturedAt)
                 if pending.recognizeTextInImages,
                     pending.capture.kind == .image,
                     pending.capture.ocrText == nil,

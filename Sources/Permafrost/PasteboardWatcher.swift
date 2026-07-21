@@ -140,8 +140,12 @@ final class PasteboardWatcher {
 
         if let text = pasteboard.string(forType: .string), !text.isEmpty {
             let rich = pasteboard.data(forType: .rtf)
+            // ADR-019: only worth reading when there's no native .rtf — conversion (and
+            // preferring native RTF when both exist) happens later, off the main actor.
+            let html = rich == nil ? pasteboard.data(forType: .html) : nil
             return ClipboardCapture(
-                text: text, richData: rich, sourceApp: sourceApp, isConcealed: concealed)
+                text: text, richData: rich, htmlData: html, sourceApp: sourceApp,
+                isConcealed: concealed)
         }
         return nil
     }

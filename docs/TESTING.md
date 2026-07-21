@@ -243,18 +243,26 @@ outside the app (e.g. CI or a broken build that won't launch):
     works again. Reset to Default → `⌥⌘V` works again. Quit/relaunch → the last custom
     shortcut persists if one was active.
 22. **Paste as plain text (ADR-018)**: copy some bold/rich text from **Word, Pages, Notes,
-    or TextEdit in Rich Text mode** — found 2026-07-21 that browsers (Chrome/Safari
-    confirmed) copy rich content as `public.html`, never `.rtf`, and Permafrost only ever
-    captures `.rtf`, so a web-copied item has no rich data to strip in the first place and
-    plain-vs-rich will look identical for it (separate gap, docs/BACKLOG.md "Later"). With
-    a genuinely `.rtf`-backed item: open the panel → hover the card → confirm a 📄 "Paste
-    as Plain Text" icon appears alongside pin/share/delete, and hovering/clicking it does
-    **not** trigger the card's own click-to-paste (no premature commit). Click it → pastes
-    into the target app with formatting stripped (plain text only), panel closes. Repeat
-    via keyboard: select the same item, press `⇧⏎` → identical stripped-formatting result,
-    vs. plain `⏎` which still pastes the rich version. Confirm the 📄 icon does **not**
-    appear when hovering an `.image` card, and that `⇧⏎` on a selected image card falls
-    back to a normal (rich) paste rather than doing nothing.
+    TextEdit in Rich Text mode, or a browser** (ADR-019 added HTML→RTF conversion, so
+    browser copies carry recovered rich data too now — see item 22a). Open the panel →
+    hover the card → confirm a 📄 "Paste as Plain Text" icon appears alongside
+    pin/share/delete, and hovering/clicking it does **not** trigger the card's own
+    click-to-paste (no premature commit). Click it → pastes into the target app with
+    formatting stripped (plain text only), panel closes. Repeat via keyboard: select the
+    same item, press `⇧⏎` → identical stripped-formatting result, vs. plain `⏎` which still
+    pastes the rich version. Confirm the 📄 icon does **not** appear when hovering an
+    `.image` card, and that `⇧⏎` on a selected image card falls back to a normal (rich)
+    paste rather than doing nothing.
+22a. **HTML→RTF rich capture (ADR-019)**: copy formatted text from a browser (bold/italic/
+    strikethrough — a product page with a sale-price strikethrough works well) → paste
+    rich (`⏎`) into a rich-text app (TextEdit in Rich Text mode, Word, Pages) → confirm
+    *some* formatting survives (bold/italic at minimum; exact fidelity isn't guaranteed,
+    RTF can't represent everything CSS can). Paste as plain text (`⇧⏎`) on the same item →
+    confirm it's still fully stripped. Separately, copy from Word/Pages/Notes (native
+    `.rtf` present) → confirm behavior is bit-for-bit unchanged from before this ADR (the
+    native-RTF path never touches the HTML conversion code — check
+    `~/Library/Application Support/Permafrost/store.sqlite`'s `rich_data` length matches
+    what was on the pasteboard, not a converted/re-encoded version).
     **Critical regression check** (found 2026-07-21: this silently destroyed the source
     item once already): after a plain-text paste, re-open the panel and confirm the
     **same item still shows its rich content** (or check

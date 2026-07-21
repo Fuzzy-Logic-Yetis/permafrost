@@ -89,14 +89,22 @@ public struct ClipboardCapture: Sendable {
     public var text: String?
     public var ocrText: String?
     public var richData: Data?
+    /// Transient (ADR-019): raw `.html` pasteboard bytes, carried only until
+    /// `CaptureSaveQueue` converts them to `richData` when no native `.rtf` was present.
+    /// Never persisted — `ClipboardStore.save` doesn't read this field at all.
+    public var htmlData: Data?
     public var imageData: Data?
     public var sourceApp: String?
     public var isConcealed: Bool
 
-    public init(text: String, richData: Data? = nil, sourceApp: String? = nil, isConcealed: Bool = false) {
+    public init(
+        text: String, richData: Data? = nil, htmlData: Data? = nil, sourceApp: String? = nil,
+        isConcealed: Bool = false
+    ) {
         self.kind = .text
         self.text = text
         self.richData = richData
+        self.htmlData = htmlData
         self.sourceApp = sourceApp
         self.isConcealed = isConcealed
     }
