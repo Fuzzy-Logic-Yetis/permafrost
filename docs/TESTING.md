@@ -295,6 +295,17 @@ outside the app (e.g. CI or a broken build that won't launch):
     success: revert the Active Hotkey display back to the previous working shortcut, show an
     inline error message naming the rejected chord, and the previous shortcut must still
     open the panel.
+25. **Drag-and-drop out of the panel (ADR-020)**: quick click on a text/image card still
+    pastes-and-closes exactly as before (regression check). Press-and-drag a text card onto
+    TextEdit/Notes/Mail compose → plain text lands at the drop point, panel stays open
+    throughout. Press-and-drag an image card onto Finder/Mail compose → lands as a real
+    image (PNG), not a broken/empty file. Hover a card to reveal pin/share/delete/📄, click
+    one of those buttons → still performs that action, does not instead start dragging the
+    whole card. Drag onto the Desktop with nothing to receive it → Finder materializes the
+    drop as a real `.txt`/`.png` file (confirmed 2026-07-21 — an emergent side effect of
+    using plain `String`/PNG `Data` as the drag payload, not something specifically built,
+    but a nice one). Drag and release somewhere that won't accept it → nothing pastes
+    anywhere, panel unaffected, no crash/hang.
 
 ## Performance spot checks
 

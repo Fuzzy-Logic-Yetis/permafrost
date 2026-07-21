@@ -102,17 +102,12 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    `HTMLRichTextConverter` now strips color specifically while keeping character-level
    emphasis (bold/italic/strikethrough/underline) intact. Native `.rtf` from Word/Pages/
    Notes is completely unaffected.
-3. **Drag-and-drop out of the panel** (ADR-020) — in progress, on branch
-   `feat/drag-and-drop`. Spike done: built a throwaway SwiftUI app to test whether
-   `.draggable()` coexists with the existing `onTapGesture`-based click-to-paste — it does,
-   with zero custom gesture code needed (confirmed by real mouse/trackpad testing; `cliclick`
-   automation couldn't reliably trigger AppKit's drag recognition, so this one needed a human
-   from the start). Design: text items drag as plain `String`, image items as PNG `Data`,
-   mirroring the existing `shareableItems`/share-sheet precedent rather than carrying RTF.
-   Panel stays open during/after a drag (no auto-close — no drop-completion callback in
-   plain SwiftUI `.draggable()` worth chasing for v1). No unit-test seam (same as
-   `shareableItems`, its closest analog) — manual checklist only, recorded in ADR-020.
-   Implementation not yet started.
+3. ~~Drag-and-drop out of the panel~~ (ADR-020) — **DONE 2026-07-21.** Text items drag as
+   plain `String`, image items as PNG `Data` (`DraggableImageData`), mirroring the existing
+   `shareableItems`/share-sheet precedent rather than carrying RTF. `.draggable()` needed
+   zero custom gesture code to coexist with click-to-paste (spike-verified). All 5 manual
+   checklist items passed, including a nice emergent bonus: dragging onto the Desktop with
+   nothing to receive the drop makes Finder materialize it as a real `.txt`/`.png` file.
 
 ## Later
 
