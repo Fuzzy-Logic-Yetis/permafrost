@@ -272,6 +272,67 @@ import PermafrostCore
         #expect(model.items.map(\.text) == ["older"])
         #expect(model.selectedItem?.text == "older")
     }
+
+    // MARK: - Paste as plain text (ADR-018, planned before implementation)
+    //
+    // These reference `PanelModel.commitSelectionAsPlainText()`,
+    // `PanelModel.canPasteSelectedAsPlainText`, and `PanelPasteServing.pasteAsPlainText(_:)`,
+    // none of which exist yet — intentionally red until ADR-018 is implemented. Acceptable
+    // on this feature branch per CLAUDE.md's "every commit is a working state" protecting
+    // `main`'s releasability, not every intermediate branch commit (see ADR-018 test plan).
+
+    @Test func commitSelectionAsPlainTextCallsPlainTextPasteNotRichPaste() throws {
+        let (store, model, pasteService) = try makeModel()
+        try store.save(ClipboardCapture(text: "rich me"), now: now)
+        model.prepareForShow()
+
+        model.commitSelectionAsPlainText()
+
+        #expect(pasteService.pastedAsPlainTexts == ["rich me"])
+        #expect(pasteService.pastedTexts.isEmpty)
+    }
+
+    @Test func commitAsPlainTextClosesBeforePasteAndReportsAccessibilityFallback() throws {
+        let (store, model, pasteService) = try makeModel(pasteResult: false)
+        try store.save(ClipboardCapture(text: "needs accessibility"), now: now)
+        var events: [String] = []
+        model.onCommit = { events.append("close") }
+        model.onAccessibilityNeeded = { events.append("accessibility") }
+        pasteService.onPaste = { events.append("paste") }
+        model.prepareForShow()
+
+        model.commitSelectionAsPlainText()
+
+        #expect(pasteService.pastedAsPlainTexts == ["needs accessibility"])
+        #expect(events == ["close", "paste", "accessibility"])
+    }
+
+    @Test func canPasteSelectedAsPlainTextIsFalseForImageItems() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(imageData: Data([1, 2, 3])), now: now)
+        model.prepareForShow()
+
+        #expect(model.canPasteSelectedAsPlainText == false)
+    }
+
+    @Test func canPasteSelectedAsPlainTextIsTrueForTextItems() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "plain me"), now: now)
+        model.prepareForShow()
+
+        #expect(model.canPasteSelectedAsPlainText == true)
+    }
+
+    @Test func commitSelectionAsPlainTextOnImageItemFallsBackToRichPaste() throws {
+        let (store, model, pasteService) = try makeModel()
+        try store.save(ClipboardCapture(imageData: Data([1, 2, 3])), now: now)
+        model.prepareForShow()
+
+        model.commitSelectionAsPlainText()
+
+        #expect(pasteService.pastedAsPlainTexts.isEmpty)
+        #expect(pasteService.pastedTexts.count == 1)
+    }
 }
 
 @MainActor
@@ -280,6 +341,7 @@ private final class FakePasteService: PanelPasteServing {
     var pastedTexts: [String] = []
     var copiedOCRTexts: [String] = []
     var pastedOCRTexts: [String] = []
+    var pastedAsPlainTexts: [String] = []
     var onPaste: () -> Void = {}
 
     init(result: Bool) {
@@ -288,6 +350,12 @@ private final class FakePasteService: PanelPasteServing {
 
     func paste(_ item: ClipboardItem) -> Bool {
         pastedTexts.append(item.text ?? "")
+        onPaste()
+        return result
+    }
+
+    func pasteAsPlainText(_ item: ClipboardItem) -> Bool {
+        pastedAsPlainTexts.append(item.text ?? "")
         onPaste()
         return result
     }

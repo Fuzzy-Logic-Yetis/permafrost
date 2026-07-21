@@ -464,3 +464,80 @@ review artifact. Remaining review items intentionally deferred to BACKLOG.md: ho
 registration failure/rollback tests (Carbon's `RegisterEventHotKey` isn't practical to fail
 deterministically in a unit test), preview-mode keyboard-routing tests, and a testable
 policy object for pasteboard watcher pause/excluded-app behavior.
+
+## ADR-018: Paste-as-plain-text (`⇧⏎` + hover icon), planned before implementation
+
+**Context.** Project owner requested `⇧⏎` paste the selected item's plain text (stripping
+`.rtf` rich data) alongside the existing `⏎` (rich paste). Raised and resolved before any
+code was written: a keyboard shortcut alone isn't reachable by a mouse-only user, because
+[PanelView.swift](../Sources/Permafrost/Panel/PanelView.swift)'s `onTapGesture` on each card
+calls `model.commit(index:)` directly — a mouse click **is** a full commit-and-close, not a
+"select for further action" state. There is currently no way to land the mouse on a card
+without immediately pasting it, so a second, separate mouse-reachable affordance is required
+alongside `⇧⏎`, not merely a keyboard modifier.
+
+**Decision — interaction design.**
+
+- Reuse the existing hover-action row (pin / share / delete, ADR-012) rather than invent a
+  new mechanism: those three buttons already prove a click *inside* the hover row does not
+  bubble to the card's own commit-on-tap gesture. A fourth icon, **Paste as Plain Text**,
+  is added to that row, following the same pattern.
+- This explicitly **revisits and partially reverses BACKLOG item 6's deferral** of a fourth
+  hover icon (that deferral was about the *preview* toggle specifically, reasoned as "a
+  passive view option, not worth crowding the row for" — paste-as-plain-text is an
+  alternate **commit** action people will reach for by mouse regularly, not a passive
+  toggle, so the same crowding objection doesn't carry over unchanged). Recorded here per
+  CLAUDE.md ("reversing a prior ADR" requires one; BACKLOG items aren't ADRs, but the same
+  spirit applies to reversing a recorded product call).
+- Only meaningful for `.text` items. `.image` items already have an equivalent
+  (OCR "Paste Text" in the preview pane) — the plain-text hover icon is hidden for image
+  cards rather than shown-but-degenerate.
+- `⇧⏎` and the hover icon both call the same new model entry point (below); no separate
+  code paths to keep in sync.
+
+**Decision — implementation seam** (mirrors the existing `pasteOCRText`/`copyOCRTextToPasteboard`
+precedent in `PasteService`/`PanelPasteServing`):
+
+- `PasteService`: new `copyPlainTextToPasteboard(_ item: ClipboardItem)` (sets only
+  `.string`, never `.rtf`, unlike `copyToPasteboard(_:)`) and new
+  `pasteAsPlainText(_ item: ClipboardItem) -> Bool` (copy, then the existing
+  `sendPasteKeystrokeIfTrusted()` — identical Accessibility-fallback behavior to `paste(_:)`).
+- `PanelPasteServing` protocol: add `func pasteAsPlainText(_ item: ClipboardItem) -> Bool`.
+- `PanelModel`: `commit(index:asPlainText:)` (default `asPlainText: false`, so the existing
+  `commit(index:)`, `commitSelection()`, and `commitQuickPaste(number:)` call sites are
+  unchanged); new `commitSelectionAsPlainText()` for the `⇧⏎` key handler; new computed
+  `canPasteSelectedAsPlainText: Bool { selectedItem?.kind == .text }` for gating the hover
+  icon's visibility (and for `⇧⏎` to silently fall back to a normal paste on an image row
+  rather than erroring — kept forgiving, not a hard failure state).
+- `docs/UX.md`'s keyboard map and hover-action description are updated in the **same commit**
+  as the implementation, per CLAUDE.md — not now, since the behavior doesn't exist yet.
+
+**Test plan (written and committed before implementation, per project owner's request).**
+Following this project's existing testing philosophy (docs/TESTING.md explicitly keeps
+gesture/UI automation out of unit tests): the pure decision logic gets real Swift Testing
+coverage now; the mouse/hover-icon mechanics get a manual checklist addition once built.
+
+- Extend `Tests/PermafrostTests/PanelModelTests.swift`'s `FakePasteService` with
+  `pastedAsPlainTexts: [String]` and a `pasteAsPlainText(_:)` stub, mirroring the existing
+  `pastedOCRTexts`/`pasteOCRText` fields exactly.
+- New tests (same file): `commitSelectionAsPlainTextCallsPlainTextPasteNotRichPaste`,
+  `commitAsPlainTextClosesBeforePasteAndReportsAccessibilityFallback` (mirrors the existing
+  rich-paste equivalent), `canPasteSelectedAsPlainTextIsFalseForImageItems`,
+  `commitSelectionAsPlainTextOnImageItemFallsBackToRichPaste`.
+- These tests reference APIs that don't exist yet, so they will not compile until
+  implemented — expected and acceptable on this feature branch (`feat/paste-plain-text`)
+  under CLAUDE.md's "every commit is a working state" rule, which protects `main`'s
+  releasability, not every intermediate commit on a short-lived branch. The branch tip must
+  build and pass `swift test` before merge; intermediate red commits do not.
+- Manual checklist addition to docs/TESTING.md (once implemented): hover icon appears only
+  on `.text` cards, is hidden on `.image` cards, a click on it pastes plain text without
+  triggering the card's own commit gesture, and `⇧⏎` matches it for the keyboard path.
+
+**Consequences.** Small, additive, no schema/dependency/permission change. Deliberately
+scoped to text-only paste-as-plain-text; **drag-and-drop out of the panel (BACKLOG "Later")
+is explicitly out of scope for this ADR** despite sharing the same underlying question
+("what does interacting with a card body mean now that it's not just commit-on-tap") —
+drag-and-drop needs a throwaway technical spike (does SwiftUI's `.draggable`/`onDrag`
+coexist cleanly with the existing `LazyVStack` + `ScrollView` + `onTapGesture` without a
+regression to click-to-paste?) before a real plan can be written with confidence. That spike
+and its own ADR come after this feature ships and merges, not in parallel with it.

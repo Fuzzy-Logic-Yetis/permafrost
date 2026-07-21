@@ -86,13 +86,28 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
     completion posts a panel refresh notification so searches/previews update after the
     background job finishes.
 
+## Next up (v0.4)
+
+1. **Paste as plain text** (⇧⏎ + hover icon) — planned, ADR-018, on branch
+   `feat/paste-plain-text`. Design, seam, and test plan are recorded in ADR-018; failing
+   Swift Testing coverage for the extractable logic lands before the implementation itself,
+   per project owner's request. Build order: `PasteService`/`PanelPasteServing` seam →
+   `PanelModel` entry points → red tests → implementation → hover icon + `⇧⏎` wiring →
+   docs/UX.md update → manual checklist addition → merge.
+2. **Drag-and-drop out of the panel** — drag an item card into a document. **Not planned in
+   detail yet.** ADR-018 explicitly scoped this out: it shares the "what does interacting
+   with the card body mean" question with item 1 above, but needs its own throwaway
+   technical spike first (does SwiftUI's `.draggable`/`onDrag` coexist with the existing
+   `LazyVStack` + `ScrollView` + `onTapGesture` without regressing click-to-paste?) before a
+   real design/test plan can be written with confidence. Spike happens after item 1 ships,
+   not in parallel with it — one interaction-model change in flight at a time.
+
 ## Later
+
 - **Optional at-rest encryption** — CryptoKit AES-GCM blobs, key in Keychain (ADR-008 has
   the constraint analysis; FUTURE_IDEAS.md has the design sketch).
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).
 - **Homebrew cask** — requires notarized artifact (v1.0).
-- **Drag-and-drop out of the panel** — drag an item card into a document.
-- **Paste as plain text** modifier (⇧⏎) — strip rich data on paste.
 - **Localization scaffolding** — English-only for MVP.
 - **`swift format` lint gate in CI** — currently advisory, make it enforced.
 
