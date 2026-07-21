@@ -93,13 +93,15 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    (rich or plain) was being re-captured by `PasteboardWatcher` as if it were a new incoming
    copy, which silently self-deduped for rich paste but destroyed the source item's rich
    data for plain-text paste. Fixed with `PasteboardWatcher.ignoreOwnWrite()`.
-2. **HTML rich-text capture** (ADR-019) — in progress, on branch `feat/html-rich-capture`.
-   Browsers copy rich content as `public.html`, never `.rtf`; `PasteboardWatcher` only ever
-   captured `.rtf`, so web-sourced copies had no rich data at all (found testing item 1).
-   Design: convert HTML → RTF at capture time (native `NSAttributedString`, no new
-   dependency, no schema change — smaller in scope than first assumed, see ADR-019) rather
-   than storing a second rich-data type. Plan, spike results, and red tests are recorded in
-   ADR-019; implementation not yet started.
+2. ~~HTML rich-text capture~~ (ADR-019) — **DONE 2026-07-21.** Merged to `main`. Converts
+   HTML → RTF at capture time (native `NSAttributedString`, no new dependency, no schema
+   change) when no native `.rtf` is present, so browser-sourced copies get real rich data
+   instead of none. Amended after live testing against two real product pages (a
+   firearms-parts site, then Amazon): the naive conversion carried over background color
+   and link color as page decoration (a colored badge became a gray/tan box in Word), so
+   `HTMLRichTextConverter` now strips color specifically while keeping character-level
+   emphasis (bold/italic/strikethrough/underline) intact. Native `.rtf` from Word/Pages/
+   Notes is completely unaffected.
 3. **Drag-and-drop out of the panel** — drag an item card into a document. **Not planned in
    detail yet.** ADR-018 explicitly scoped this out: it shares the "what does interacting
    with the card body mean" question with items 1–2 above, but needs its own throwaway
