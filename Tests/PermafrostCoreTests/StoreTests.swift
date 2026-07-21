@@ -252,4 +252,71 @@ import Testing
         #expect(Thumbnailer.pngThumbnail(from: Data([0xde, 0xad, 0xbe, 0xef])) == nil)
         #expect(Thumbnailer.pngThumbnail(from: Data()) == nil)
     }
+
+    // MARK: - Concealed-content encryption (ADR-021, planned before implementation)
+    //
+    // These reference `ClipboardItem.encryptedData` and `ClipboardStore.revealText(for:)`,
+    // neither of which exist yet — intentionally red on this branch
+    // (feat/concealed-encryption) until implemented.
+
+    @Test func concealedTextIsEncryptedNotStoredInPlaintext() throws {
+        let store = try ClipboardStore.inMemory()
+        let item = try store.save(
+            ClipboardCapture(
+                text: "hunter2-but-longer", richData: Data("rich".utf8), isConcealed: true),
+            now: now)
+
+        #expect(item.text == nil)
+        #expect(item.richData == nil)
+        #expect(item.encryptedData != nil)
+        #expect(try store.revealText(for: item) == "hunter2-but-longer")
+    }
+
+    @Test func nonConcealedTextIsNeverEncrypted() throws {
+        let store = try ClipboardStore.inMemory()
+        let item = try store.save(ClipboardCapture(text: "ordinary text"), now: now)
+
+        #expect(item.text == "ordinary text")
+        #expect(item.encryptedData == nil)
+        #expect(try store.revealText(for: item) == "ordinary text")
+    }
+
+    @Test func concealedDedupStaysDecryptableAfterRecopy() throws {
+        let store = try ClipboardStore.inMemory()
+        _ = try store.save(
+            ClipboardCapture(text: "same secret", isConcealed: true), now: now)
+        let second = try store.save(
+            ClipboardCapture(text: "same secret", isConcealed: true),
+            now: now.addingTimeInterval(60))
+
+        #expect(try store.count() == 1)
+        #expect(try store.revealText(for: second) == "same secret")
+    }
+
+    @Test func transitioningToConcealedWipesExistingPlaintext() throws {
+        // A row already stored in cleartext (never concealed) must not keep its plaintext
+        // sitting around once a later copy of the same content is flagged concealed —
+        // the flag flipping true is exactly the moment the old plaintext must go.
+        let store = try ClipboardStore.inMemory()
+        _ = try store.save(ClipboardCapture(text: "secretish"), now: now)
+
+        let second = try store.save(
+            ClipboardCapture(text: "secretish", isConcealed: true),
+            now: now.addingTimeInterval(60))
+
+        #expect(try store.count() == 1)
+        #expect(second.isConcealed)
+        #expect(second.text == nil)
+        #expect(second.encryptedData != nil)
+        #expect(try store.revealText(for: second) == "secretish")
+    }
+
+    @Test func concealedContentIsExcludedFromTextSearchButStillBrowsable() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(
+            ClipboardCapture(text: "unfindable-secret-value", isConcealed: true), now: now)
+
+        #expect(try store.items().count == 1)
+        #expect(try store.items(matching: "unfindable-secret-value").isEmpty)
+    }
 }

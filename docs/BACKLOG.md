@@ -108,17 +108,20 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    zero custom gesture code to coexist with click-to-paste (spike-verified). All 5 manual
    checklist items passed, including a nice emergent bonus: dragging onto the Desktop with
    nothing to receive the drop makes Finder materialize it as a real `.txt`/`.png` file.
+4. **At-rest encryption for concealed (password) items** (ADR-021) — in progress, on
+   branch `feat/concealed-encryption`. Scoped to just the opt-in concealed category
+   (ADR-011), not the whole store, which is what makes it tractable — losing full-text
+   search over the rare, already-flagged concealed subset is an acceptable trade instead of
+   the blocker ADR-008's original "encrypt everything" framing ran into. Paired with
+   redact-by-default/reveal-on-demand display. Spike done before planning: a Keychain-held
+   key does **not** fail cleanly across this project's ad-hoc rebuild cycle — it triggers a
+   blocking, modal system authorization prompt that can hang the calling thread; the key is
+   fetched once at launch, off the main actor, specifically because of this finding. See
+   ADR-021 for the full design, including a pre-existing plaintext-export leak this happens
+   to fix along the way. Plan and red tests written; implementation next.
 
 ## Later
 
-- **At-rest encryption for concealed (password) items** — refined 2026-07-21: scoped to
-  just the opt-in concealed category rather than the whole store, which is what makes it
-  tractable (ADR-008's original "encrypt everything" framing stalled on FTS5 not being
-  able to search ciphertext at all; losing search over only the rare, already-flagged
-  concealed subset is an acceptable trade instead of a blocker). Paired with
-  redact-by-default/reveal-on-demand display for those items — see FUTURE_IDEAS.md for the
-  full design sketch and motivating use case. Still needs its own ADR (new column for
-  ciphertext is a real schema change) before planning in ADR-018/019/020 style.
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).
 - **Homebrew cask** — requires notarized artifact (v1.0).
 - **Localization scaffolding** — English-only for MVP.

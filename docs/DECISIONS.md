@@ -752,3 +752,125 @@ needs no custom gesture-disambiguation code at all, it already coexists with
 `onTapGesture` cleanly. Deliberately conservative on data richness (plain text/PNG only,
 matching the share-sheet precedent) and on panel lifecycle (no auto-close) — both are easy
 to revisit later, hard to un-ship if the first version overreaches.
+
+## ADR-021: At-rest encryption for concealed (password) items
+
+**Context.** Refines ADR-008's original "encrypt everything" framing (rejected — FTS5
+can't search ciphertext for any encrypted item) down to just the concealed/password
+category (ADR-011: recording these is already an explicit, risk-acknowledged opt-in).
+Motivating use case: a password that's recognizable on sight but not memorizable, kept
+around specifically to re-unlock a password-manager browser extension that itself then
+requires a hardware key — the project owner needs to *read* it occasionally, not just
+paste it blind, so any design has to support a real visual reveal, not merely
+enable-to-paste.
+
+**A real risk found via spike, not assumed.** Before designing the key-storage approach,
+tested whether a Keychain-held encryption key survives this project's own ad-hoc rebuild
+cycle (every `make-app.sh` run produces a new, unrelated code signature — the same root
+cause ADR-013–016 already documented for Accessibility/Input Monitoring). Built a
+throwaway command-line tool, wrote a generic-password Keychain item, did a **clean rebuild**
+(confirmed via `codesign -dvvv`: identifier and CDHash both genuinely changed), then tried
+to read the same item back. Result: **not** a clean "access denied" error and **not**
+silent success — macOS presented a blocking, modal `SecurityAgent` authorization dialog
+("`X` wants to use your confidential information... enter the login keychain password"),
+and the calling process hung for the ~10 minutes it sat unanswered on screen. This is a
+materially worse failure mode than the TCC-permission friction already documented in this
+project: a permission reset needs a user to notice a stale badge and click a button; this
+would **freeze the calling thread entirely** until a system dialog most users won't
+recognize is answered — and if that thread is the main actor, mid-paste, it takes the whole
+app down with it, at exactly the moment the feature exists to help. "Always Allow" doesn't
+durably fix this either, since ad-hoc signing means the *next* rebuild presents a different,
+still-unrecognized identity — this is expected to disappear once Developer ID signing
+lands (v1.0 gate), same as the TCC situation, not something to over-engineer around now.
+
+**Decision — mitigate, don't avoid.** Keychain remains the right, native, no-new-dependency
+mechanism (`Security` framework; `CryptoKit` for AES-GCM is already imported in
+`PermafrostCore` for content hashing) — the risk is real but bounded to ad-hoc dev builds,
+and the fix is about *when and where* the key is fetched, not avoiding Keychain. The key is
+retrieved/created exactly **once, at app launch, on a background queue** — never lazily on
+first concealed-paste, and never on the main actor. This means: (a) if a re-authorization
+prompt is ever needed, it surfaces at a predictable moment (launch) rather than mid-action;
+(b) even if unanswered, only concealed-item encrypt/decrypt is blocked — search, paste, and
+everything else for non-concealed history keeps working normally, since it never depended
+on this key in the first place.
+
+**Decision — scope: `.text` items only.** `org.nspasteboard.ConcealedType` is a marker
+password managers set on *text* copies; an `.image` capture carrying it is a scenario this
+codebase has never actually observed and isn't designed around. Concealed images (if they
+ever occur) keep today's behavior — stored in cleartext, a known, explicitly out-of-scope
+gap rather than a silent one.
+
+**Decision — schema.** One new column, `encrypted_data BLOB`, added via migration
+`v3_concealed_encryption`. For a concealed `.text` capture: `text` and `rich_data` are
+**never populated** (no plaintext, and no rich-formatting path either — preserving a
+password's bold/italic isn't a real requirement, and building a second encryption path for
+`rich_data` isn't worth it for that); `encrypted_data` holds `AES.GCM.SealedBox.combined`
+(nonce + ciphertext + tag in one blob — no separate IV column needed). `content_hash` is
+still computed from the *original* plaintext before encryption, so re-copying the same
+password still dedupes correctly against its existing (encrypted) row. The dedup path in
+`ClipboardStore.save` needs one correctness fix beyond just adding the encrypt step: today
+it unconditionally does `existing.richData = capture.richData` and ORs `isConcealed` — if a
+row was previously stored in cleartext as *not* concealed and a later copy of the identical
+text arrives flagged concealed, the existing plaintext must be wiped and replaced with
+ciphertext at that point, not left sitting in cleartext under a newly-true `isConcealed`
+flag. Both the fresh-insert and dedup-update paths route through the same
+encrypt-or-passthrough step so this can't be missed in one path and not the other.
+
+**Decision — FTS stays correct with no special-case code.** GRDB's FTS5 sync only indexes
+whatever's actually in the synchronized `text`/`ocr_text` columns; since concealed rows
+never populate `text`, the auto-generated sync triggers index nothing for them — the row
+still exists (browsable, sortable, filterable by `source_app`/dates/pin state, all in plain
+columns untouched by any of this) but a content search simply never matches it. No explicit
+exclusion logic needed — this falls out of the schema decision above for free.
+
+**Decision — UI: redact by default, reveal on demand.** Concealed items show `••••••••`
+in the panel list and preview pane instead of their content. Reveal is a dedicated
+hover-row toggle (same non-bubbling pattern already proven for pin/share/delete/paste-as-
+plain-text, ADR-012/018) — clicking it decrypts and displays the actual text in place,
+clicking again re-redacts. Not persisted across panel sessions: every fresh panel open
+starts redacted. A plain click on the card still commits-and-pastes as always (decrypting
+transparently for the paste itself via `PasteService`) — reveal is purely a *display*
+toggle, independent of paste, matching "I need to see it, not just be able to use it
+blind" directly.
+
+**Decision — a pre-existing leak this happens to fix.** `ImportExport.exportArchive`
+today writes `item.text` straight into the export manifest's JSON for *every* item,
+concealed included — meaning "Export History" currently writes recorded passwords in
+**plaintext** into a file on disk, with no special handling at all. Not something this ADR
+set out to fix, but leaving it unfixed while adding encryption elsewhere would be
+inconsistent to the point of pointlessness. `ManifestItem` gains an `encryptedDataFile`
+field (same blob-file pattern as `richDataFile`/`imageFile`) so a concealed item's
+ciphertext round-trips through export/import without ever touching plaintext.
+
+**Test plan.** The encryption logic itself is fully unit-testable with an injected,
+in-memory `SymmetricKey` — no real Keychain touched in tests, matching how `TextRecognizing`/
+`HTMLRichTextConverting` are faked today:
+
+- New `ConcealedContentCipherTests.swift` (`PermafrostCoreTests`): seal-then-open round
+  trips to the original text; opening with the *wrong* key fails rather than returning
+  garbage; sealing the same plaintext twice produces different ciphertext (fresh nonce
+  each time — sealed boxes must never be deterministic).
+- `ClipboardStoreTests` additions: saving a concealed text capture persists `encrypted_data`
+  and leaves `text`/`rich_data` nil; a non-concealed capture is completely unaffected
+  (`encrypted_data` stays nil); re-copying the same concealed text dedupes onto the
+  existing encrypted row via `content_hash`; a previously-plaintext row that later gets
+  copied again while concealed has its plaintext wiped and replaced with ciphertext, not
+  left alongside a flipped flag; a plain (non-FTS) query returns concealed rows, but an
+  FTS search for their actual content does not.
+- `ImportExportTests` additions: round-trip a concealed item through export → import and
+  confirm the *re-imported* row can still be decrypted with the same key, and confirm the
+  exported manifest JSON contains no plaintext for that item.
+- **Not** unit-tested, by design, matching this project's established boundary (docs/
+  TESTING.md keeps AppKit/OS-integration code manual-only): Keychain key retrieval itself,
+  the redact/reveal UI toggle, and decrypt-on-paste. Manual checklist added to
+  docs/TESTING.md covering all three, plus the specific ad-hoc-rebuild re-authorization
+  scenario this ADR's spike surfaced.
+
+**Consequences.** Real schema change (one new nullable column, additive, no migration risk
+to existing rows). No new dependency — `Security`/`CryptoKit` are both system frameworks.
+Meaningfully smaller and more tractable than ADR-008's original all-or-nothing framing,
+and fixes an undocumented plaintext-export gap as a side effect. The one real open cost is
+the ad-hoc-signing Keychain friction during **development** specifically — mitigated (launch-
+time, background-thread key fetch) but not eliminated, and expected to disappear entirely
+once Developer ID signing lands at v1.0, exactly like the TCC permission friction it
+parallels.

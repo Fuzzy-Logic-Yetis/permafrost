@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -14,7 +15,10 @@ import Testing
     }
 
     @Test func roundTripPreservesContentPinsAndTimestamps() throws {
-        let source = try ClipboardStore.inMemory()
+        // Same key on both ends simulates the real scenario: import/export happens on the
+        // same machine against the same Keychain-backed key (ADR-021).
+        let key = SymmetricKey(size: .bits256)
+        let source = try ClipboardStore.inMemory(concealedContentKey: key)
         let created = now.addingTimeInterval(-5 * 24 * 3600)
         let pinned = try source.save(
             ClipboardCapture(text: "pinned text", sourceApp: "TextEdit"), now: created)
@@ -28,7 +32,15 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         try ImportExport.exportArchive(from: source, to: dir)
 
-        let destination = try ClipboardStore.inMemory()
+        // ADR-021: the export manifest must never contain a concealed item's plaintext —
+        // this was a real, pre-existing leak (every item's `text` was written verbatim)
+        // that adding encryption elsewhere would be pointless to leave unfixed.
+        let manifestText = try String(
+            contentsOf: dir.appendingPathComponent(ImportExport.manifestFileName),
+            encoding: .utf8)
+        #expect(!manifestText.contains("secret"))
+
+        let destination = try ClipboardStore.inMemory(concealedContentKey: key)
         let imported = try ImportExport.importArchive(from: dir, into: destination)
         #expect(imported == 3)
 
@@ -40,7 +52,9 @@ import Testing
         #expect(text?.sourceApp == "TextEdit")
         #expect(text?.createdAt.timeIntervalSince1970 == created.timeIntervalSince1970)
 
-        #expect(items.contains { $0.isConcealed && $0.text == "secret" })
+        let concealed = try #require(items.first { $0.isConcealed })
+        #expect(concealed.text == nil)
+        #expect(try destination.revealText(for: concealed) == "secret")
 
         let image = items.first { $0.kind == .image }
         #expect(image?.imageData == TestImages.png(width: 64, height: 32))
