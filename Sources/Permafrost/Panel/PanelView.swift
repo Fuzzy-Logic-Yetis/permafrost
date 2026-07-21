@@ -1,3 +1,4 @@
+import AppKit
 import PermafrostCore
 import SwiftUI
 
@@ -5,6 +6,8 @@ import SwiftUI
 struct PanelView: View {
     @ObservedObject var model: PanelModel
     @FocusState private var searchFocused: Bool
+    @State private var isSharePickerOpen = false
+    @State private var suppressCardCommitsUntil: Date?
 
     var body: some View {
         ZStack {
@@ -23,12 +26,21 @@ struct PanelView: View {
                 PreviewPane(
                     item: item,
                     onCopyOCRText: { model.copySelectedOCRText() },
-                    onPasteOCRText: { model.pasteSelectedOCRText() }
+                    onPasteOCRText: { model.pasteSelectedOCRText() },
+                    onCopyOCRSelection: { model.scheduleReloadAfterExternalCopy() }
                 )
             }
         }
         .frame(width: 440, height: 500)
         .background(.regularMaterial)
+        .onReceive(NotificationCenter.default.publisher(for: .sharePickerWillOpen)) { _ in
+            isSharePickerOpen = true
+            suppressCardCommitsUntil = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .sharePickerDidClose)) { _ in
+            isSharePickerOpen = false
+            suppressCardCommitsUntil = Date().addingTimeInterval(0.35)
+        }
     }
 
     private var searchBar: some View {
@@ -67,10 +79,14 @@ struct PanelView: View {
                             isSelected: index == model.selectedIndex,
                             quickPasteIndex: index < recentCount && index < 9 ? index + 1 : nil,
                             onTogglePin: { if let id = item.id { model.togglePin(id: id) } },
-                            onDelete: { if let id = item.id { model.deleteItem(id: id) } }
+                            onDelete: { if let id = item.id { model.deleteItem(id: id) } },
+                            onPreviewOCR: { model.showPreview(index: index) }
                         )
                         .id(item.id)
-                        .onTapGesture { model.commit(index: index) }
+                        .onTapGesture {
+                            guard canCommitCardTap else { return }
+                            model.commit(index: index)
+                        }
                     }
                 }
                 .padding(8)
@@ -81,6 +97,14 @@ struct PanelView: View {
                 }
             }
         }
+    }
+
+    private var canCommitCardTap: Bool {
+        guard !isSharePickerOpen else { return false }
+        if let suppressCardCommitsUntil, Date() < suppressCardCommitsUntil {
+            return false
+        }
+        return true
     }
 
     private func sectionHeader(at index: Int) -> String? {
@@ -157,19 +181,21 @@ private struct ItemCard: View {
     let quickPasteIndex: Int?
     let onTogglePin: () -> Void
     let onDelete: () -> Void
+    let onPreviewOCR: () -> Void
 
     @State private var isHovering = false
+    @State private var isSharing = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             content
             Spacer(minLength: 0)
             // Fixed width regardless of hover state: the badge column (at rest) and
-            // the 3-button row (on hover) have very different natural widths, and
-            // without pinning this slot, `content` would reflow/re-wrap every time
-            // the mouse moved onto a different card.
+            // the hover button row have different natural widths, and without pinning
+            // this slot, `content` would reflow/re-wrap every time the mouse moved onto
+            // a different card.
             trailing
-                .frame(width: 60, alignment: .trailing)
+                .frame(width: 78, alignment: .trailing)
         }
         .padding(8)
         .background(
@@ -189,17 +215,29 @@ private struct ItemCard: View {
     /// screenshot share panel, so the panel doesn't require the keyboard.
     @ViewBuilder
     private var trailing: some View {
-        if isHovering {
+        if isHovering || isSharing {
             HStack(spacing: 6) {
+                if item.hasOCRText {
+                    Button(action: onPreviewOCR) {
+                        Image(systemName: "text.viewfinder")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
+                    .help("Open recognized text")
+                }
+
                 Button(action: onTogglePin) {
                     Image(systemName: item.isPinned ? "pin.slash" : "pin")
                 }
                 .buttonStyle(.plain)
                 .help(item.isPinned ? "Unpin" : "Pin")
 
-                ShareButton(items: item.shareableItems)
-                    .frame(width: 15, height: 15)
-                    .help("Share")
+                ShareButton(
+                    items: item.shareableItems,
+                    onPresentationChanged: { isSharing = $0 }
+                )
+                .frame(width: 15, height: 15)
+                .help("Share")
 
                 Button(action: onDelete) {
                     Image(systemName: "trash")
@@ -222,11 +260,14 @@ private struct ItemCard: View {
                         .foregroundStyle(.yellow)
                 }
                 if item.hasOCRText {
-                    Label("OCR", systemImage: "text.viewfinder")
-                        .labelStyle(.iconOnly)
-                        .font(.caption2)
-                        .foregroundStyle(.blue)
-                        .help("Recognized text")
+                    Button(action: onPreviewOCR) {
+                        Label("OCR", systemImage: "text.viewfinder")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption2)
+                    .foregroundStyle(.blue)
+                    .help("Open recognized text")
                 }
                 if let quickPasteIndex {
                     Text("⌘\(quickPasteIndex)")
@@ -254,9 +295,29 @@ private struct ItemCard: View {
                     Label("Image", systemImage: "photo")
                         .foregroundStyle(.secondary)
                 }
+                if let snippet = ocrSnippet {
+                    Label {
+                        Text(snippet)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                    } icon: {
+                        Image(systemName: "text.viewfinder")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
             caption
         }
+    }
+
+    private var ocrSnippet: String? {
+        guard item.kind == .image, let text = item.ocrText else { return nil }
+        let collapsed = text
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return collapsed.isEmpty ? nil : collapsed
     }
 
     private var caption: some View {
@@ -268,13 +329,105 @@ private struct ItemCard: View {
     private var captionText: String {
         var parts: [String] = []
         if let app = item.sourceApp { parts.append(app) }
-        parts.append(item.lastUsedAt.formatted(.relative(presentation: .named)))
+        parts.append(ClipboardTimestampFormatter.caption(for: item))
         if item.kind == .image, let data = item.imageData,
             let size = Thumbnailer.pixelSize(of: data)
         {
             parts.append("\(size.width)×\(size.height)")
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+private struct SelectablePlainTextView: NSViewRepresentable {
+    let text: String
+    var onCopySelection: (String) -> Void = { _ in }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+
+        let textView = CopyingTextView()
+        textView.onCopySelection = onCopySelection
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.drawsBackground = false
+        textView.textContainerInset = NSSize(width: 6, height: 6)
+        textView.font = NSFont.preferredFont(forTextStyle: .body)
+        textView.textColor = .labelColor
+        textView.string = text
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: scrollView.contentSize.width,
+            height: .greatestFiniteMagnitude
+        )
+        textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+
+        scrollView.documentView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? CopyingTextView else { return }
+        if textView.string != text {
+            textView.string = text
+        }
+        textView.font = NSFont.preferredFont(forTextStyle: .body)
+        textView.textColor = .labelColor
+        textView.onCopySelection = onCopySelection
+    }
+}
+
+private final class CopyingTextView: NSTextView {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers == .command, event.charactersIgnoringModifiers?.lowercased() == "c" {
+            copySelectionToPasteboard()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func copy(_ sender: Any?) {
+        copySelectionToPasteboard()
+    }
+
+    private func copySelectionToPasteboard() {
+        let selected = selectedRange()
+        guard selected.length > 0, let range = Range(selected, in: string) else {
+            NSSound.beep()
+            return
+        }
+        let selection = String(string[range])
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(selection, forType: .string)
+        onCopySelection(selection)
+    }
+
+    var onCopySelection: (String) -> Void = { _ in }
+}
+
+private enum ClipboardTimestampFormatter {
+    static func caption(for item: ClipboardItem) -> String {
+        let created = item.createdAt.formatted(.relative(presentation: .named))
+        let lastUsed = item.lastUsedAt.formatted(.relative(presentation: .named))
+        guard abs(item.lastUsedAt.timeIntervalSince(item.createdAt)) >= 60 else {
+            return "copied \(lastUsed)"
+        }
+        return "first copied \(created) · last used/copied \(lastUsed)"
     }
 }
 
@@ -316,6 +469,9 @@ private struct PreviewPane: View {
     let item: ClipboardItem
     let onCopyOCRText: () -> Void
     let onPasteOCRText: () -> Void
+    let onCopyOCRSelection: () -> Void
+
+    @State private var copiedSelectionMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -360,10 +516,35 @@ private struct PreviewPane: View {
                             Label("Recognized Text", systemImage: "text.viewfinder")
                                 .font(.headline)
                             Spacer()
-                            Button("Copy Text", action: onCopyOCRText)
-                            Button("Paste Text", action: onPasteOCRText)
+                            if let copiedSelectionMessage {
+                                Text(copiedSelectionMessage)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.green)
+                            } else {
+                                Text("Scroll/select below; ⌘C copies selection.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Button("Copy All", action: onCopyOCRText)
+                            Button("Paste All", action: onPasteOCRText)
                         }
-                        TextPreview(text: ocrText, lineLimit: nil, selectable: true)
+                        HStack(spacing: 12) {
+                            KeyHint(key: "⌘C", label: "copy selection")
+                            KeyHint(key: "⌥⌘C", label: "copy all")
+                            KeyHint(key: "⇧⏎", label: "paste all")
+                        }
+                        SelectablePlainTextView(
+                            text: ocrText,
+                            onCopySelection: { selection in
+                                copiedSelectionMessage = "Copied \(selection.count) characters"
+                                onCopyOCRSelection()
+                            }
+                        )
+                        .frame(height: 170)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(.separator, lineWidth: 1)
+                            )
                     }
                 } else {
                     Text("OCR text will appear here after recognition finishes.")
@@ -377,7 +558,7 @@ private struct PreviewPane: View {
     private var captionText: String {
         var parts: [String] = []
         if let app = item.sourceApp { parts.append(app) }
-        parts.append(item.lastUsedAt.formatted(.relative(presentation: .named)))
+        parts.append(ClipboardTimestampFormatter.caption(for: item))
         if item.kind == .image, let data = item.imageData,
             let size = Thumbnailer.pixelSize(of: data)
         {

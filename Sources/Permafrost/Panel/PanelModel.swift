@@ -63,8 +63,22 @@ final class PanelModel: ObservableObject {
         isPreviewShown.toggle()
     }
 
+    func showPreview(index: Int) {
+        guard items.indices.contains(index) else { return }
+        selectedIndex = index
+        isPreviewShown = true
+    }
+
     func closePreview() {
         isPreviewShown = false
+        scheduleReloadAfterExternalCopy()
+    }
+
+    func scheduleReloadAfterExternalCopy() {
+        reloadPreservingSelection()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            MainActor.assumeIsolated { self?.reloadPreservingSelection() }
+        }
     }
 
     /// The panel loads at most this many rows; `countLabel` reflects that cap

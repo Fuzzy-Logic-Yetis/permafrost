@@ -13,6 +13,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let panel: NSPanel
     private let model: PanelModel
     private var keyMonitor: Any?
+    private var sharePickerObserverTokens: [NSObjectProtocol] = []
+    private var isSharePickerOpen = false
 
     init(model: PanelModel) {
         self.model = model
@@ -41,6 +43,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentView = hosting
 
         model.onCommit = { [weak self] in self?.hide() }
+        observeSharePickerPresentation()
     }
 
     var isVisible: Bool { panel.isVisible }
@@ -62,7 +65,27 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func windowDidResignKey(_ notification: Notification) {
+        guard !isSharePickerOpen else { return }
         hide()
+    }
+
+    private func observeSharePickerPresentation() {
+        sharePickerObserverTokens = [
+            NotificationCenter.default.addObserver(
+                forName: .sharePickerWillOpen,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.isSharePickerOpen = true }
+            },
+            NotificationCenter.default.addObserver(
+                forName: .sharePickerDidClose,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.isSharePickerOpen = false }
+            },
+        ]
     }
 
     // MARK: - Placement
@@ -118,6 +141,19 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// Returns true when the event was consumed.
     private func handle(_ input: KeyInput) -> Bool {
         guard panel.isKeyWindow else { return false }
+
+        if model.isPreviewShown, model.selectedItem?.hasOCRText == true {
+            if input.modifiers == [.option, .command], input.baseKey == "c" {
+                model.copySelectedOCRText()
+                return true
+            }
+            if input.modifiers == .shift,
+                input.keyCode == kVKReturn || input.keyCode == kVKKeypadEnter
+            {
+                model.pasteSelectedOCRText()
+                return true
+            }
+        }
 
         switch input.keyCode {
         case kVKUpArrow:
