@@ -88,30 +88,28 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 
 ## Next up (v0.4)
 
-1. **Paste as plain text** (⇧⏎ + hover icon) — planned, ADR-018, on branch
-   `feat/paste-plain-text`. Design, seam, and test plan are recorded in ADR-018; failing
-   Swift Testing coverage for the extractable logic lands before the implementation itself,
-   per project owner's request. Build order: `PasteService`/`PanelPasteServing` seam →
-   `PanelModel` entry points → red tests → implementation → hover icon + `⇧⏎` wiring →
-   docs/UX.md update → manual checklist addition → merge.
-2. **Drag-and-drop out of the panel** — drag an item card into a document. **Not planned in
+1. ~~Paste as plain text~~ (⇧⏎ + hover icon) — **DONE 2026-07-21, ADR-018.** Merged to
+   `main`. Along the way, manual testing surfaced and fixed a real data-loss bug: any paste
+   (rich or plain) was being re-captured by `PasteboardWatcher` as if it were a new incoming
+   copy, which silently self-deduped for rich paste but destroyed the source item's rich
+   data for plain-text paste. Fixed with `PasteboardWatcher.ignoreOwnWrite()`.
+2. **HTML rich-text capture** (ADR-019) — in progress, on branch `feat/html-rich-capture`.
+   Browsers copy rich content as `public.html`, never `.rtf`; `PasteboardWatcher` only ever
+   captured `.rtf`, so web-sourced copies had no rich data at all (found testing item 1).
+   Design: convert HTML → RTF at capture time (native `NSAttributedString`, no new
+   dependency, no schema change — smaller in scope than first assumed, see ADR-019) rather
+   than storing a second rich-data type. Plan, spike results, and red tests are recorded in
+   ADR-019; implementation not yet started.
+3. **Drag-and-drop out of the panel** — drag an item card into a document. **Not planned in
    detail yet.** ADR-018 explicitly scoped this out: it shares the "what does interacting
-   with the card body mean" question with item 1 above, but needs its own throwaway
+   with the card body mean" question with items 1–2 above, but needs its own throwaway
    technical spike first (does SwiftUI's `.draggable`/`onDrag` coexist with the existing
    `LazyVStack` + `ScrollView` + `onTapGesture` without regressing click-to-paste?) before a
-   real design/test plan can be written with confidence. Spike happens after item 1 ships,
-   not in parallel with it — one interaction-model change in flight at a time.
+   real design/test plan can be written with confidence. Comes after item 2 ships, not in
+   parallel with it — one interaction-model change in flight at a time.
 
 ## Later
 
-- **Capture/paste `public.html`, not just `.rtf`, as rich data** — found 2026-07-21
-  testing ADR-018 (paste as plain text): `PasteboardWatcher` only ever reads
-  `pasteboard.data(forType: .rtf)` into `richData`; browsers (Chrome/Safari confirmed live)
-  copy rich content as `public.html`, never `.rtf`, so web-sourced rich text is captured
-  with `richData == nil` — indistinguishable from plain text on paste, rich or plain,
-  because there was never anything to restore. Native rich-text apps (Word, Pages, Notes)
-  do write `.rtf`, so this only affects browser-sourced content. Needs a design pass, not a
-  quick fix: whether to store both types, prefer one, or convert between them.
 - **Optional at-rest encryption** — CryptoKit AES-GCM blobs, key in Keychain (ADR-008 has
   the constraint analysis; FUTURE_IDEAS.md has the design sketch).
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).

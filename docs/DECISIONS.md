@@ -541,3 +541,87 @@ drag-and-drop needs a throwaway technical spike (does SwiftUI's `.draggable`/`on
 coexist cleanly with the existing `LazyVStack` + `ScrollView` + `onTapGesture` without a
 regression to click-to-paste?) before a real plan can be written with confidence. That spike
 and its own ADR come after this feature ships and merges, not in parallel with it.
+
+## ADR-019: HTML→RTF conversion at capture time, not a second stored rich-data type
+
+**Context.** Testing ADR-018 (paste as plain text) surfaced a real gap: content copied from
+a browser (Chrome/Safari confirmed live, 2026-07-21) carries `public.html` on the
+pasteboard, never `.rtf` — `PasteboardWatcher` only ever reads `.rtf` into `richData`, so a
+web-sourced item is captured with no rich data at all, making rich-vs-plain paste
+indistinguishable for it (not a bug in ADR-018, a pre-existing capture-scope gap; see
+BACKLOG.md and the ADR-018 follow-up notes above).
+
+Initial framing (BACKLOG.md, written before this ADR) assumed storing HTML alongside RTF
+would need a schema change (a type tag or a second column) and separate paste-back logic
+per type — real work, its own ADR. Project owner's counter-proposal: don't store HTML at
+all — **convert it to RTF at capture time** and keep using the existing single `rich_data`
+column and existing RTF-only paste-back path unchanged. This collapses the schema-change
+concern entirely: `rich_data` stays "RTF, whether original or synthesized," full stop.
+
+**Decision — precedence.** Prefer native `.rtf` when the source app provides it (lossless,
+exact — Word/Pages/Notes already do). Only attempt HTML→RTF conversion when `.rtf` is
+absent. If conversion fails or produces nothing usable, fall back to today's behavior
+(plain text only, no rich data) rather than blocking the capture.
+
+**Decision — conversion is best-effort, not lossless.** RTF cannot represent everything CSS
+can (web fonts, some layout/positioning, certain modern HTML). This is explicitly acceptable
+— *some* recovered formatting beats today's *none* for web content, and native apps that
+already provide real RTF are completely unaffected by this change.
+
+**Decision — native API, verified before committing to the design.** macOS's
+`NSAttributedString(data:options:[.documentType: .html])` → `.data(from:documentAttributes:
+[.documentType: .rtf])` round-trip does the conversion with no new dependency (ADR-003's
+one-dependency budget stays at GRDB). Before writing this down as fact, spiked it directly
+(2026-07-21, see conversation record): converted a small bold/strikethrough HTML sample on
+the main thread, a `DispatchQueue.sync` background queue, and a detached thread. All three
+succeeded and preserved the bold RTF marker (`\b`). Timing: **first call in the process
+~0.65s** (one-time framework warmup, plausibly WebKit's HTML importer initializing), **every
+call after that ~2.5ms**. The one-time cost must never land on the main thread, or a user's
+first-ever web copy could visibly hitch the UI — this fixes where the conversion has to run.
+
+**Decision — where it runs.** `PasteboardWatcher.makeCapture()` stays on the main actor and
+fast: it now also reads `.html` bytes, but *only* when `.rtf` is absent (no point holding
+both), and hands them through unconverted. `ClipboardCapture` (PermafrostCore) gets one new
+transient field, `htmlData: Data?` — plain bytes, no AppKit, so this doesn't violate
+PermafrostCore's "never imports AppKit" rule. The actual conversion happens in
+`CaptureSaveQueue`'s existing background queue (`Sources/Permafrost/CaptureSaveQueue.swift`)
+— the same place thumbnail generation, hashing, and OCR already run off the main thread —
+*before* `store.save(capture:)` is called, so `ClipboardStore` needs zero changes: it
+already persists whatever ends up in `capture.richData`, exactly like today.
+`HTMLRichTextConverting` is a small injectable protocol (mirrors `TextRecognizing`/OCR
+precisely — real implementation uses `NSAttributedString`, needs `import AppKit`, so it
+lives in the `Permafrost` executable target, not PermafrostCore) with a
+`FakeHTMLRichTextConverter` for tests, following the exact same shape as
+`FakeQueueTextRecognizer` in `CaptureSaveQueueTests.swift`.
+
+**Test plan (written before implementation, per project owner's established practice).**
+
+- New `HTMLRichTextConverterTests.swift` (`PermafrostTests`, needs AppKit so can't live in
+  `PermafrostCoreTests`): converting bold/strikethrough HTML produces RTF containing
+  recognizable formatting markers; malformed/empty HTML returns `nil` gracefully rather than
+  crashing.
+- Extend `CaptureSaveQueueTests.swift` with a `FakeHTMLRichTextConverter` (call-count
+  tracked, same pattern as the existing OCR fake): a text capture with `richData: nil,
+  htmlData: <bytes>` ends up persisted with the fake's converted output as `richData`
+  (fallback path exercised); a capture with **both** `richData` and `htmlData` present
+  persists the native `richData` unchanged and the converter is never invoked (precedence
+  proven, not assumed); a capture with neither is unaffected (existing behavior, explicit
+  coverage for this feature rather than relying on it being incidentally true).
+- These reference `ClipboardCapture.htmlData`, `HTMLRichTextConverting`, and
+  `HTMLRichTextConverter`, none of which exist yet — intentionally red on this branch
+  (`feat/html-rich-capture`), same acceptance rule as ADR-018: the branch tip must build and
+  pass `swift test` before merge, intermediate commits don't have to.
+- Manual checklist addition to docs/TESTING.md (once implemented): copy formatted text from
+  a browser → paste (rich, `⏎`) into a rich-text app → confirm *some* formatting survives
+  (not necessarily identical to the source); paste as plain text (`⇧⏎`) → confirm it's still
+  fully stripped; copy from Word/Pages (native RTF present) → confirm behavior is bit-for-bit
+  unchanged from before this ADR (native RTF path never touches the new conversion code).
+
+**Consequences.** No schema change, no new dependency, no `ClipboardStore`/import-export
+changes — smaller in scope than BACKLOG.md's original framing, thanks to converting at
+capture time instead of storing a second rich-data type. The one-time ~0.65s warmup cost is
+real but happens off the main thread and only once per app launch (subsequent conversions
+are ~2.5ms) — acceptable given docs/TESTING.md's precedent of not chasing perfect first-call
+latency for background capture work (OCR's Vision framework has a similar cold-start cost
+today). Fidelity is intentionally best-effort; not chasing perfect HTML/CSS→RTF fidelity is
+a deliberate non-goal, not an oversight.
