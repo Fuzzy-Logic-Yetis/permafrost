@@ -887,3 +887,26 @@ the ad-hoc-signing Keychain friction during **development** specifically — mit
 time, background-thread key fetch) but not eliminated, and expected to disappear entirely
 once Developer ID signing lands at v1.0, exactly like the TCC permission friction it
 parallels.
+
+**Follow-up 2026-07-21: retroactive "Mark as Concealed."** Project owner found a real gap
+using the feature: pinned passwords with no 🔑 badge at all, sitting in plaintext.
+`isConcealed` is set entirely by the *source* app marking the pasteboard
+(`org.nspasteboard.ConcealedType`) at capture time — plenty of real passwords never carry
+it (typed and ⌘C'd, copied from Notes, a password manager that doesn't implement the
+marker), and there was no way to protect one after the fact. Added
+`ClipboardStore.markConcealed(id:)`: encrypts an existing `.text` item's content, wipes its
+plaintext `text`/`rich_data`, sets `isConcealed`. Reuses the exact same transition-to-
+concealed logic already proven in `save`'s dedup path, just reachable as a deliberate user
+action instead of only firing automatically on a matching re-copy. Deliberately **one-way**
+— no "unmark" — matching `isConcealed`'s existing sticky-in-the-safer-direction rule
+(`dedupIsConcealedIsStickyInSaferDirection`); a no-op for `.image` items (concealed
+encryption is still text-only) and for items already concealed. Surfaced as a right-click
+context-menu item ("Mark as Concealed") rather than a hover-row icon — this is a rare,
+corrective action, not a frequent one, so it doesn't need to compete for space in the
+already-busy hover row (pin/share/delete/📄/👁), and a context menu is a standard, zero-
+gesture-conflict place for an infrequent per-item action. Also fixed, found while touching
+this code: dragging a concealed card (ADR-020) was dragging an empty string, since
+`item.text` is nil for encrypted rows — now decrypts on demand for the drag payload too,
+consistent with paste already doing the same. Covered by
+`markConcealedEncryptsAnExistingPlaintextItem`, `markConcealedIsANoOpForImageItems`,
+`markConcealedIsANoOpForAlreadyConcealedItems`.

@@ -252,6 +252,29 @@ public final class ClipboardStore: Sendable {
         }
     }
 
+    /// Retroactively encrypts an existing `.text` item that wasn't captured as concealed
+    /// (ADR-021 follow-up) — the marker that flags a copy as concealed is set by the
+    /// *source* app at capture time (`org.nspasteboard.ConcealedType`); plenty of real
+    /// passwords never carry it (typed and ⌘C'd, copied from Notes, a password manager
+    /// that doesn't implement the marker), so there's no way to protect them without a
+    /// manual, deliberate opt-in after the fact. One-way, same as the automatic
+    /// transition-to-concealed path in `save` — no "unmark" exists, matching
+    /// `isConcealed`'s existing "sticky in the safer direction" rule. A no-op for
+    /// `.image` items (concealed encryption is scoped to text, ADR-021) and for items
+    /// already concealed.
+    public func markConcealed(id: Int64) throws {
+        try dbQueue.write { db in
+            guard var item = try ClipboardItem.fetchOne(db, key: id),
+                item.kind == .text, !item.isConcealed
+            else { return }
+            item.encryptedData = try cipher.seal(item.text ?? "")
+            item.text = nil
+            item.richData = nil
+            item.isConcealed = true
+            try item.update(db)
+        }
+    }
+
     public func markUsed(id: Int64, now: Date = Date()) throws {
         try dbQueue.write { db in
             try db.execute(

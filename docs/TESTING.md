@@ -333,6 +333,19 @@ outside the app (e.g. CI or a broken build that won't launch):
     timeout, falls back to a session-only key). If that happens, previously-recorded
     concealed items won't decrypt correctly *this session* — expected and specific to
     ad-hoc dev signing, not a bug; resolves permanently once Developer ID signing lands.
+27. **Mark as Concealed (ADR-021 follow-up)**: copy a password-shaped string through a
+    plain route that doesn't set the source app's concealed marker (type it and ⌘C, or
+    copy from Notes/TextEdit) → confirm it shows up as ordinary, unredacted text (no 🔑, no
+    eye icon) — proving the gap this closes is real. Right-click the card → "Mark as
+    Concealed" appears → click it → the card immediately redacts (`••••••••••••`), gains
+    the 🔑 badge and the eye reveal icon, exactly like a natively-concealed item. Confirm
+    in `store.sqlite`: `text`/`rich_data` are now NULL, `encrypted_data` is populated.
+    Confirm it's no longer findable via search. Right-click it again → "Mark as Concealed"
+    should **not** appear anymore (no "unmark," one-way only). Right-click an `.image` card
+    → the option should not appear at all (text-only). Drag a concealed card (mouse, not
+    automatable — see ADR-020's own note on this) onto a native app → confirm the real
+    decrypted text lands, not an empty drop (found 2026-07-21: this was silently dragging
+    an empty string before the fix, since `item.text` is nil for encrypted rows).
 
 ## Performance spot checks
 

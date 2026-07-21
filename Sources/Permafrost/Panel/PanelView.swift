@@ -88,10 +88,18 @@ struct PanelView: View {
                         // ADR-020: drag as plain text/PNG, mirroring the existing
                         // shareableItems/share-sheet precedent rather than carrying RTF.
                         // Verified via spike that .draggable() needs no custom gesture code
-                        // to coexist with the onTapGesture commit below.
+                        // to coexist with the onTapGesture commit below. ADR-021: a concealed
+                        // item's `.text` is nil (encrypted) — decrypt on demand for the drag
+                        // payload too, same as paste already does, rather than silently
+                        // dragging an empty string.
                         Group {
                             if item.kind == .text {
-                                card.draggable(item.text ?? "")
+                                // Inlined (not a `let`) so `.draggable`'s @autoclosure
+                                // defers the decrypt to actual drag start, not every render.
+                                card.draggable(
+                                    item.isConcealed
+                                        ? (model.revealConcealedText(for: item) ?? "")
+                                        : (item.text ?? ""))
                             } else if let imageData = item.imageData {
                                 card.draggable(DraggableImageData(data: imageData))
                             } else {
@@ -102,6 +110,15 @@ struct PanelView: View {
                         .onTapGesture {
                             guard canCommitCardTap else { return }
                             model.commit(index: index)
+                        }
+                        .contextMenu {
+                            // ADR-021 follow-up: retroactive concealment for content
+                            // captured without the source app's concealed marker.
+                            if item.kind == .text, !item.isConcealed, let id = item.id {
+                                Button("Mark as Concealed") {
+                                    model.markConcealed(id: id)
+                                }
+                            }
                         }
                     }
                 }

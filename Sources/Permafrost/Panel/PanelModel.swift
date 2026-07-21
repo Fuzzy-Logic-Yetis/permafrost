@@ -217,6 +217,21 @@ final class PanelModel: ObservableObject {
         }
     }
 
+    /// ADR-021 follow-up: retroactively encrypts an existing `.text` item that wasn't
+    /// captured as concealed. One-way — no "unmark," matching `isConcealed`'s existing
+    /// sticky-in-the-safer-direction rule.
+    func markConcealed(id: Int64) {
+        do {
+            try store.markConcealed(id: id)
+        } catch {
+            Log.store.error("mark concealed failed: \(error.localizedDescription)")
+        }
+        reload()
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            selectedIndex = index
+        }
+    }
+
     func deleteItem(id: Int64) {
         let previousSelection = selectedIndex
         let wasSelectedItem = selectedItem?.id == id

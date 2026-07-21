@@ -319,4 +319,48 @@ import Testing
         #expect(try store.items().count == 1)
         #expect(try store.items(matching: "unfindable-secret-value").isEmpty)
     }
+
+    @Test func markConcealedEncryptsAnExistingPlaintextItem() throws {
+        // ADR-021 follow-up: a password captured without the source app's concealed
+        // marker (typed and ⌘C'd, copied from Notes, etc.) sits in plaintext until
+        // manually flagged after the fact.
+        let store = try ClipboardStore.inMemory()
+        let item = try store.save(
+            ClipboardCapture(text: "wY72^C$FMfZeE@j", richData: Data("rich".utf8)), now: now)
+        try store.setPinned(true, id: item.id!)
+
+        try store.markConcealed(id: item.id!)
+
+        let updated = try #require(try store.items().first)
+        #expect(updated.isConcealed)
+        #expect(updated.text == nil)
+        #expect(updated.richData == nil)
+        #expect(updated.isPinned)
+        #expect(try store.revealText(for: updated) == "wY72^C$FMfZeE@j")
+        #expect(try store.items(matching: "wY72").isEmpty)
+    }
+
+    @Test func markConcealedIsANoOpForImageItems() throws {
+        let store = try ClipboardStore.inMemory()
+        let png = TestImages.png(width: 10, height: 10)
+        let item = try store.save(ClipboardCapture(imageData: png), now: now)
+
+        try store.markConcealed(id: item.id!)
+
+        let updated = try #require(try store.items().first)
+        #expect(!updated.isConcealed)
+        #expect(updated.imageData == png)
+    }
+
+    @Test func markConcealedIsANoOpForAlreadyConcealedItems() throws {
+        let store = try ClipboardStore.inMemory()
+        let item = try store.save(
+            ClipboardCapture(text: "already secret", isConcealed: true), now: now)
+
+        // Should not throw or double-encrypt; still decrypts to the same original text.
+        try store.markConcealed(id: item.id!)
+
+        let updated = try #require(try store.items().first)
+        #expect(try store.revealText(for: updated) == "already secret")
+    }
 }
