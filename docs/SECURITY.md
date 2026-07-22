@@ -43,7 +43,20 @@ By explicit decision of the project owner, Permafrost supports recording conceal
 Residual risk the user accepts: shoulder-surfing after reveal, plaintext exposure in the
 system pasteboard during copy/paste, and metadata exposure (timestamps, source app, pin state,
 and a deterministic unsalted content hash). If Keychain access is pending, new concealed
-captures stay only in memory and are retried when the persistent key becomes available. That hash permits offline confirmation of guessed
+captures stay only in memory and are retried when the persistent key becomes available.
+
+## Portable encrypted backups
+
+Export offers **This Mac Only** (the existing Keychain-bound archive) and **Portable Encrypted
+Backup**. The portable format encrypts the complete archive payload with an export passphrase,
+using PBKDF2-HMAC-SHA256 with a random salt and AES-GCM. It is the supported way to move
+concealed history to another Mac: import prompts for its passphrase and re-encrypts concealed
+text with that Mac's Keychain key.
+
+Permafrost never stores or can recover this passphrase. A forgotten passphrase makes a portable
+archive unrecoverable. The outer archive manifest contains only format/KDF metadata; clipboard
+content is inside the encrypted payload. Import authenticates and validates the entire payload
+before writing it, so an incorrect passphrase or damaged archive does not partially import data. That hash permits offline confirmation of guessed
 weak secrets for someone who can read the database. Encrypted archives contain ciphertext and
 are only importable with the same Keychain key; they are not portable backups.
 

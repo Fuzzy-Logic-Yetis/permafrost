@@ -446,6 +446,32 @@ public final class ClipboardStore: Sendable {
     /// metadata-import path to bypass the storage invariant. Returns false on duplicate hash.
     @discardableResult
     public func insertPreservingMetadata(_ item: ClipboardItem) throws -> Bool {
+        try insertPreservingMetadata([item]) == 1
+    }
+
+    /// Validates/prepares every item before one database transaction, so an import cannot
+    /// report failure after persisting only an arbitrary prefix of its archive.
+    public func insertPreservingMetadata(_ items: [ClipboardItem]) throws -> Int {
+        let prepared = try items.map { try prepareForMetadataInsertion($0) }
+        return try dbQueue.write { db in
+            var inserted = 0
+            for var item in prepared {
+                let exists =
+                    try Bool.fetchOne(
+                        db,
+                        sql: "SELECT EXISTS(SELECT 1 FROM clipboard_item WHERE content_hash = ?)",
+                        arguments: [item.contentHash]
+                    ) ?? false
+                guard !exists else { continue }
+                item.id = nil
+                try item.insert(db)
+                inserted += 1
+            }
+            return inserted
+        }
+    }
+
+    private func prepareForMetadataInsertion(_ item: ClipboardItem) throws -> ClipboardItem {
         var imported = item
         if imported.kind == .text, imported.isConcealed, imported.encryptedData == nil {
             guard let plaintext = imported.text else {
@@ -456,17 +482,6 @@ public final class ClipboardStore: Sendable {
             imported.text = nil
             imported.richData = nil
         }
-        return try dbQueue.write { db in
-            let exists =
-                try Bool.fetchOne(
-                    db,
-                    sql: "SELECT EXISTS(SELECT 1 FROM clipboard_item WHERE content_hash = ?)",
-                    arguments: [imported.contentHash]
-                ) ?? false
-            if exists { return false }
-            imported.id = nil
-            try imported.insert(db)
-            return true
-        }
+        return imported
     }
 }

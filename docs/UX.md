@@ -161,6 +161,13 @@ hijack normal typing. `Esc` or **Cancel** exits recording without changing the c
 shortcut. **Use Selected Preset** removes a custom recording and returns to the currently
 selected preset; **Reset to Default** returns to `⌥⌘V`.
 
+## Import and export
+
+Export offers **This Mac Only** for a Keychain-bound local archive and **Portable Encrypted
+Backup** for moving history to another Mac. Portable Backup prompts for a 12-character-or-longer
+passphrase and confirmation; Permafrost cannot recover it. Import detects a portable archive and
+prompts for its passphrase automatically. A wrong passphrase or damaged archive imports nothing.
+
 ## First-run / onboarding
 
 1. First launch: menu bar snowflake appears; a one-time notification-style alert explains
