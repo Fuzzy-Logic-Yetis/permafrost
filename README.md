@@ -15,12 +15,29 @@ Local-first. Keyboard-first. No cloud, no analytics, no network code at all.
 - **Pinning** — pinned entries never expire, live in their own section, and never steal a
   quick-paste slot from your latest copy
 - **Time-based retention** — unpinned entries expire automatically (1/7/30/90 days, or never)
-- **Search** — type to filter instantly (SQLite FTS5 under the hood)
-- **Paste on select** — `⏎` pastes straight into the app you were using
-- **Mouse-friendly too** — hover any entry for pin / share / delete buttons
+- **Search** — type to filter instantly (SQLite FTS5 under the hood), including recognized
+  text from images (see OCR below)
+- **Paste on select** — `⏎` pastes straight into the app you were using; `⇧⏎` pastes plain
+  text (strips rich formatting) when you don't want the source's styling
+- **Rich text capture** — native `.rtf` is kept as-is; HTML-only copies (e.g. from browsers)
+  are converted to RTF automatically, with page styling (background/link color) stripped
+  so only the actual formatting (bold/italic/etc.) survives
+- **Drag-and-drop** — drag a card straight out of the panel into any app, or onto the
+  Desktop to materialize it as a real `.txt`/`.png` file
+- **OCR on screenshots** — recognized text from screen snips (on-device, via Apple's Vision
+  framework) is searchable, previewable, and copyable as text
+- **Preview pane** — `␣` opens a full-size, scrollable look at the selected item without
+  leaving the panel
+- **Concealed (password) content — opt-in** — off by default; when enabled, content from
+  password managers is recorded encrypted at rest (AES-GCM, a macOS Keychain-backed key),
+  redacted in the panel until you deliberately reveal it
+- **Mouse-friendly too** — hover any entry for reveal / plain-text / pin / share / delete
+  buttons
 - **Menu bar app** — no Dock icon, no window clutter
 - **Pause capture** — temporarily stop recording from the menu bar or Settings
-- **Import / export** — your history is yours; take it with you
+- **Import / export** — a **This Mac Only** archive (tied to this Mac's Keychain) or a
+  **Portable Encrypted Backup** (passphrase-protected, importable on another Mac); your
+  history is yours, take it with you
 
 ## Windows → macOS cheat sheet
 
@@ -30,6 +47,7 @@ Local-first. Keyboard-first. No cloud, no analytics, no network code at all.
 | `Win + Shift + S` (screen snip → clipboard) | `⌃⇧⌘4` (built into macOS; Permafrost keeps the snip) |
 | Pin item in Win+V | `⌥P` on the selected item |
 | Paste from history | `⏎` or `⌘1`–`⌘9` |
+| Paste as plain text | `⇧⏎` |
 
 ## Install
 
@@ -57,7 +75,9 @@ copy-to-clipboard mode.
 - Content copied from password managers (1Password, Bitwarden, etc.) is **not recorded by
   default** — Permafrost honors `org.nspasteboard.ConcealedType` and transient pasteboard
   types. If you *want* password history, there's an explicit opt-in behind a
-  risk-acknowledgment prompt (see [docs/SECURITY.md](docs/SECURITY.md))
+  risk-acknowledgment prompt; opted-in content is AES-GCM encrypted at rest with a
+  macOS Keychain-backed key, redacted in the panel by default, and only decrypted on a
+  deliberate reveal (see [docs/SECURITY.md](docs/SECURITY.md))
 - **Excluded apps** — add any app to Settings → Excluded Apps and Permafrost never records
   anything copied while that app is frontmost, useful for apps that don't mark their
   clipboard content as concealed
@@ -74,13 +94,16 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full story.
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Architecture Decision Records |
 | [docs/RESEARCH.md](docs/RESEARCH.md) | Why this exists — competitor analysis and the build-vs-buy gate |
 | [docs/UX.md](docs/UX.md) | Interaction spec and keyboard map |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | Ordered engineering backlog — what's shipped, what's next |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Where this is going |
 | [docs/FUTURE_IDEAS.md](docs/FUTURE_IDEAS.md) | Deferred ideas and explicitly unscheduled possibilities |
+| [docs/TESTING.md](docs/TESTING.md) | Automated test notes and the manual smoke checklist |
 | [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) | Baseline prompt and process for independent engineering reviews |
 
 ## Status
 
-**v0.2.0** — under active development. See [docs/PROJECT_PLAN.md](docs/PROJECT_PLAN.md).
+**v0.4.0** — under active development, daily-driver-ready. See
+[docs/ROADMAP.md](docs/ROADMAP.md) for what shipped and what's next.
 
 ## License
 

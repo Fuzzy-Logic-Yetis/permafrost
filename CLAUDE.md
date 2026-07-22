@@ -70,12 +70,17 @@ expire; unpinned entries expire after a configurable period.**
 ## Definition of Done
 
 A change is done when:
+
 1. Code builds (`swift build`) and tests pass (`swift test`)
 2. New logic in core has tests
 3. Docs affected by the change are updated in the same commit
 4. Deferred work is captured in docs/BACKLOG.md
 5. If it changed an architectural decision, an ADR exists
 6. The manual smoke test relevant to the change passes (docs/TESTING.md)
+7. If it completes a ROADMAP.md milestone, `PermafrostVersion.string` (App.swift) and
+   `VERSION` (scripts/make-app.sh) are bumped together, and README.md's Status line
+   matches — this has drifted silently twice already (see ADR history in DECISIONS.md);
+   check `grep -rn "PermafrostVersion.string\|VERSION=" Sources scripts` before tagging
 
 ## Pull request expectations
 

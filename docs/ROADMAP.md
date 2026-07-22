@@ -6,7 +6,7 @@ The Win+V experience, complete: history (text + images/snips), `⌥⌘V` panel, 
 paste-on-select, pinning, time-based retention, settings, import/export, launch at login.
 Built from source, ad-hoc signed. See [PROJECT_PLAN.md](PROJECT_PLAN.md) milestones.
 
-## v0.2.0 — Pin lifecycle & hover actions (now)
+## v0.2.0 — Pin lifecycle & hover actions
 
 Driven by first real-world use (see ADR-012 and the 2026-07-06 review in
 docs/DECISIONS.md): recent-first/pinned-at-bottom ordering with quick-paste bounded to the
@@ -32,6 +32,30 @@ kind/field consistency, and rejects symlinked blobs instead of trusting the mani
 Settings' History Management actions surface errors the same way the status-menu versions
 already did; docs/SECURITY.md now discloses Input Monitoring; PermissionReset no longer
 blocks the main actor. See docs/DECISIONS.md for the ADR.
+
+## v0.4.0 — Rich capture, drag-and-drop, concealed encryption, portable backups (done 2026-07-22, now)
+
+- ~~Paste as plain text~~ (`⇧⏎`, ADR-018) and ~~HTML-to-RTF rich-text capture~~ (ADR-019) —
+  browser copies without a native `.rtf` now get real formatting instead of none, with
+  page decoration (background/link color) stripped.
+- ~~Drag-and-drop out of the panel~~ (ADR-020) — text/image cards drag into any app or onto
+  the Desktop as a real file.
+- ~~At-rest encryption for concealed (password) items~~ (ADR-021) — opt-in, AES-GCM,
+  Keychain-backed key, redact-by-default/reveal-on-demand. Includes two hardening rounds
+  after real-world use surfaced problems: a retroactive "Mark as Concealed" action for
+  content that arrived without the source app's concealed marker, and — after an actual,
+  unrecoverable data-loss incident during this work — removing a fallback-key design
+  entirely so concealed content can never again be sealed with a key that isn't the one
+  real, persistent one. See ADR-021 in DECISIONS.md for the full history, including that
+  incident.
+- ~~Portable encrypted backups~~ — export/import history to another Mac via a
+  passphrase-protected archive (PBKDF2 + AES-GCM), independent of this Mac's Keychain.
+- **Follow-up, 2026-07-22**: a high-effort code review of everything above surfaced ten
+  issues (unbounded plaintext retention in a retry queue, a migration failure able to
+  permanently disable encryption for a session, a decrypt failure showing the wrong error
+  dialog, non-atomic archive import, main-thread-blocking key derivation, and others) —
+  all fixed the same day, with regression tests for each. See BACKLOG.md item 4's
+  follow-ups and ADR-021's 2026-07-22 entry for the full list.
 
 ## v1.0 — Distribution
 

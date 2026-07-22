@@ -2,7 +2,7 @@ import AppKit
 import PermafrostCore
 
 enum PermafrostVersion {
-    static let string = "0.3.0"
+    static let string = "0.4.0"
 }
 
 extension Notification.Name {
