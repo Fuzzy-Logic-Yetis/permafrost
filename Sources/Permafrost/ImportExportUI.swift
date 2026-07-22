@@ -103,18 +103,20 @@ enum ImportExportUI {
         alert.informativeText = confirm
             ? "Choose a passphrase with at least 12 characters. It cannot be recovered."
             : "Enter the passphrase used when this backup was created."
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.spacing = 8
-        let passphrase = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        // NSAlert does not reliably infer an NSStackView's width from secure text fields;
+        // use an explicit frame so the passphrase inputs are visible in the native sheet.
+        let height: CGFloat = confirm ? 58 : 24
+        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: height))
+        let passphrase = NSSecureTextField(
+            frame: NSRect(x: 0, y: confirm ? 34 : 0, width: 280, height: 24))
         passphrase.placeholderString = "Passphrase"
-        stack.addArrangedSubview(passphrase)
+        accessory.addSubview(passphrase)
         let confirmation = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         if confirm {
             confirmation.placeholderString = "Confirm passphrase"
-            stack.addArrangedSubview(confirmation)
+            accessory.addSubview(confirmation)
         }
-        alert.accessoryView = stack
+        alert.accessoryView = accessory
         alert.addButton(withTitle: confirm ? "Export" : "Import")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
