@@ -54,8 +54,10 @@ you just copied, and must never steal the `⌘1` slot from it either.
 - Selected card: accent-tinted border/background, follows system accent color.
 - **Hover actions** (mouse-first, ADR-012): hovering a card swaps its trailing badges for
   buttons — pin/unpin, share (opens the system share sheet via `NSSharingServicePicker`, the
-  same one macOS's own screenshot panel uses), and delete, plus a **Paste as Plain Text**
-  icon (📄, ADR-018) on `.text` cards only. Clicking any of these does not trigger the
+  same one macOS's own screenshot panel uses), and delete (tinted red — the row's one
+  destructive action; every other icon stays neutral secondary-gray, matching macOS
+  convention), plus a **Paste as Plain Text** icon (📄, ADR-018) on `.text` cards only.
+  Clicking any of these does not trigger the
   card's own click-to-paste gesture — proven by pin/share/delete first, extended to the
   plain-text button the same way. Lets a mouse user manage an item without touching the
   keyboard; the keyboard shortcuts remain the fast path for everyone else. Each icon's

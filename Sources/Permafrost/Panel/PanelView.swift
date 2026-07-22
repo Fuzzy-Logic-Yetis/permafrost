@@ -359,12 +359,15 @@ private struct ItemCard: View {
                 .opacity(shareItems.isEmpty ? 0.35 : 1)
                 .help("Share")
 
+                // Tinted red as the row's one destructive action (macOS convention),
+                // distinct from the neutral-gray non-destructive icons around it.
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.plain)
                 .frame(width: 20, height: 20)
                 .contentShape(Rectangle())
+                .foregroundStyle(.red)
                 .help("Delete")
             }
             .font(.caption)
