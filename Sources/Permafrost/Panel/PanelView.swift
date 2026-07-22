@@ -296,12 +296,12 @@ private struct ItemCard: View {
                 .buttonStyle(.plain)
                 .help(item.isPinned ? "Unpin" : "Pin")
 
-                // Sharing a concealed row would otherwise hand an empty `text` field to
-                // AppKit. Keep disclosure explicit: reveal/copy/paste is supported, sharing
-                // is unavailable until a deliberate decrypt-and-share flow exists.
-                if !item.isConcealed {
+                // Concealed rows have no plaintext `item.text`. Sharing becomes available
+                // only after the eye has deliberately revealed it, and then passes that
+                // in-memory plaintext to the native picker rather than an empty string.
+                if !item.isConcealed || revealedText != nil {
                     ShareButton(
-                        items: item.shareableItems,
+                        items: item.isConcealed ? [revealedText!] : item.shareableItems,
                         onPresentationChanged: { isSharing = $0 }
                     )
                     .frame(width: 15, height: 15)
