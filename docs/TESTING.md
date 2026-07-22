@@ -351,6 +351,21 @@ outside the app (e.g. CI or a broken build that won't launch):
     decrypted text lands, not an empty drop (found 2026-07-21: this was silently dragging
     an empty string before the fix, since `item.text` is nil for encrypted rows).
 
+28. **Code-review fixes (2026-07-22)**: with "Record concealed content" enabled, reveal a
+    concealed card's text in the preview pane (`␣`), then arrow to a different concealed
+    item while the preview stays open → the new item's preview must show *its own*
+    redacted placeholder, never the previous item's already-revealed plaintext. Force a
+    paste of a concealed item immediately after a fresh relaunch, before the Keychain
+    prompt (if any) has been answered → confirm you see "Can't paste this yet", not the
+    Accessibility-permission prompt. Export a large-ish history (a few hundred items) as a
+    **Portable Encrypted Backup** → the panel/menu bar should stay responsive (spinning
+    beachball or a frozen menu bar during the passphrase step is a regression — PBKDF2 key
+    derivation must run off the main thread); repeat for import. Import an archive
+    containing one entry that can't be decrypted (e.g. edit a copy to reference a different
+    Keychain-encrypted blob) alongside otherwise-valid entries → confirm **none** of the
+    entries were added to the store (check the count before/after), not just the bad one
+    skipped — import is all-or-nothing now.
+
 ## Performance spot checks
 
 - Panel open feels instant (< 100 ms) with 1k+ items

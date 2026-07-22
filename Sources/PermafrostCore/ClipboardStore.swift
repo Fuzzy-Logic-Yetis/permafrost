@@ -42,13 +42,31 @@ public final class ClipboardStore: Sendable {
     /// Called once the persistent key becomes available — however long that takes.
     /// Thread-safe: intended to be called from a background queue once a Keychain fetch
     /// resolves, with no bound on how long that may take (ADR-021 follow-up).
-    public func setConcealedContentKey(_ key: SymmetricKey) throws {
+    ///
+    /// Installs the cipher unconditionally, *before* attempting the legacy-row backfill
+    /// below: these are two independent concerns, and a transient failure backfilling old
+    /// rows must never hold the entire concealed-content feature hostage for the rest of
+    /// the session (a real regression found 2026-07-22 — a one-time DB hiccup during this
+    /// backfill left every *future* concealed capture/reveal/mark failing with
+    /// `keyNotYetAvailable`, indistinguishable from the key still loading, with no retry).
+    public func setConcealedContentKey(_ key: SymmetricKey) {
         let cipher = ConcealedContentCipher(key: key)
-        // v3 could add the ciphertext column before this asynchronously acquired key was
-        // available. Backfill those legacy concealed rows before exposing the key so a
-        // successful setup establishes the invariant for all concealed text.
-        try migrateLegacyConcealedText(using: cipher)
         cipherLock.withLock { _cipher = cipher }
+        do {
+            // v3 could add the ciphertext column before this asynchronously acquired key
+            // was available. Backfill those legacy concealed rows now that the cipher is
+            // live so old plaintext doesn't linger under a `is_concealed = true` flag.
+            try migrateLegacyConcealedText(using: cipher)
+        } catch {
+            // Non-fatal: concealed-content operations already work correctly going
+            // forward via the cipher installed above. Only the one-time backfill of rows
+            // that predate any working key on this Mac didn't complete this attempt —
+            // its WHERE clause only matches still-unmigrated rows, so it's harmless and
+            // self-healing to simply retry on a later call (e.g. the next launch).
+            Log.store.error(
+                "legacy concealed-content migration failed, will retry later: \(error.localizedDescription)"
+            )
+        }
     }
 
     private func migrateLegacyConcealedText(using cipher: ConcealedContentCipher) throws {
@@ -109,6 +127,25 @@ public final class ClipboardStore: Sendable {
         let dbQueue = try DatabaseQueue()
         try migrator.migrate(dbQueue)
         return ClipboardStore(dbQueue: dbQueue)
+    }
+
+    /// Test-only: recreates the exact pre-ADR-021 legacy row shape `migrateLegacyConcealedText`
+    /// exists to repair (concealed flag set, plaintext still on disk, no ciphertext). The
+    /// public API can no longer produce this shape — every path that sets `isConcealed` now
+    /// requires a cipher first — so tests need this direct seam to exercise the one-time backfill.
+    func seedLegacyConcealedPlaintextRowForTesting(text: String, now: Date) throws -> ClipboardItem {
+        try dbQueue.write { db in
+            var item = ClipboardItem(
+                contentHash: ClipboardCapture(text: text).contentHash,
+                kind: .text,
+                text: text,
+                createdAt: now,
+                lastUsedAt: now,
+                isConcealed: true
+            )
+            try item.insert(db)
+            return item
+        }
     }
 
     static var migrator: DatabaseMigrator {

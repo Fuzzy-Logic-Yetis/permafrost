@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 
@@ -107,6 +108,74 @@ import PermafrostCore
 
         #expect(converter.callCount == 0)
         #expect(try store.allItems().first?.richData == nativeRTF)
+    }
+
+    // MARK: - Concealed captures while the Keychain key is pending (regression, 2026-07-22)
+    //
+    // `ClipboardStore.onDisk(at:)` never takes a key — exactly the real app's state between
+    // launch and its background Keychain fetch resolving — so it's the public seam these
+    // tests use to reach the same `keyNotYetAvailable` path production hits.
+
+    private func tempStoreURL() throws -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("permafrost-queue-test-\(UUID().uuidString)")
+            .appendingPathComponent("store.sqlite")
+    }
+
+    @Test func concealedCaptureQueuedWhileKeyPendingIsSavedOnceKeyArrives() throws {
+        let url = try tempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = try ClipboardStore.onDisk(at: url)
+        let queue = CaptureSaveQueue(store: store)
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(text: "secret", isConcealed: true),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()
+            )
+        )
+        queue.waitUntilIdle()
+        #expect(try store.count() == 0)  // never reached disk plaintext, never lost either
+
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))
+        queue.retryPendingConcealedCaptures()
+        queue.waitUntilIdle()
+
+        let item = try #require(store.allItems().first)
+        #expect(item.isConcealed)
+        #expect(try store.revealText(for: item) == "secret")
+    }
+
+    @Test func pendingConcealedCapturesAreBoundedDroppingOldestFirst() throws {
+        let url = try tempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = try ClipboardStore.onDisk(at: url)
+        let queue = CaptureSaveQueue(store: store)
+        let overflow = 5
+        let total = CaptureSaveQueue.maxPendingConcealedCaptures + overflow
+
+        for index in 0..<total {
+            queue.enqueue(
+                CaptureSaveQueue.PendingCapture(
+                    capture: ClipboardCapture(text: "secret \(index)", isConcealed: true),
+                    capturedAt: Date(timeIntervalSince1970: 2_000_000_000 + Double(index)),
+                    retentionPolicy: RetentionPolicy()
+                )
+            )
+        }
+        queue.waitUntilIdle()
+
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))
+        queue.retryPendingConcealedCaptures()
+        queue.waitUntilIdle()
+
+        // The oldest `overflow` captures were evicted to keep the queue bounded; only the
+        // most recent `maxPendingConcealedCaptures` survive to be saved once the key arrives.
+        let savedTexts = try store.allItems().compactMap { try store.revealText(for: $0) }
+        #expect(savedTexts.count == CaptureSaveQueue.maxPendingConcealedCaptures)
+        #expect(!savedTexts.contains("secret 0"))
+        #expect(savedTexts.contains("secret \(total - 1)"))
     }
 
     @Test func textCaptureWithNeitherRTFNorHTMLIsUnaffected() throws {

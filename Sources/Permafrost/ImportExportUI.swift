@@ -18,26 +18,47 @@ enum ImportExportUI {
         NSApp.activate(ignoringOtherApps: true)
         guard savePanel.runModal() == .OK, let destination = savePanel.url else { return }
 
-        do {
-            let staging = FileManager.default.temporaryDirectory
-                .appendingPathComponent("permafrost-export-\(UUID().uuidString)")
-            try FileManager.default.createDirectory(
-                at: staging, withIntermediateDirectories: true)
-            defer { try? FileManager.default.removeItem(at: staging) }
+        let portable = chooseExportKind()
+        guard let portable else { return }
+        let passphrase: String?
+        if portable {
+            guard let entered = promptForPassphrase(confirm: true) else { return }
+            passphrase = entered
+        } else {
+            passphrase = nil
+        }
 
-            let portable = chooseExportKind()
-            guard let portable else { return }
-            if portable {
-                guard let passphrase = promptForPassphrase(confirm: true) else { return }
-                try PortableArchive.exportArchive(from: store, to: staging, passphrase: passphrase)
-            } else {
-                try ImportExport.exportArchive(from: store, to: staging)
+        // Archive I/O and, for a portable export, 600k rounds of PBKDF2 are expensive
+        // enough to freeze the whole app for their duration if run on the main actor —
+        // do the real work in the background, only hopping back to touch AppKit again.
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let staging = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("permafrost-export-\(UUID().uuidString)")
+                try FileManager.default.createDirectory(
+                    at: staging, withIntermediateDirectories: true)
+                defer { try? FileManager.default.removeItem(at: staging) }
+
+                if let passphrase {
+                    try PortableArchive.exportArchive(
+                        from: store, to: staging, passphrase: passphrase)
+                } else {
+                    try ImportExport.exportArchive(from: store, to: staging)
+                }
+                try? FileManager.default.removeItem(at: destination)
+                try runDitto(["-c", "-k", staging.path, destination.path])
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        NSWorkspace.shared.activateFileViewerSelecting([destination])
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        presentError(title: "Export failed", error: error)
+                    }
+                }
             }
-            try? FileManager.default.removeItem(at: destination)
-            try runDitto(["-c", "-k", staging.path, destination.path])
-            NSWorkspace.shared.activateFileViewerSelecting([destination])
-        } catch {
-            presentError(title: "Export failed", error: error)
         }
     }
 
@@ -51,34 +72,59 @@ enum ImportExportUI {
         NSApp.activate(ignoringOtherApps: true)
         guard openPanel.runModal() == .OK, let source = openPanel.url else { return }
 
-        do {
-            var directory = source
-            var staging: URL?
-            if source.pathExtension.lowercased() == "zip" {
-                let unpacked = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("permafrost-import-\(UUID().uuidString)")
-                try runDitto(["-x", "-k", source.path, unpacked.path])
-                staging = unpacked
-                directory = unpacked
-            }
-            defer { if let staging { try? FileManager.default.removeItem(at: staging) } }
+        // Unzipping and, for a portable archive, checking/deriving the passphrase-based key
+        // (600k rounds of PBKDF2) are expensive enough to freeze the whole app for their
+        // duration if run on the main actor — do the real work in the background, only
+        // hopping back to touch AppKit again. The passphrase prompt itself must stay on
+        // the main actor, so it's resolved first for the (common, cheap) not-yet-known case.
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                var directory = source
+                var staging: URL?
+                if source.pathExtension.lowercased() == "zip" {
+                    let unpacked = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("permafrost-import-\(UUID().uuidString)")
+                    try runDitto(["-x", "-k", source.path, unpacked.path])
+                    staging = unpacked
+                    directory = unpacked
+                }
+                defer { if let staging { try? FileManager.default.removeItem(at: staging) } }
 
-            let imported: Int
-            if try PortableArchive.requiresPassphrase(at: directory) {
-                guard let passphrase = promptForPassphrase(confirm: false) else { return }
-                imported = try PortableArchive.importArchive(
-                    from: directory, into: store, passphrase: passphrase)
-            } else {
-                imported = try ImportExport.importArchive(from: directory, into: store)
+                let requiresPassphrase = try PortableArchive.requiresPassphrase(at: directory)
+                var passphrase: String?
+                if requiresPassphrase {
+                    let prompted = DispatchQueue.main.sync {
+                        MainActor.assumeIsolated { promptForPassphrase(confirm: false) }
+                    }
+                    guard let prompted else { return }
+                    passphrase = prompted
+                }
+
+                let imported: Int
+                if requiresPassphrase {
+                    imported = try PortableArchive.importArchive(
+                        from: directory, into: store, passphrase: passphrase)
+                } else {
+                    imported = try ImportExport.importArchive(from: directory, into: store)
+                }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        let alert = NSAlert()
+                        alert.messageText = "Import complete"
+                        alert.informativeText =
+                            imported == 1
+                            ? "1 entry imported."
+                            : "\(imported) entries imported (existing content skipped)."
+                        alert.runModal()
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        presentError(title: "Import failed", error: error)
+                    }
+                }
             }
-            let alert = NSAlert()
-            alert.messageText = "Import complete"
-            alert.informativeText =
-                imported == 1
-                ? "1 entry imported." : "\(imported) entries imported (existing content skipped)."
-            alert.runModal()
-        } catch {
-            presentError(title: "Import failed", error: error)
         }
     }
 
@@ -130,7 +176,9 @@ enum ImportExportUI {
         return value
     }
 
-    private static func runDitto(_ arguments: [String]) throws {
+    /// Runs on background queues from `runExport`/`runImport` — never touches AppKit,
+    /// so it doesn't need the enclosing type's main-actor isolation.
+    private static nonisolated func runDitto(_ arguments: [String]) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = arguments

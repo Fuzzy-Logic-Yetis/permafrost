@@ -958,3 +958,85 @@ untouched, not half-converted), `revealTextReturnsNilRatherThanThrowingWhenKeyNo
 `settingKeyLaterEnablesConcealedOperations`. `ClipboardStore.inMemoryWithoutConcealedContentKey()`
 (test-only) constructs a store with no cipher at all, matching the real app's state
 between launch and its background fetch resolving.
+
+**Follow-up 2026-07-22: a high-effort code review of everything built on top of this ADR
+(concealed-storage hardening, retroactive concealment, portable encrypted exports) surfaced
+ten issues, all fixed on `fix/code-review-findings-2026-07-21`.** Grouped by what they
+actually were, most severe first:
+
+1. **`CaptureSaveQueue`'s key-pending retry queue traded the old data-loss bug for a new
+   plaintext-retention one, and could still silently drop a capture.** The queue added to
+   retry concealed captures once the Keychain key arrived (`bde2ea6`) was unbounded — a
+   session where the key never resolves would accumulate concealed plaintext in process
+   memory indefinitely — and a transient (non-key) error during the one retry attempt fell
+   into a bare log-and-drop with no re-queue, permanently losing a capture the user already
+   made. Fixed: the pending queue is now capped at 20 (dropping the oldest, logged, expected
+   to never trigger — the real-world window is sub-second), and a retry that fails for a
+   reason *other* than the key being unavailable gets up to 3 short-lived automatic retries
+   before being logged and dropped. Covered by
+   `concealedCaptureQueuedWhileKeyPendingIsSavedOnceKeyArrives` and
+   `pendingConcealedCapturesAreBoundedDroppingOldestFirst`
+   (`Tests/PermafrostTests/CaptureSaveQueueTests.swift`).
+2. **`ClipboardStore.setConcealedContentKey` let a one-time migration failure permanently
+   disable concealed-content encryption for the rest of the session.** The legacy-row
+   backfill (`migrateLegacyConcealedText`) ran *before* the cipher was installed and threw
+   on failure, with nothing in `App.swift` retrying it — a single transient DB hiccup meant
+   every future concealed capture/reveal/mark failed with `keyNotYetAvailable`,
+   indistinguishable from the key still loading. Fixed at the root: the cipher now installs
+   *unconditionally* first; the backfill runs after and is non-fatal on failure (logged,
+   self-healing — its `WHERE` clause only ever matches still-unmigrated rows, so a later
+   call, e.g. the next launch, retries it harmlessly for free). `setConcealedContentKey` no
+   longer throws. Covered by the (previously entirely untested) happy path,
+   `settingKeyMigratesExistingLegacyConcealedPlaintextRows`, using a new test-only seam
+   (`ClipboardStore.seedLegacyConcealedPlaintextRowForTesting`) since the public API can no
+   longer produce that legacy row shape itself.
+3. **A concealed item's decrypt failure showed the wrong dialog.** `PasteService.paste`
+   reused its existing `Bool` return to also mean "couldn't resolve this item's content at
+   all" (e.g. pasting a concealed item before the Keychain key is ready), but `PanelModel`
+   still read `false` as its old, sole meaning — "Accessibility isn't granted" — and showed
+   that prompt regardless. Fixed with a `PasteOutcome` enum (`pasted` /
+   `copiedOnly` / `contentUnavailable`) so the two failure modes are distinguishable by
+   type, not just a lost boolean; `PanelModel.onContentUnavailable` shows its own, accurate
+   alert. Covered by `commitContentUnavailableCallsOnContentUnavailableNotAccessibility`.
+4. **`PreviewPane`'s revealed plaintext could leak across items.** Unlike `ItemCard` (each
+   keyed by `.id(item.id)` in its `ForEach`), the preview pane had no per-item identity, so
+   arrow-key navigation to a different item while the preview stayed open reused the same
+   `@State revealedText` — the *previous* item's already-decrypted secret, mislabeled as the
+   newly-selected item's content, instead of resetting to redacted. Fixed by keying
+   `PreviewPane` with `.id(item.id)`, same as every card.
+5. **`ClipboardItem.shareableItems` silently returned an empty share for concealed items.**
+   The "allow sharing revealed concealed text" fix (`22309fa`) special-cased
+   `item.isConcealed` only at the `PanelView` Share-button call site (with a force-unwrap);
+   the shared accessor itself was untouched and would still hand any other/future caller
+   `[""]` for a concealed item. Fixed at the root: `shareableItems(revealedText:)` now
+   returns `nil` (not a silent empty array) whenever a concealed item's plaintext wasn't
+   supplied, so the dependency can't be overlooked by a caller that doesn't know to special-
+   case concealment.
+6. **Archive import wasn't atomic.** `ImportExport.importArchive` inserted each manifest
+   entry individually as it validated them; an entry that failed partway through (e.g. one
+   concealed item encrypted under a different Mac's Keychain key) left every entry *before*
+   it already durably committed, while the UI showed one undifferentiated "Import failed"
+   alert. Fixed by validating/decrypting every entry into a plain `ClipboardItem` first, with
+   nothing written until a single batch `insertPreservingMetadata` call at the end (already
+   one transaction, and already how `PortableArchive.importArchive` worked) — a failing
+   archive now leaves the store exactly as it was. Covered by
+   `importIsAtomicNothingPersistsWhenALaterItemFails`.
+7. **Portable-archive key derivation (600k rounds of PBKDF2) ran on the main actor.**
+   `ImportExportUI` is `@MainActor`, and nothing hopped off it before calling into
+   `PortableArchive`/`PortableArchiveCipher` — every portable export or import froze the
+   whole app for the derivation's duration. Fixed by moving the archive I/O and key
+   derivation onto a background queue, hopping back to the main actor (`MainActor
+   .assumeIsolated`, matching this codebase's existing pattern for main-actor call-backs
+   from background work) only to present the passphrase prompt and the final alert.
+8. **A nil-check and a force-unwrap of the same optional were split apart in
+   `PasteService.copyToPasteboard`,** making memory safety depend on statement order rather
+   than the type system. Fixed with a single `guard let` binding.
+9. **`PortableArchive` and `ImportExport` each independently implemented the same
+   per-kind field/hash validation** (Review M-2's kind-confusion and content-hash checks)
+   under two separate error types — a future fix to one had no reason to also land in the
+   other. Factored into one shared `ClipboardItemValidation.validate(...)`
+   (`Sources/PermafrostCore/ClipboardItemValidation.swift`) that both call, each mapping its
+   generic error back to its own public error type.
+
+All ten fixed in place rather than deferred — none required a schema or permission-model
+change, so no additional ADR beyond this entry.

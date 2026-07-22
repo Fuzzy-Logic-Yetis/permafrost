@@ -283,6 +283,38 @@ import Testing
         }
     }
 
+    /// Regression: an archive where a later entry fails validation must not leave earlier,
+    /// individually-valid entries already committed to the store — the whole import is one
+    /// unit, matching the single "Import failed" alert the user actually sees.
+    @Test func importIsAtomicNothingPersistsWhenALaterItemFails() throws {
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let firstHash = ClipboardCapture(text: "first").contentHash
+        let manifest = """
+            {"version": 1, "exportedAt": "2026-07-05T00:00:00Z", "items": [
+                {"contentHash": "\(firstHash)", "kind": "text", "text": "first",
+                 "sourceApp": null, "createdAt": "2026-07-05T00:00:00Z",
+                 "lastUsedAt": "2026-07-05T00:00:00Z", "isPinned": false, "pinOrder": null,
+                 "isConcealed": false, "imageFile": null, "thumbnailFile": null,
+                 "richDataFile": null},
+                {"contentHash": "not-the-real-hash", "kind": "text", "text": "second",
+                 "sourceApp": null, "createdAt": "2026-07-05T00:00:00Z",
+                 "lastUsedAt": "2026-07-05T00:00:00Z", "isPinned": false, "pinOrder": null,
+                 "isConcealed": false, "imageFile": null, "thumbnailFile": null,
+                 "richDataFile": null}
+            ]}
+            """
+        try manifest.write(
+            to: dir.appendingPathComponent(ImportExport.manifestFileName),
+            atomically: true, encoding: .utf8)
+
+        let store = try ClipboardStore.inMemory()
+        #expect(throws: ImportExport.ImportError.contentHashMismatch("not-the-real-hash")) {
+            try ImportExport.importArchive(from: dir, into: store)
+        }
+        #expect(try store.count() == 0)
+    }
+
     @Test func symlinkedBlobIsRejected() throws {
         let dir = try tempDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }

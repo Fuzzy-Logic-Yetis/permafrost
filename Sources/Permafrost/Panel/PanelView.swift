@@ -30,6 +30,12 @@ struct PanelView: View {
                     onCopyOCRSelection: { model.scheduleReloadAfterExternalCopy() },
                     revealConcealedText: { model.revealConcealedText(for: item) }
                 )
+                // Keyed by item identity, same as each ItemCard in the list below: without
+                // this, arrow-key navigation to a different item while the preview stays
+                // open reuses this view's `@State revealedText` verbatim, showing the
+                // *previous* item's already-decrypted plaintext mislabeled as the new
+                // item's content instead of resetting to redacted.
+                .id(item.id)
             }
         }
         .frame(width: 440, height: 500)
@@ -318,10 +324,12 @@ private struct ItemCard: View {
 
                 // Concealed rows have no plaintext `item.text`. Sharing becomes available
                 // only after the eye has deliberately revealed it, and then passes that
-                // in-memory plaintext to the native picker rather than an empty string.
-                if !item.isConcealed || revealedText != nil {
+                // in-memory plaintext to the native picker rather than an empty string —
+                // `shareableItems(revealedText:)` returns nil (not a silent empty share)
+                // for a concealed item that hasn't been revealed yet.
+                if let shareItems = item.shareableItems(revealedText: revealedText) {
                     ShareButton(
-                        items: item.isConcealed ? [revealedText!] : item.shareableItems,
+                        items: shareItems,
                         onPresentationChanged: { presenting in
                             isSharing = presenting
                             if !presenting { revealedText = nil }

@@ -98,8 +98,13 @@ you just copied, and must never steal the `⌘1` slot from it either.
 ## Concealed text
 
 Concealed text is redacted whenever the panel opens. Hover a concealed card and click the eye
-icon to reveal it for the current panel session; closing and reopening the panel, or completing
-a Share action, redacts it again. Share is shown only after this explicit reveal.
+icon to reveal it for the current panel session; closing and reopening the panel, moving
+selection to a different item (including in the preview pane), or completing a Share action,
+redacts it again. Share is shown only after this explicit reveal.
+
+If a concealed item's content can't be resolved yet (the Keychain key hasn't loaded — normally
+sub-second after launch), pasting it shows a distinct "Can't paste this yet" alert rather than
+the Accessibility-permission prompt, since granting Accessibility wouldn't fix it.
 
 Browsers and other apps do not always mark password-field copies as concealed. Hover any ordinary
 text card and use the lock icon (**Encrypt and Conceal**) to encrypt it manually; this is one-way.

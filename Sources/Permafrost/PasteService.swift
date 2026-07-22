@@ -3,6 +3,18 @@ import ApplicationServices
 import Carbon.HIToolbox
 import PermafrostCore
 
+/// Distinguishes *why* `paste`/`pasteAsPlainText` didn't fully succeed, since the two
+/// failure modes need different handling by the caller: `contentUnavailable` means nothing
+/// was written to the pasteboard at all (e.g. a concealed item whose key isn't ready yet —
+/// showing an Accessibility prompt for that would be actively misleading), while
+/// `copiedOnly` means the content is on the pasteboard and only the automatic ⌘V keystroke
+/// was skipped for lack of Accessibility permission.
+enum PasteOutcome: Equatable {
+    case pasted
+    case copiedOnly
+    case contentUnavailable
+}
+
 /// Loads an item onto the pasteboard and synthesizes ⌘V into the frontmost app
 /// (ADR-006). Requires Accessibility; degrades to copy-only without it.
 @MainActor
@@ -25,17 +37,19 @@ final class PasteService {
 
     @discardableResult
     func copyToPasteboard(_ item: ClipboardItem) -> Bool {
-        // Resolve before clearing the pasteboard. A missing Keychain key or corrupt ciphertext
-        // must leave the user's current clipboard intact rather than replacing it with "".
-        let text = item.kind == .text ? revealedText(for: item) : nil
-        if item.kind == .text, text == nil { return false }
         let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
         switch item.kind {
         case .text:
-            pasteboard.setString(text!, forType: .string)
+            // Resolve before clearing the pasteboard. A missing Keychain key or corrupt
+            // ciphertext must leave the user's current clipboard intact, not replace it
+            // with "" — bound once via `guard let` so there is no later force-unwrap of
+            // an optional the compiler can't prove is still non-nil at that point.
+            guard let text = revealedText(for: item) else { return false }
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
             if let rich = item.richData { pasteboard.setData(rich, forType: .rtf) }
         case .image:
+            pasteboard.clearContents()
             if let data = item.imageData { pasteboard.setData(data, forType: .png) }
         }
         onPasteboardWritten()
@@ -74,16 +88,16 @@ final class PasteService {
         }
     }
 
-    /// Returns false when Accessibility is missing — the item is on the pasteboard
-    /// (copy-only fallback) but no keystroke was sent.
     @discardableResult
-    func paste(_ item: ClipboardItem) -> Bool {
-        copyToPasteboard(item) && sendPasteKeystrokeIfTrusted()
+    func paste(_ item: ClipboardItem) -> PasteOutcome {
+        guard copyToPasteboard(item) else { return .contentUnavailable }
+        return sendPasteKeystrokeIfTrusted() ? .pasted : .copiedOnly
     }
 
     @discardableResult
-    func pasteAsPlainText(_ item: ClipboardItem) -> Bool {
-        copyPlainTextToPasteboard(item) && sendPasteKeystrokeIfTrusted()
+    func pasteAsPlainText(_ item: ClipboardItem) -> PasteOutcome {
+        guard copyPlainTextToPasteboard(item) else { return .contentUnavailable }
+        return sendPasteKeystrokeIfTrusted() ? .pasted : .copiedOnly
     }
 
     @discardableResult

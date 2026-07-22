@@ -129,6 +129,17 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    key entirely (see ADR-021's critical follow-up) — the key is now set whenever it
    becomes available, no timeout, no placeholder, ever. Concealed-content actions are
    simply unavailable (fails safe, not silently insecure) until then.
+   **Follow-up 2026-07-22**: a high-effort code review of everything built on ADR-021 since
+   (concealed-storage hardening, retroactive concealment, portable encrypted exports)
+   surfaced ten issues, all fixed on `fix/code-review-findings-2026-07-21` — see ADR-021's
+   2026-07-22 follow-up in DECISIONS.md for the full list. Highlights: the key-pending
+   retry queue added to `CaptureSaveQueue` traded the old data-loss bug for an unbounded
+   plaintext-retention one (now capped, with bounded automatic retries instead of a bare
+   drop); a transient migration failure in `setConcealedContentKey` could permanently
+   disable concealed-content encryption for a session (now non-fatal and self-healing);
+   archive import wasn't atomic (a failing entry left earlier entries already committed
+   behind one misleading "Import failed" alert); portable-archive PBKDF2 key derivation ran
+   on the main actor (froze the app during export/import).
 
 ## Later
 

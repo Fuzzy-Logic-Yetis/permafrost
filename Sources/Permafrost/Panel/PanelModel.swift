@@ -4,8 +4,8 @@ import SwiftUI
 
 @MainActor
 protocol PanelPasteServing {
-    func paste(_ item: ClipboardItem) -> Bool
-    func pasteAsPlainText(_ item: ClipboardItem) -> Bool
+    func paste(_ item: ClipboardItem) -> PasteOutcome
+    func pasteAsPlainText(_ item: ClipboardItem) -> PasteOutcome
     func copyOCRTextToPasteboard(_ item: ClipboardItem)
     func pasteOCRText(_ item: ClipboardItem) -> Bool
 }
@@ -28,6 +28,10 @@ final class PanelModel: ObservableObject {
 
     var onCommit: () -> Void = {}
     var onAccessibilityNeeded: () -> Void = {}
+    /// Fires when a paste couldn't resolve the item's content at all (e.g. a concealed
+    /// item whose Keychain key isn't ready yet) — distinct from `onAccessibilityNeeded`,
+    /// since prompting for Accessibility permission would be misleading for this case.
+    var onContentUnavailable: () -> Void = {}
 
     private let store: ClipboardStore
     private let pasteService: any PanelPasteServing
@@ -146,12 +150,14 @@ final class PanelModel: ObservableObject {
         guard items.indices.contains(index) else { return }
         let item = items[index]
         onCommit()  // close the panel first so focus is back in the target app
-        let pasted =
+        let outcome =
             asPlainText && item.kind == .text
             ? pasteService.pasteAsPlainText(item)
             : pasteService.paste(item)
-        if !pasted {
-            onAccessibilityNeeded()
+        switch outcome {
+        case .pasted: break
+        case .copiedOnly: onAccessibilityNeeded()
+        case .contentUnavailable: onContentUnavailable()
         }
     }
 

@@ -153,7 +153,15 @@ public enum ImportExport {
             return try Data(contentsOf: url)
         }
 
-        var imported = 0
+        // Every entry is validated/decrypted into a plain `ClipboardItem` here, with
+        // nothing written to the store yet — only after every entry in the archive checks
+        // out does the single batch insert below run, itself one transaction. This makes
+        // the whole import atomic: an archive that fails partway through (e.g. one
+        // concealed entry from a different Keychain key) leaves the store exactly as it
+        // was, rather than the entries before the failure already being permanently
+        // committed while the user sees a single "Import failed" alert that doesn't
+        // reflect that partial state.
+        var itemsToInsert: [ClipboardItem] = []
         for entry in manifest.items {
             let richData = try blob(entry.richDataFile)
             let imageData = try blob(entry.imageFile)
@@ -182,73 +190,59 @@ public enum ImportExport {
                 guard ClipboardCapture(text: plaintext).contentHash == entry.contentHash else {
                     throw ImportError.contentHashMismatch(entry.contentHash)
                 }
-                let item = ClipboardItem(
-                    id: nil,
-                    contentHash: entry.contentHash,
-                    kind: .text,
-                    text: nil,
-                    ocrText: nil,
-                    richData: nil,
-                    encryptedData: encryptedData,
-                    imageData: nil,
-                    thumbnail: nil,
-                    sourceApp: entry.sourceApp,
-                    createdAt: entry.createdAt,
-                    lastUsedAt: entry.lastUsedAt,
-                    isPinned: entry.isPinned,
-                    pinOrder: entry.pinOrder,
-                    isConcealed: true
-                )
-                if try store.insertPreservingMetadata(item) {
-                    imported += 1
-                }
+                itemsToInsert.append(
+                    ClipboardItem(
+                        id: nil,
+                        contentHash: entry.contentHash,
+                        kind: .text,
+                        text: nil,
+                        ocrText: nil,
+                        richData: nil,
+                        encryptedData: encryptedData,
+                        imageData: nil,
+                        thumbnail: nil,
+                        sourceApp: entry.sourceApp,
+                        createdAt: entry.createdAt,
+                        lastUsedAt: entry.lastUsedAt,
+                        isPinned: entry.isPinned,
+                        pinOrder: entry.pinOrder,
+                        isConcealed: true
+                    ))
                 continue
             }
 
             // Review M-2: don't trust the manifest's kind/hash claims — recompute
             // the hash from the actual content using the same logic that produced
             // it at capture time, and reject fields that don't match the kind.
-            let capture: ClipboardCapture
-            switch entry.kind {
-            case .text:
-                guard let text = entry.text, entry.ocrText == nil, imageData == nil else {
-                    throw ImportError.kindFieldMismatch(entry.contentHash)
-                }
-                capture = ClipboardCapture(
-                    text: text, richData: richData, sourceApp: entry.sourceApp,
-                    isConcealed: entry.isConcealed)
-            case .image:
-                guard let imageData, entry.text == nil else {
-                    throw ImportError.kindFieldMismatch(entry.contentHash)
-                }
-                capture = ClipboardCapture(
-                    imageData: imageData, ocrText: entry.ocrText, sourceApp: entry.sourceApp,
-                    isConcealed: entry.isConcealed)
-            }
-            guard capture.contentHash == entry.contentHash else {
+            do {
+                try ClipboardItemValidation.validate(
+                    kind: entry.kind, text: entry.text, ocrText: entry.ocrText,
+                    imageData: imageData, richData: richData, sourceApp: entry.sourceApp,
+                    isConcealed: entry.isConcealed, expectedContentHash: entry.contentHash)
+            } catch ClipboardItemValidation.Error.kindFieldMismatch {
+                throw ImportError.kindFieldMismatch(entry.contentHash)
+            } catch ClipboardItemValidation.Error.contentHashMismatch {
                 throw ImportError.contentHashMismatch(entry.contentHash)
             }
 
-            let item = ClipboardItem(
-                id: nil,
-                contentHash: entry.contentHash,
-                kind: entry.kind,
-                text: entry.text,
-                ocrText: entry.ocrText,
-                richData: richData,
-                imageData: imageData,
-                thumbnail: thumbnail,
-                sourceApp: entry.sourceApp,
-                createdAt: entry.createdAt,
-                lastUsedAt: entry.lastUsedAt,
-                isPinned: entry.isPinned,
-                pinOrder: entry.pinOrder,
-                isConcealed: entry.isConcealed
-            )
-            if try store.insertPreservingMetadata(item) {
-                imported += 1
-            }
+            itemsToInsert.append(
+                ClipboardItem(
+                    id: nil,
+                    contentHash: entry.contentHash,
+                    kind: entry.kind,
+                    text: entry.text,
+                    ocrText: entry.ocrText,
+                    richData: richData,
+                    imageData: imageData,
+                    thumbnail: thumbnail,
+                    sourceApp: entry.sourceApp,
+                    createdAt: entry.createdAt,
+                    lastUsedAt: entry.lastUsedAt,
+                    isPinned: entry.isPinned,
+                    pinOrder: entry.pinOrder,
+                    isConcealed: entry.isConcealed
+                ))
         }
-        return imported
+        return try store.insertPreservingMetadata(itemsToInsert)
     }
 }

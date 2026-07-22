@@ -412,11 +412,31 @@ import Testing
         let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
         let item = try store.save(ClipboardCapture(text: "plain for now"), now: now)
 
-        try store.setConcealedContentKey(SymmetricKey(size: .bits256))
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))
         try store.markConcealed(id: item.id!)
 
         let updated = try #require(try store.items().first)
         #expect(updated.isConcealed)
         #expect(try store.revealText(for: updated) == "plain for now")
+    }
+
+    /// Direct regression test for the migration `setConcealedContentKey` runs internally:
+    /// a pre-ADR-021 legacy row (concealed flag set, plaintext still on disk, no
+    /// ciphertext) must get backfilled into encrypted storage as soon as a key is set.
+    /// The public API can no longer produce this row shape itself (every path that sets
+    /// `isConcealed` now requires a cipher first) — `seedLegacyConcealedPlaintextRowForTesting`
+    /// is the test-only seam that reaches past that guard to recreate it.
+    @Test func settingKeyMigratesExistingLegacyConcealedPlaintextRows() throws {
+        let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
+        let legacy = try store.seedLegacyConcealedPlaintextRowForTesting(
+            text: "old password", now: now)
+
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))
+
+        let migrated = try #require(try store.allItems().first { $0.id == legacy.id })
+        #expect(migrated.text == nil)
+        #expect(migrated.richData == nil)
+        #expect(migrated.encryptedData != nil)
+        #expect(try store.revealText(for: migrated) == "old password")
     }
 }

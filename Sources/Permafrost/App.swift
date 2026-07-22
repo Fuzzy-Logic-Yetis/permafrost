@@ -62,16 +62,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // Never blocks launch or falls back to a throwaway key. Pending concealed captures
         // are retried only after a successfully persisted Keychain key is installed.
+        // setConcealedContentKey installs the cipher unconditionally and self-heals any
+        // legacy-row backfill failure on its own on a later call, so no retry belongs here.
         ConcealedContentKeychain.loadOrCreateKey { [weak self, weak store] result in
             switch result {
             case .success(let key):
-                do {
-                    try store?.setConcealedContentKey(key)
-                    DispatchQueue.main.async { [weak self] in
-                        self?.captureSaveQueue.retryPendingConcealedCaptures()
-                    }
-                } catch {
-                    Log.store.error("concealed-content setup failed: \(error.localizedDescription)")
+                store?.setConcealedContentKey(key)
+                DispatchQueue.main.async { [weak self] in
+                    self?.captureSaveQueue.retryPendingConcealedCaptures()
                 }
             case .failure(let error):
                 Log.store.error("concealed-content key unavailable: \(error.localizedDescription)")
@@ -83,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let model = PanelModel(store: store, pasteService: pasteService)
         model.onAccessibilityNeeded = { [weak self] in self?.showAccessibilityPrompt() }
+        model.onContentUnavailable = { [weak self] in self?.showContentUnavailablePrompt() }
         panelController = PanelController(model: model)
 
         watcher = PasteboardWatcher()
@@ -486,6 +485,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )!
             NSWorkspace.shared.open(url)
         }
+    }
+
+    private func showContentUnavailablePrompt() {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Can't paste this yet"
+        alert.informativeText =
+            "This item's concealed content isn't available yet. Try again in a moment."
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     private func presentFatalError(_ error: Error) {

@@ -136,6 +136,25 @@ import PermafrostCore
         #expect(events == ["close", "paste", "accessibility"])
     }
 
+    /// Regression: a concealed item whose content can't be resolved yet (Keychain key not
+    /// ready) must not be reported through `onAccessibilityNeeded` — that alert claims
+    /// Accessibility is the problem, which is both wrong and unfixable by the user here.
+    @Test func commitContentUnavailableCallsOnContentUnavailableNotAccessibility() throws {
+        let (store, model, pasteService) = try makeModel()
+        try store.save(ClipboardCapture(text: "locked"), now: now)
+        pasteService.outcome = .contentUnavailable
+        var accessibilityPromptCount = 0
+        var contentUnavailableCount = 0
+        model.onAccessibilityNeeded = { accessibilityPromptCount += 1 }
+        model.onContentUnavailable = { contentUnavailableCount += 1 }
+        model.prepareForShow()
+
+        model.commitSelection()
+
+        #expect(contentUnavailableCount == 1)
+        #expect(accessibilityPromptCount == 0)
+    }
+
     @Test func commitWhilePreviewShownPastesSelectedItem() throws {
         let (store, model, pasteService) = try makeModel()
         try store.save(ClipboardCapture(text: "not selected"), now: now)
@@ -337,7 +356,11 @@ import PermafrostCore
 
 @MainActor
 private final class FakePasteService: PanelPasteServing {
-    var result: Bool
+    /// `true`/`false` map to `.pasted`/`.copiedOnly` — the two outcomes existing tests
+    /// distinguish (full paste vs. the Accessibility-missing fallback). Tests exercising
+    /// the third outcome (`.contentUnavailable`) set `outcome` directly.
+    var outcome: PasteOutcome
+    var ocrResult: Bool
     var pastedTexts: [String] = []
     var copiedOCRTexts: [String] = []
     var pastedOCRTexts: [String] = []
@@ -345,19 +368,20 @@ private final class FakePasteService: PanelPasteServing {
     var onPaste: () -> Void = {}
 
     init(result: Bool) {
-        self.result = result
+        self.outcome = result ? .pasted : .copiedOnly
+        self.ocrResult = result
     }
 
-    func paste(_ item: ClipboardItem) -> Bool {
+    func paste(_ item: ClipboardItem) -> PasteOutcome {
         pastedTexts.append(item.text ?? "")
         onPaste()
-        return result
+        return outcome
     }
 
-    func pasteAsPlainText(_ item: ClipboardItem) -> Bool {
+    func pasteAsPlainText(_ item: ClipboardItem) -> PasteOutcome {
         pastedAsPlainTexts.append(item.text ?? "")
         onPaste()
-        return result
+        return outcome
     }
 
     func copyOCRTextToPasteboard(_ item: ClipboardItem) {
@@ -367,6 +391,6 @@ private final class FakePasteService: PanelPasteServing {
     func pasteOCRText(_ item: ClipboardItem) -> Bool {
         pastedOCRTexts.append(item.ocrText ?? "")
         onPaste()
-        return result
+        return ocrResult
     }
 }

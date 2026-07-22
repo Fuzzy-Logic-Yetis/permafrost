@@ -136,20 +136,14 @@ public enum PortableArchive {
     }
 
     private static func validatedClipboardItem(from entry: Item) throws -> ClipboardItem {
-        let capture: ClipboardCapture
-        switch entry.kind {
-        case .text:
-            guard let text = entry.text, entry.ocrText == nil, entry.imageData == nil else {
-                throw Error.kindFieldMismatch(entry.contentHash)
-            }
-            capture = ClipboardCapture(text: text, richData: entry.richData, sourceApp: entry.sourceApp)
-        case .image:
-            guard let imageData = entry.imageData, entry.text == nil else {
-                throw Error.kindFieldMismatch(entry.contentHash)
-            }
-            capture = ClipboardCapture(imageData: imageData, ocrText: entry.ocrText, sourceApp: entry.sourceApp)
-        }
-        guard capture.contentHash == entry.contentHash else {
+        do {
+            try ClipboardItemValidation.validate(
+                kind: entry.kind, text: entry.text, ocrText: entry.ocrText,
+                imageData: entry.imageData, richData: entry.richData, sourceApp: entry.sourceApp,
+                isConcealed: entry.isConcealed, expectedContentHash: entry.contentHash)
+        } catch ClipboardItemValidation.Error.kindFieldMismatch {
+            throw Error.kindFieldMismatch(entry.contentHash)
+        } catch ClipboardItemValidation.Error.contentHashMismatch {
             throw Error.contentHashMismatch(entry.contentHash)
         }
         return ClipboardItem(
