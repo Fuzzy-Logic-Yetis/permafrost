@@ -247,7 +247,11 @@ private struct ItemCard: View {
             // this slot, `content` would reflow/re-wrap every time the mouse moved onto
             // a different card.
             trailing
-                .frame(width: 78, alignment: .trailing)
+                // Widened 2026-07-22 alongside enlarging each hover-row icon's hit target
+                // to 20x20 (was undersized for the current 5-icon-wide worst case — text
+                // items show up to 5 at once — which let content overflow this frame and,
+                // combined with its trailing alignment, shift earlier icons left/right).
+                .frame(width: 124, alignment: .trailing)
         }
         .padding(8)
         .background(
@@ -278,6 +282,8 @@ private struct ItemCard: View {
                         Image(systemName: "text.viewfinder")
                     }
                     .buttonStyle(.plain)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
                     .foregroundStyle(.blue)
                     .help("Open recognized text")
                 }
@@ -289,6 +295,8 @@ private struct ItemCard: View {
                         Image(systemName: "doc.plaintext")
                     }
                     .buttonStyle(.plain)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
                     .help("Paste as Plain Text")
                 }
 
@@ -300,6 +308,8 @@ private struct ItemCard: View {
                         Image(systemName: "lock.fill")
                     }
                     .buttonStyle(.plain)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
                     .help("Encrypt and Conceal")
                 }
 
@@ -313,6 +323,8 @@ private struct ItemCard: View {
                         Image(systemName: revealedText == nil ? "eye" : "eye.slash")
                     }
                     .buttonStyle(.plain)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
                     .help(revealedText == nil ? "Reveal" : "Hide")
                 }
 
@@ -320,29 +332,39 @@ private struct ItemCard: View {
                     Image(systemName: item.isPinned ? "pin.slash" : "pin")
                 }
                 .buttonStyle(.plain)
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
                 .help(item.isPinned ? "Unpin" : "Pin")
 
                 // Concealed rows have no plaintext `item.text`. Sharing becomes available
                 // only after the eye has deliberately revealed it, and then passes that
                 // in-memory plaintext to the native picker rather than an empty string —
                 // `shareableItems(revealedText:)` returns nil (not a silent empty share)
-                // for a concealed item that hasn't been revealed yet.
-                if let shareItems = item.shareableItems(revealedText: revealedText) {
-                    ShareButton(
-                        items: shareItems,
-                        onPresentationChanged: { presenting in
-                            isSharing = presenting
-                            if !presenting { revealedText = nil }
-                        }
-                    )
-                    .frame(width: 15, height: 15)
-                    .help("Share")
-                }
+                // for a concealed item that hasn't been revealed yet. Always rendered
+                // (disabled via `ShareButton`'s existing `isEnabled = !items.isEmpty`
+                // rather than removed from the layout) so this slot's width is constant —
+                // conditionally inserting/removing it here used to shift every icon before
+                // it (found 2026-07-22: this row sits in a fixed-width, trailing-aligned
+                // frame, so a changing row width shifts earlier icons left/right, not just
+                // this one — enough to misfire a Pin click meant for the eye toggle).
+                let shareItems = item.shareableItems(revealedText: revealedText) ?? []
+                ShareButton(
+                    items: shareItems,
+                    onPresentationChanged: { presenting in
+                        isSharing = presenting
+                        if !presenting { revealedText = nil }
+                    }
+                )
+                .frame(width: 20, height: 20)
+                .opacity(shareItems.isEmpty ? 0.35 : 1)
+                .help("Share")
 
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.plain)
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
                 .help("Delete")
             }
             .font(.caption)

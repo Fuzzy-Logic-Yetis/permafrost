@@ -58,7 +58,13 @@ you just copied, and must never steal the `⌘1` slot from it either.
   icon (📄, ADR-018) on `.text` cards only. Clicking any of these does not trigger the
   card's own click-to-paste gesture — proven by pin/share/delete first, extended to the
   plain-text button the same way. Lets a mouse user manage an item without touching the
-  keyboard; the keyboard shortcuts remain the fast path for everyone else.
+  keyboard; the keyboard shortcuts remain the fast path for everyone else. Each icon's
+  tappable area (20×20) is intentionally larger than its glyph so a near-miss still hits
+  the button instead of falling through to the card's paste gesture, and every icon that
+  can appear in the hover row is always laid out (dimmed/disabled rather than removed when
+  unavailable, e.g. Share before a concealed item is revealed) so revealing/hiding one icon
+  never shifts the others — found 2026-07-22 after a shifted Share icon caused a misclick
+  on Pin.
 - **Paste as plain text** (`⇧⏎`, ADR-018): pastes the selected item stripped of rich
   data (no `.rtf`) instead of the normal `⏎` rich paste. Text-only — pressing `⇧⏎` on an
   `.image` card falls back to a normal paste rather than doing nothing, since images have
