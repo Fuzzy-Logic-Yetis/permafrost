@@ -95,6 +95,15 @@ you just copied, and must never steal the `⌘1` slot from it either.
   that text into the previous app. If recognition is still running, the panel refreshes
   after the background OCR job stores text.
 
+## Concealed text
+
+Concealed text is redacted whenever the panel opens. Hover a concealed card and click the eye
+icon to reveal it for the current panel session; closing and reopening the panel, or completing
+a Share action, redacts it again. Share is shown only after this explicit reveal.
+
+Browsers and other apps do not always mark password-field copies as concealed. Hover any ordinary
+text card and use the lock icon (**Encrypt and Conceal**) to encrypt it manually; this is one-way.
+
 ## Keyboard map
 
 | Key | Action |

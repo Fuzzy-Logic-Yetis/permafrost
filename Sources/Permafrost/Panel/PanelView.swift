@@ -83,7 +83,9 @@ struct PanelView: View {
                             onDelete: { if let id = item.id { model.deleteItem(id: id) } },
                             onPreviewOCR: { model.showPreview(index: index) },
                             onPasteAsPlainText: { model.commit(index: index, asPlainText: true) },
-                            revealConcealedText: { model.revealConcealedText(for: item) }
+                            onMarkConcealed: { if let id = item.id { model.markConcealed(id: id) } },
+                            revealConcealedText: { model.revealConcealedText(for: item) },
+                            revealToken: model.focusToken
                         )
                         // ADR-020: drag as plain text/PNG, mirroring the existing
                         // shareableItems/share-sheet precedent rather than carrying RTF.
@@ -219,7 +221,10 @@ private struct ItemCard: View {
     let onDelete: () -> Void
     let onPreviewOCR: () -> Void
     let onPasteAsPlainText: () -> Void
+    let onMarkConcealed: () -> Void
     let revealConcealedText: () -> String?
+    /// Changes for every new panel session; revealed secrets must not survive a close/reopen.
+    let revealToken: UUID
 
     @State private var isHovering = false
     @State private var isSharing = false
@@ -249,6 +254,10 @@ private struct ItemCard: View {
         )
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
+        .onChange(of: revealToken) {
+            revealedText = nil
+            isSharing = false
+        }
     }
 
     /// State badges (pin/concealed/quick-number) at rest; mouse-first actions
@@ -277,6 +286,17 @@ private struct ItemCard: View {
                     .help("Paste as Plain Text")
                 }
 
+                // Encrypt ordinary text copied from browsers/apps that do not set
+                // `org.nspasteboard.ConcealedType`. This is intentionally visible rather
+                // than buried only in the context menu.
+                if item.kind == .text, !item.isConcealed {
+                    Button(action: onMarkConcealed) {
+                        Image(systemName: "lock.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Encrypt and Conceal")
+                }
+
                 // ADR-021: redact-by-default, reveal-on-demand — a dedicated toggle so
                 // revealing is a deliberate click, never a side effect of hovering or of
                 // the card's own click-to-paste.
@@ -302,7 +322,10 @@ private struct ItemCard: View {
                 if !item.isConcealed || revealedText != nil {
                     ShareButton(
                         items: item.isConcealed ? [revealedText!] : item.shareableItems,
-                        onPresentationChanged: { isSharing = $0 }
+                        onPresentationChanged: { presenting in
+                            isSharing = presenting
+                            if !presenting { revealedText = nil }
+                        }
                     )
                     .frame(width: 15, height: 15)
                     .help("Share")
