@@ -32,7 +32,13 @@ struct ShareButton: NSViewRepresentable {
     func updateNSView(_ nsView: NSButton, context: Context) {
         context.coordinator.items = items
         context.coordinator.onPresentationChanged = onPresentationChanged
-        nsView.isEnabled = !items.isEmpty
+        // Deliberately left `isEnabled = true` always (found 2026-07-22): a disabled
+        // NSButton doesn't consume its click, so with `items` empty (revealed-but-not-yet
+        // -unlocked concealed content) the click fell through to the card underneath and
+        // pasted the item instead of doing nothing. Keeping the button enabled means it
+        // captures the click; `Coordinator.share(_:)`'s own `guard !items.isEmpty` below
+        // still makes an empty-items click a safe no-op — just one that consumes the tap
+        // instead of leaking it to whatever's behind this view.
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
