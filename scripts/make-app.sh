@@ -10,6 +10,7 @@ cd "$(dirname "$0")/.."
 VERSION="0.5.0"
 IDENTIFIER="com.fuzzylogicyetis.Permafrost"
 APP="dist/Permafrost.app"
+REVISION="$(git rev-parse --short=12 HEAD 2>/dev/null || echo development)"
 
 echo "Building release binary..."
 swift build -c release
@@ -44,6 +45,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>${VERSION}</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
+    <key>PermafrostGitRevision</key>
+    <string>${REVISION}</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>

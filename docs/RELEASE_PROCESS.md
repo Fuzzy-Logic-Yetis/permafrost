@@ -20,6 +20,12 @@ version has no `## vX.Y.Z` section in ROADMAP.md — run it before tagging; CI r
    releases** — an unsigned/ad-hoc binary from the internet trains users to bypass
    Gatekeeper. Install instructions are build-from-source (README).
 
+The status menu's **Check for Updates…** item opens GitHub Releases. **About Permafrost**
+shows the semantic version plus the exact Git revision embedded by `scripts/make-app.sh`,
+so a user can confirm which source revision is running. During v0.x, installing an update
+means pulling the intended published tag and rebuilding locally. There is no background
+network request or automatic installation.
+
 ## v1.0+ releases (requires Apple Developer Program — deferred, ROADMAP.md)
 
 Additions to the process, in order:

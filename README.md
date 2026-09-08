@@ -39,6 +39,8 @@ Local-first. Keyboard-first. No cloud, no analytics, no network code at all.
 - **Mouse-friendly too** — hover any entry for reveal / plain-text / pin / share / delete
   buttons
 - **Menu bar app** — no Dock icon, no window clutter
+- **Visible build identity** — About Permafrost shows the version and exact Git revision;
+  Check for Updates opens the project's GitHub Releases page
 - **Pause capture** — temporarily stop recording from the menu bar or Settings
 - **Import / export** — a **This Mac Only** archive (tied to this Mac's Keychain) or a
   **Portable Encrypted Backup** (passphrase-protected, importable on another Mac); your
@@ -65,6 +67,10 @@ cd permafrost
 ./scripts/make-app.sh          # builds release binary and assembles Permafrost.app
 open dist/Permafrost.app
 ```
+
+For updates, choose **Check for Updates…** from the menu bar, pull the published release,
+and rebuild with `./scripts/make-app.sh`. Automatic updates are planned after Developer ID
+signing and notarization are available.
 
 Requires macOS 14+ and the Xcode Command Line Tools (`xcode-select --install`).
 

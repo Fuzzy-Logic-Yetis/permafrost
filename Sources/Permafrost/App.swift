@@ -3,7 +3,17 @@ import PermafrostCore
 
 enum PermafrostVersion {
     static let string = "0.5.0"
+
+    static var revision: String {
+        Bundle.main.object(forInfoDictionaryKey: "PermafrostGitRevision") as? String
+            ?? "development"
+    }
+
+    static var display: String { "Version \(string) (revision \(revision))" }
 }
+
+private let projectURL = URL(string: "https://github.com/Fuzzy-Logic-Yetis/permafrost")!
+private let releasesURL = projectURL.appendingPathComponent("releases")
 
 extension Notification.Name {
     /// Posted when Carbon rejects a shortcut and Permafrost falls back to a
@@ -232,6 +242,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(importItem)
 
         menu.addItem(.separator())
+        let aboutItem = NSMenuItem(
+            title: "About Permafrost", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+
+        let updatesItem = NSMenuItem(
+            title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        updatesItem.target = self
+        menu.addItem(updatesItem)
+
+        menu.addItem(.separator())
         let clearItem = NSMenuItem(
             title: "Clear Unpinned History…", action: #selector(clearHistory), keyEquivalent: "")
         clearItem.target = self
@@ -371,6 +392,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindowController = SettingsWindowController(store: store)
         }
         settingsWindowController?.showWindow()
+    }
+
+    @objc private func showAbout() {
+        let alert = NSAlert()
+        alert.messageText = "Permafrost"
+        alert.informativeText = "\(PermafrostVersion.display)\n\nLocal-first clipboard history for macOS."
+        alert.icon = NSApp.applicationIconImage
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "View on GitHub")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSWorkspace.shared.open(projectURL)
+        }
+    }
+
+    @objc private func checkForUpdates() {
+        NSWorkspace.shared.open(releasesURL)
     }
 
     @objc private func clearHistory() {

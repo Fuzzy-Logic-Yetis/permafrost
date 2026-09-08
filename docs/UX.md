@@ -159,6 +159,10 @@ and empty everywhere or absent everywhere, rather than fighting that decoration 
 
 ## Capture controls
 
+The status menu also includes **About Permafrost**, which reports the semantic version and
+packaged Git revision and links to the source repository. **Check for Updates…** opens GitHub
+Releases; v0.x updates remain an explicit build-from-source action.
+
 The status-bar menu includes **Pause Capture**. When checked, Permafrost continues running
 and the history panel remains available, but new pasteboard changes are ignored and not
 backfilled later. Resuming capture starts from the next clipboard change. The same persisted
