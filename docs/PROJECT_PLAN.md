@@ -28,7 +28,13 @@ Core requirements (MVP):
 | **M4 — Packaging** | `make-app.sh`, ad-hoc signing, install docs, tag v0.1.0 | ✅ done |
 | **M5 — Pin lifecycle & hover actions** | ADR-012: recent/pinned section split, quick-paste bounded to recent; hover pin/share/delete; Unpin All / Clear Everything; dedup metadata refresh, import path validation, error surfacing from independent code review | ✅ done |
 
-Post-MVP direction: see [ROADMAP.md](ROADMAP.md).
+The table above covers the MVP only and stops at M5 by design — post-MVP work is tracked by
+version in [ROADMAP.md](ROADMAP.md), not by milestone here.
+
+**Current state (2026-09-07):** v0.1.0–v0.4.0 shipped; **v0.5.0 (QR codes) is in progress** —
+decoding shipped, two follow-ups still open. Start at [ROADMAP.md](ROADMAP.md) for what
+shipped and [BACKLOG.md](BACKLOG.md) for what's next; version strings still read 0.4.0 until
+v0.5.0 closes (see the note in ROADMAP.md).
 
 ## Workflow
 

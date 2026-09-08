@@ -33,7 +33,7 @@ Settings' History Management actions surface errors the same way the status-menu
 already did; docs/SECURITY.md now discloses Input Monitoring; PermissionReset no longer
 blocks the main actor. See docs/DECISIONS.md for the ADR.
 
-## v0.4.0 — Rich capture, drag-and-drop, concealed encryption, portable backups (done 2026-07-22, now)
+## v0.4.0 — Rich capture, drag-and-drop, concealed encryption, portable backups (done 2026-07-22)
 
 - ~~Paste as plain text~~ (`⇧⏎`, ADR-018) and ~~HTML-to-RTF rich-text capture~~ (ADR-019) —
   browser copies without a native `.rtf` now get real formatting instead of none, with
@@ -56,6 +56,25 @@ blocks the main actor. See docs/DECISIONS.md for the ADR.
   dialog, non-atomic archive import, main-thread-blocking key derivation, and others) —
   all fixed the same day, with regression tests for each. See BACKLOG.md item 4's
   follow-ups and ADR-021's 2026-07-22 entry for the full list.
+
+## v0.5.0 — QR codes (in progress, now)
+
+- ~~QR code decoding on captured images~~ — **shipped 2026-09-07, ADR-022.** Snipped QR
+  codes are decoded on-device with Vision and stored in the same `ocr_text` metadata as OCR,
+  so they are searchable, previewable, pasteable, and exportable with no schema change.
+  Payloads in known secret-bearing formats (`otpauth:`, `otpauth-migration:`, `WIFI:`) are
+  dropped before any database write — screen snips never carry the pasteboard's concealed
+  marker, so ADR-011's protection cannot cover them.
+- **Still open in this milestone** (see docs/BACKLOG.md "Next up (v0.5)" for full context):
+  - Tell the user when a sensitive payload was dropped — today a gated snip is
+    indistinguishable from a code that simply didn't decode. Needs a real schema field.
+  - Optionally record sensitive payloads *encrypted* rather than dropping them, for users who
+    want that history — needs ADR-021's concealed path extended to image metadata.
+
+**Version strings deliberately still read 0.4.0** (`PermafrostVersion.string`,
+`scripts/make-app.sh`, README Status). Per CLAUDE.md's Definition of Done they bump when a
+ROADMAP milestone *completes*, and the two items above are still open. Bump all three
+together when this milestone closes.
 
 ## v1.0 — Distribution
 
