@@ -7,6 +7,12 @@ public enum ClipboardItemKind: String, Codable, Sendable {
     case image
 }
 
+public enum QRSensitiveStatus: String, Codable, Sendable {
+    case omitted
+    case encrypted
+    case keyUnavailable
+}
+
 /// A stored clipboard history entry.
 public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
     public var id: Int64?
@@ -14,6 +20,8 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
     public var kind: ClipboardItemKind
     public var text: String?
     public var ocrText: String?
+    public var qrSensitiveStatus: QRSensitiveStatus?
+    public var encryptedQRData: Data?
     public var richData: Data?
     /// AES-GCM sealed box (nonce+ciphertext+tag combined) for concealed `.text` items only
     /// (ADR-021) — never populated alongside `text`/`richData` for the same row.
@@ -30,6 +38,8 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, kind, text, thumbnail
         case ocrText = "ocr_text"
+        case qrSensitiveStatus = "qr_sensitive_status"
+        case encryptedQRData = "encrypted_qr_data"
         case contentHash = "content_hash"
         case richData = "rich_data"
         case encryptedData = "encrypted_data"
@@ -48,6 +58,8 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
         kind: ClipboardItemKind,
         text: String? = nil,
         ocrText: String? = nil,
+        qrSensitiveStatus: QRSensitiveStatus? = nil,
+        encryptedQRData: Data? = nil,
         richData: Data? = nil,
         encryptedData: Data? = nil,
         imageData: Data? = nil,
@@ -64,6 +76,8 @@ public struct ClipboardItem: Identifiable, Equatable, Codable, Sendable {
         self.kind = kind
         self.text = text
         self.ocrText = ocrText
+        self.qrSensitiveStatus = qrSensitiveStatus
+        self.encryptedQRData = encryptedQRData
         self.richData = richData
         self.encryptedData = encryptedData
         self.imageData = imageData

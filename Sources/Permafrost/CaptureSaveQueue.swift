@@ -16,6 +16,7 @@ final class CaptureSaveQueue: @unchecked Sendable {
         var retentionPolicy: RetentionPolicy
         var recognizeTextInImages = true
         var decodeQRCodes = true
+        var recordSensitiveQRCodes = false
     }
 
     /// Bounds in-memory retention of concealed plaintext awaiting a Keychain key. The
@@ -50,7 +51,7 @@ final class CaptureSaveQueue: @unchecked Sendable {
         self.htmlRichTextConverter = htmlRichTextConverter
     }
 
-    var onOCRTextSaved: @Sendable (Int64) -> Void = { _ in }
+    var onCaptureSaved: @Sendable (Int64) -> Void = { _ in }
 
     func enqueue(_ pending: PendingCapture) {
         queue.async { [weak self] in self?.save(pending, retainIfKeyPending: true, attempt: 1) }
@@ -81,13 +82,12 @@ final class CaptureSaveQueue: @unchecked Sendable {
                 let imageData = pending.capture.imageData
             {
                 let recognized = recognizedText(for: pending, imageData: imageData)
-                if !recognized.isEmpty {
-                    try store.setOCRText(recognized, id: id)
-                    Log.capture.info("recognized text saved for image item \(id)")
-                    onOCRTextSaved(id)
-                }
+                try store.setImageRecognition(
+                    ocrText: recognized.ordinary, sensitiveQRText: recognized.sensitive,
+                    detectedSensitiveQR: recognized.detectedSensitive, id: id)
             }
             try store.purge(with: pending.retentionPolicy, now: pending.capturedAt)
+            if let id = item.id { onCaptureSaved(id) }
         } catch ClipboardStore.ConcealedContentError.keyNotYetAvailable where retainIfKeyPending {
             // Keep it only until the async Keychain request resolves; it never reaches disk
             // plaintext and is discarded on app termination if no persistent key becomes
@@ -122,10 +122,14 @@ final class CaptureSaveQueue: @unchecked Sendable {
     /// preview, Copy/Paste Text, and import/export cover QR content with no new plumbing
     /// (ADR-022). Payloads follow the OCR block, separated by a blank line.
     ///
-    /// Sensitive payloads are dropped here rather than filtered downstream: this is the only
-    /// point where the decoded secret exists in memory but has not yet reached disk.
-    private func recognizedText(for pending: PendingCapture, imageData: Data) -> String {
+    /// Sensitive payloads are separated in memory here; only the store may seal them.
+    /// Without the explicit opt-in they are discarded before any metadata write.
+    private func recognizedText(for pending: PendingCapture, imageData: Data)
+        -> (ordinary: String, sensitive: String?, detectedSensitive: Bool)
+    {
         var parts: [String] = []
+        var sensitive: [String] = []
+        var detectedSensitive = false
 
         if pending.recognizeTextInImages, let text = textRecognizer.recognizeText(in: imageData),
             !text.isEmpty
@@ -139,14 +143,17 @@ final class CaptureSaveQueue: @unchecked Sendable {
                 case .ordinary:
                     parts.append(payload)
                 case .sensitive(let reason):
+                    detectedSensitive = true
+                    if pending.recordSensitiveQRCodes { sensitive.append(payload) }
                     // Never log the payload itself (CLAUDE.md: never log clipboard content).
                     Log.capture.info(
-                        "QR payload not recorded — \(reason.rawValue, privacy: .public)")
+                        "sensitive QR payload detected — \(reason.rawValue, privacy: .public)")
                 }
             }
         }
 
-        return parts.joined(separator: "\n\n")
+        return (parts.joined(separator: "\n\n"),
+                sensitive.isEmpty ? nil : sensitive.joined(separator: "\n\n"), detectedSensitive)
     }
 
     @discardableResult

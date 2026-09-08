@@ -193,6 +193,12 @@ public final class ClipboardStore: Sendable {
                 t.add(column: "encrypted_data", .blob)
             }
         }
+        migrator.registerMigration("v4_sensitive_qr") { db in
+            try db.alter(table: "clipboard_item") { t in
+                t.add(column: "qr_sensitive_status", .text)
+                t.add(column: "encrypted_qr_data", .blob)
+            }
+        }
         return migrator
     }
 
@@ -406,6 +412,57 @@ public final class ClipboardStore: Sendable {
         }
     }
 
+    /// Recognition metadata commits together; notices never become searchable content.
+    public func setImageRecognition(
+        ocrText: String?, sensitiveQRText: String?, detectedSensitiveQR: Bool, id: Int64
+    ) throws {
+        try dbQueue.write { db in
+            guard var item = try ClipboardItem.fetchOne(db, key: id), item.kind == .image else { return }
+            if let ocrText, !ocrText.isEmpty { item.ocrText = ocrText }
+            if let sensitiveQRText {
+                if cipher != nil {
+                    item.encryptedQRData = try sealSensitiveQRText(sensitiveQRText, contentHash: item.contentHash)
+                    item.qrSensitiveStatus = .encrypted
+                } else if item.encryptedQRData == nil {
+                    item.qrSensitiveStatus = .keyUnavailable
+                }
+            } else if detectedSensitiveQR, item.encryptedQRData == nil {
+                item.qrSensitiveStatus = .omitted
+            }
+            try item.update(db)
+        }
+    }
+
+    private struct QRSecret: Codable {
+        var contentHash: String
+        var text: String
+    }
+
+    func sealSensitiveQRText(_ text: String, contentHash: String) throws -> Data {
+        guard let cipher else { throw ConcealedContentError.keyNotYetAvailable }
+        let envelope = try JSONEncoder().encode(QRSecret(contentHash: contentHash, text: text))
+        return try cipher.seal(String(decoding: envelope, as: UTF8.self))
+    }
+
+    public func revealSensitiveQRText(for item: ClipboardItem) throws -> String? {
+        guard item.kind == .image, let data = item.encryptedQRData else { return nil }
+        guard let cipher else { return nil }
+        let envelope = try cipher.open(data)
+        let secret = try JSONDecoder().decode(QRSecret.self, from: Data(envelope.utf8))
+        guard secret.contentHash == item.contentHash else {
+            throw ConcealedContentError.invalidConcealedContent
+        }
+        return secret.text
+    }
+
+    static func validateQRMetadata(_ item: ClipboardItem) throws {
+        if item.qrSensitiveStatus != nil || item.encryptedQRData != nil {
+            guard item.kind == .image,
+                (item.qrSensitiveStatus == .encrypted) == (item.encryptedQRData != nil)
+            else { throw ConcealedContentError.invalidConcealedContent }
+        }
+    }
+
     public func setOCRText(_ ocrText: String?, id: Int64) throws {
         try dbQueue.write { db in
             try db.execute(
@@ -509,6 +566,7 @@ public final class ClipboardStore: Sendable {
     }
 
     private func prepareForMetadataInsertion(_ item: ClipboardItem) throws -> ClipboardItem {
+        try Self.validateQRMetadata(item)
         var imported = item
         if imported.kind == .text, imported.isConcealed, imported.encryptedData == nil {
             guard let plaintext = imported.text else {

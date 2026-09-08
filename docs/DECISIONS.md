@@ -1116,3 +1116,44 @@ text awaiting key migration, and malformed mixed plaintext/ciphertext rows, fail
 export with an actionable error. Existing ciphertext exports still work without loading the
 key. Regression tests cover mixed archives and every alternate content field. No fallback
 key, skipped secrets, schema change, or version bump. Review H1 is fixed.
+
+## ADR-023: Sensitive QR metadata, explicit status, and encrypted opt-in
+
+**Context.** Completes ADR-022's two follow-ups without mixing UI notices or decoded
+secrets into searchable/pasteable OCR. Supersedes ADR-022's unconditional payload drop
+only when the new, separately acknowledged `recordSensitiveQRCodes` setting is enabled.
+
+**Decision.** Add nullable `qr_sensitive_status` (omitted/encrypted/keyUnavailable) and
+`encrypted_qr_data` columns in migration v4. Sensitive QR strings use the existing
+persistent Keychain cipher, with the image hash inside the authenticated envelope to
+prevent ciphertext being substituted onto a different image. Ordinary OCR/QR strings
+remain in `ocr_text`. The image and visible OCR remain ordinary history; this feature
+does not encrypt screenshot pixels or detect arbitrary secrets. Consent states that limit.
+
+A separate Images toggle defaults off, including for existing password-capture users.
+Sensitive QR preview is redacted until Reveal; explicit Copy Sensitive QR copies the
+revealed payload with the concealed pasteboard marker and suppresses self-capture. Ordinary
+Copy/Paste All, search, drag and share never include the encrypted decoded metadata.
+
+When a key is unavailable the image is retained, the decoded secret is discarded, and a
+key-unavailable status tells the user to copy the image again after Keychain access returns.
+No additional plaintext retry queue is introduced. Recopying without the opt-in does not
+delete previously encrypted metadata. Turning the setting off affects future captures.
+
+Same-Mac archives advance from version 1 to 3; portable archives from 2 to 4. Imports
+continue reading versions 1 and 2. Old app versions reject new exports rather than silently
+discarding encrypted QR fields. Same-Mac QR ciphertext requires the original key at import;
+portable export decrypts only in memory inside the passphrase-encrypted payload and import
+reseals with the destination key. Status/field combinations are validated atomically.
+
+General capture-completion notifications refresh QR omission states as well as ordinary
+captures, preserving the user's current selection (review M2/M8).
+
+**Verification and review curation (2026-09-08).** Core tests cover old-schema migration,
+omission and unavailable-key states, separate encrypted/searchable fields, ciphertext image
+binding, both backup formats, foreign-key failure, legacy imports and atomic malformed-input
+rejection. Real Vision decodes generated ordinary, Wi-Fi and authenticator QR fixtures. Native
+fixture UI checks verify notices, reveal/copy affordances, re-redaction and consent cancellation/
+acknowledgment without using real clipboard history or Keychain. Review M2 and capture-path
+M8 are fixed; L1 wording is synchronized. All other findings and M8's broader import/purge
+observation follow-up are explicitly recorded in BACKLOG.md before removal of the raw review.

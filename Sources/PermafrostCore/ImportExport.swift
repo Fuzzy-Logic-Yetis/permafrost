@@ -7,7 +7,7 @@ import Foundation
 ///   <dir>/blobs/<hash>.rich      — rich text alternate representation
 /// The app layer zips/unzips the directory; core stays filesystem-only for testability.
 public enum ImportExport {
-    public static let manifestVersion = 1
+    public static let manifestVersion = 3
     public static let manifestFileName = "manifest.json"
 
     public enum ImportError: Error, Equatable {
@@ -57,6 +57,8 @@ public enum ImportExport {
         /// ADR-021: concealed items export their ciphertext here, `text`/`richDataFile`
         /// stay nil for them — the manifest must never carry a concealed item's plaintext.
         var encryptedDataFile: String?
+        var qrSensitiveStatus: QRSensitiveStatus?
+        var encryptedQRDataFile: String?
     }
 
     // MARK: - Export
@@ -65,6 +67,7 @@ public enum ImportExport {
         // Preflight the same immutable snapshot we serialize, before writing any files.
         // Legacy rows can remain plaintext while the asynchronous key migration is pending.
         let items = try store.allItems()
+        for item in items { try ClipboardStore.validateQRMetadata(item) }
         for item in items where item.kind == .text && item.isConcealed {
             guard let encrypted = item.encryptedData, !encrypted.isEmpty,
                 item.text == nil, item.richData == nil, item.ocrText == nil,
@@ -91,7 +94,9 @@ public enum ImportExport {
                 imageFile: nil,
                 thumbnailFile: nil,
                 richDataFile: nil,
-                encryptedDataFile: nil
+                encryptedDataFile: nil,
+                qrSensitiveStatus: item.qrSensitiveStatus,
+                encryptedQRDataFile: nil
             )
             if let imageData = item.imageData {
                 let name = "\(item.contentHash).png"
@@ -112,6 +117,11 @@ public enum ImportExport {
                 let name = "\(item.contentHash).encrypted"
                 try encryptedData.write(to: blobs.appendingPathComponent(name))
                 entry.encryptedDataFile = "blobs/\(name)"
+            }
+            if let data = item.encryptedQRData {
+                let name = "\(item.contentHash).qr-encrypted"
+                try data.write(to: blobs.appendingPathComponent(name))
+                entry.encryptedQRDataFile = "blobs/\(name)"
             }
             manifestItems.append(entry)
         }
@@ -141,7 +151,7 @@ public enum ImportExport {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let manifest = try decoder.decode(Manifest.self, from: Data(contentsOf: manifestURL))
-        guard manifest.version == manifestVersion else {
+        guard [1, manifestVersion].contains(manifest.version) else {
             throw ImportError.unsupportedVersion(manifest.version)
         }
 
@@ -184,6 +194,21 @@ public enum ImportExport {
             let imageData = try blob(entry.imageFile)
             let thumbnail = try blob(entry.thumbnailFile)
             let encryptedData = try blob(entry.encryptedDataFile)
+            let encryptedQRData = try blob(entry.encryptedQRDataFile)
+            let qrItem = ClipboardItem(
+                contentHash: entry.contentHash, kind: entry.kind,
+                qrSensitiveStatus: entry.qrSensitiveStatus, encryptedQRData: encryptedQRData,
+                createdAt: entry.createdAt, lastUsedAt: entry.lastUsedAt)
+            try ClipboardStore.validateQRMetadata(qrItem)
+            if encryptedQRData != nil {
+                do {
+                    guard try store.revealSensitiveQRText(for: qrItem) != nil else {
+                        throw ImportError.concealedContentCannotBeImported(entry.contentHash)
+                    }
+                } catch {
+                    throw ImportError.concealedContentCannotBeImported(entry.contentHash)
+                }
+            }
 
             // ADR-021: a concealed text item is exported as ciphertext, never plaintext.
             // Verify its decrypted plaintext before inserting. A different-machine/key archive
@@ -249,6 +274,7 @@ public enum ImportExport {
                     kind: entry.kind,
                     text: entry.text,
                     ocrText: entry.ocrText,
+                    qrSensitiveStatus: entry.qrSensitiveStatus, encryptedQRData: encryptedQRData,
                     richData: richData,
                     imageData: imageData,
                     thumbnail: thumbnail,

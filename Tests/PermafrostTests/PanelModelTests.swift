@@ -215,6 +215,30 @@ import PermafrostCore
         #expect(model.selectedIndex == 1)
     }
 
+    @Test func captureCompletionPreservesSelectionAndRefreshesOrdinaryText() async throws {
+        let (store, model, _) = try makeModel()
+        let selected = try store.save(ClipboardCapture(text: "selected"), now: now)
+        model.prepareForShow()
+        let fresh = try store.save(ClipboardCapture(text: "fresh"), now: now.addingTimeInterval(1))
+        NotificationCenter.default.post(name: .captureSaved, object: nil, userInfo: ["itemID": fresh.id!])
+        await Task.yield()
+        #expect(model.items.count == 2)
+        #expect(model.selectedItem?.id == selected.id)
+    }
+
+    @Test func sensitiveQRUsesExplicitCopyAndNeverOrdinaryOCRActions() throws {
+        let (store, model, paste) = try makeModel()
+        let item = try store.save(ClipboardCapture(imageData: Data([1, 2, 3])))
+        try store.setImageRecognition(ocrText: "public", sensitiveQRText: "private QR",
+                                      detectedSensitiveQR: true, id: #require(item.id))
+        model.prepareForShow()
+        model.copySelectedOCRText()
+        #expect(paste.copiedOCRTexts == ["public"])
+        #expect(paste.copiedSensitiveTexts.isEmpty)
+        model.copySelectedSensitiveQRText()
+        #expect(paste.copiedSensitiveTexts == ["private QR"])
+    }
+
     @Test func ocrCompletionNotificationReloadsCurrentSearch() async throws {
         let (store, model, _) = try makeModel()
         let item = try store.save(ClipboardCapture(imageData: Data([1, 2, 3])), now: now)
@@ -224,7 +248,7 @@ import PermafrostCore
 
         try store.setOCRText("invoice total 42", id: try #require(item.id))
         NotificationCenter.default.post(
-            name: .ocrTextSaved,
+            name: .captureSaved,
             object: nil,
             userInfo: ["itemID": try #require(item.id)]
         )
@@ -362,6 +386,7 @@ private final class FakePasteService: PanelPasteServing {
     var outcome: PasteOutcome
     var ocrResult: Bool
     var pastedTexts: [String] = []
+    var copiedSensitiveTexts: [String] = []
     var copiedOCRTexts: [String] = []
     var pastedOCRTexts: [String] = []
     var pastedAsPlainTexts: [String] = []
@@ -387,6 +412,8 @@ private final class FakePasteService: PanelPasteServing {
     func copyOCRTextToPasteboard(_ item: ClipboardItem) {
         copiedOCRTexts.append(item.ocrText ?? "")
     }
+
+    func copySensitiveTextToPasteboard(_ text: String) { copiedSensitiveTexts.append(text) }
 
     func pasteOCRText(_ item: ClipboardItem) -> Bool {
         pastedOCRTexts.append(item.ocrText ?? "")

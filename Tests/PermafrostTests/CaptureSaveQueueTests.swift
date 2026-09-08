@@ -198,6 +198,56 @@ import PermafrostCore
 
     // MARK: - QR decoding (ADR-022)
 
+    @Test func everyCompletedCaptureNotifiesIncludingOmittedQR() throws {
+        let store = try ClipboardStore.inMemory()
+        let queue = CaptureSaveQueue(store: store,
+            textRecognizer: FakeQueueTextRecognizer(result: nil),
+            barcodeDetector: FakeQueueBarcodeDetector(payloads: ["WIFI:P:synthetic;;"]))
+        let observer = CaptureObserver()
+        queue.onCaptureSaved = { observer.record($0) }
+        queue.enqueue(.init(capture: ClipboardCapture(text: "ordinary"), capturedAt: Date(), retentionPolicy: RetentionPolicy()))
+        queue.enqueue(.init(capture: ClipboardCapture(imageData: Data([1, 2, 3])), capturedAt: Date(), retentionPolicy: RetentionPolicy()))
+        queue.waitUntilIdle()
+        #expect(observer.ids.count == 2)
+        #expect(Set(observer.ids) == Set(try store.allItems().compactMap(\.id)))
+        #expect(try store.allItems().last?.qrSensitiveStatus == .omitted)
+    }
+
+    @Test func sensitiveQROptInEncryptsWhileDefaultPersistsOmissionStatus() throws {
+        for optedIn in [false, true] {
+            let store = try ClipboardStore.inMemory()
+            let secret = "WIFI:T:WPA;S:Example;P:synthetic-secret;;"
+            let queue = CaptureSaveQueue(store: store,
+                textRecognizer: FakeQueueTextRecognizer(result: "public"),
+                barcodeDetector: FakeQueueBarcodeDetector(payloads: [secret, "https://example.com"]))
+            queue.enqueue(.init(capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                                capturedAt: Date(), retentionPolicy: RetentionPolicy(),
+                                recordSensitiveQRCodes: optedIn))
+            queue.waitUntilIdle()
+            let item = try #require(store.allItems().first)
+            #expect(item.qrSensitiveStatus == (optedIn ? .encrypted : .omitted))
+            #expect(item.ocrText == "public\n\nhttps://example.com")
+            #expect(try store.revealSensitiveQRText(for: item) == (optedIn ? secret : nil))
+            #expect(try store.items(matching: "synthetic-secret").isEmpty)
+        }
+    }
+
+    @Test func optedInQRWithoutKeySavesImageAndExplicitFailureStatus() throws {
+        let url = try tempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = try ClipboardStore.onDisk(at: url)
+        let queue = CaptureSaveQueue(store: store,
+            textRecognizer: FakeQueueTextRecognizer(result: nil),
+            barcodeDetector: FakeQueueBarcodeDetector(payloads: ["WIFI:P:synthetic;;"]))
+        queue.enqueue(.init(capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                            capturedAt: Date(), retentionPolicy: RetentionPolicy(), recordSensitiveQRCodes: true))
+        queue.waitUntilIdle()
+        let item = try #require(store.allItems().first)
+        #expect(item.imageData != nil)
+        #expect(item.qrSensitiveStatus == .keyUnavailable)
+        #expect(item.encryptedQRData == nil && item.ocrText == nil)
+    }
+
     @Test func qrPayloadIsPersistedAndSearchable() throws {
         let store = try ClipboardStore.inMemory()
         let queue = CaptureSaveQueue(
@@ -418,4 +468,11 @@ private final class FakeHTMLRichTextConverter: HTMLRichTextConverting, @unchecke
         lock.withLock { _callCount += 1 }
         return result
     }
+}
+
+private final class CaptureObserver: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Int64] = []
+    var ids: [Int64] { lock.withLock { values } }
+    func record(_ id: Int64) { lock.withLock { values.append(id) } }
 }

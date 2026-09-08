@@ -16,6 +16,9 @@ struct SettingsView: View {
     @AppStorage(AppSettings.Keys.recognizeTextInImages) private var recognizeTextInImages = true
     @AppStorage(AppSettings.Keys.decodeQRCodes) private var decodeQRCodes = true
 
+    @AppStorage(AppSettings.Keys.recordSensitiveQRCodes) private var recordSensitiveQRCodes = false
+    @State private var showSensitiveQRWarning = false
+
     @State private var launchAtLogin = AppSettings.shared.launchAtLogin
     @State private var showConcealedWarning = false
     @State private var accessibilityTrusted = PasteService.isTrusted
@@ -55,11 +58,25 @@ struct SettingsView: View {
             }
             Toggle("Recognize text in images", isOn: $recognizeTextInImages)
             Toggle("Decode QR codes in images", isOn: $decodeQRCodes)
+            Toggle("Save sensitive QR payloads encrypted", isOn: Binding(
+                get: { recordSensitiveQRCodes },
+                set: { enabled in
+                    if enabled { showSensitiveQRWarning = true }
+                    else { recordSensitiveQRCodes = false }
+                }
+            ))
+            .disabled(!decodeQRCodes)
+            .alert("Save authenticator and Wi-Fi QR secrets?", isPresented: $showSensitiveQRWarning) {
+                Button("Cancel", role: .cancel) {}
+                Button("I Understand the Risk") { recordSensitiveQRCodes = true }
+            } message: {
+                Text("Decoded authenticator keys and Wi-Fi credentials will be encrypted with your Mac's Keychain key, hidden until revealed, and included in backups. The original screenshot and visible OCR text remain ordinary, unencrypted history. Copying a revealed payload exposes it on the system clipboard. Turning this off affects future captures; existing saved payloads remain until their image is deleted.")
+            }
         } header: {
             Text("Images")
         } footer: {
             Text(
-                "OCR and QR decoding run locally with Apple's Vision framework. Recognized text is stored, searchable, shown in preview, and included in exports with the image. QR codes that carry secrets — authenticator setup keys and Wi-Fi passwords — are never recorded, even with decoding on."
+                "OCR and QR decoding run locally with Apple's Vision framework. Recognized text is stored, searchable, shown in preview, and included in exports with the image. Known sensitive decoded QR payloads are omitted unless separately enabled below. The screenshot itself is still saved."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -203,10 +220,10 @@ struct SettingsView: View {
                     } message: {
                         Text(
                             """
-                            Passwords you copy will be stored in plain text in Permafrost's \
-                            local database, will appear in the history panel, can be pinned, \
-                            and will be included in exports. Anyone with access to this Mac \
-                            user account can read them.
+                            Concealed text you copy will be encrypted with your Mac's Keychain \
+                            key and hidden until deliberately revealed. It can be pinned and \
+                            included in backups. Copying or pasting exposes it on the system \
+                            clipboard. This setting does not enable sensitive QR payload capture.
                             """
                         )
                     }

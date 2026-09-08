@@ -28,7 +28,9 @@ Local-first. Keyboard-first. No cloud, no analytics, no network code at all.
   framework) is searchable, previewable, and copyable as text
 - **QR codes** — snip a QR code and its content is decoded and kept with the image, just
   like OCR text. Codes carrying secrets (authenticator setup keys, Wi-Fi passwords) are
-  deliberately never recorded — see [docs/SECURITY.md](docs/SECURITY.md)
+  omitted by default with a visible notice. A separate opt-in saves decoded secrets encrypted,
+  with deliberate reveal/copy controls — see [docs/SECURITY.md](docs/SECURITY.md).
+  The screenshot itself remains ordinary image history.
 - **Preview pane** — `␣` opens a full-size, scrollable look at the selected item without
   leaving the panel
 - **Concealed (password) content — opt-in** — off by default; when enabled, content from
@@ -105,7 +107,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full story.
 
 ## Status
 
-**v0.4.0** — under active development, daily-driver-ready. See
+**v0.5.0** — under active development, daily-driver-ready. See
 [docs/ROADMAP.md](docs/ROADMAP.md) for what shipped and what's next.
 
 ## License

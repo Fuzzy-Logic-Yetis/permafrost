@@ -7,6 +7,7 @@ protocol PanelPasteServing {
     func paste(_ item: ClipboardItem) -> PasteOutcome
     func pasteAsPlainText(_ item: ClipboardItem) -> PasteOutcome
     func copyOCRTextToPasteboard(_ item: ClipboardItem)
+    func copySensitiveTextToPasteboard(_ text: String)
     func pasteOCRText(_ item: ClipboardItem) -> Bool
 }
 
@@ -35,19 +36,18 @@ final class PanelModel: ObservableObject {
 
     private let store: ClipboardStore
     private let pasteService: any PanelPasteServing
-    private var ocrTextSavedObserver: NSObjectProtocol?
+    private var captureSavedObserver: NSObjectProtocol?
 
     init(store: ClipboardStore, pasteService: any PanelPasteServing) {
         self.store = store
         self.pasteService = pasteService
-        ocrTextSavedObserver = NotificationCenter.default.addObserver(
-            forName: .ocrTextSaved,
+        captureSavedObserver = NotificationCenter.default.addObserver(
+            forName: .captureSaved,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            let refreshedItemID = notification.userInfo?["itemID"] as? Int64
-            Task { @MainActor [weak self, refreshedItemID] in
-                self?.reloadPreservingSelection(prefer: refreshedItemID)
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.reloadPreservingSelection()
             }
         }
     }
@@ -102,18 +102,26 @@ final class PanelModel: ObservableObject {
         }
     }
 
-    private func reloadPreservingSelection(prefer preferredItemID: Int64? = nil) {
+    private func reloadPreservingSelection() {
         let previousID = selectedItem?.id
         reload()
-        if let preferredItemID,
-            let index = items.firstIndex(where: { $0.id == preferredItemID })
-        {
-            selectedIndex = index
-        } else if let previousID,
-            let index = items.firstIndex(where: { $0.id == previousID })
-        {
+        if let previousID, let index = items.firstIndex(where: { $0.id == previousID }) {
             selectedIndex = index
         }
+    }
+
+    func revealSensitiveQRText(for item: ClipboardItem) -> String? {
+        do { return try store.revealSensitiveQRText(for: item) }
+        catch { return nil }
+    }
+
+    func copySelectedSensitiveQRText() {
+        guard let item = selectedItem else { return }
+        guard let text = revealSensitiveQRText(for: item) else {
+            onContentUnavailable()
+            return
+        }
+        pasteService.copySensitiveTextToPasteboard(text)
     }
 
     var countLabel: String {

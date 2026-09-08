@@ -14,7 +14,8 @@
    is created `0700`; the SQLite database is `0600`. When the explicit concealed-content
    opt-in is enabled, concealed **text** is AES-GCM encrypted with a 256-bit key in the
    user's Keychain. Ordinary text, images, OCR metadata, and clipboard metadata remain
-   plaintext; FileVault remains strongly recommended for whole-device protection.
+   plaintext. Separately opted-in sensitive decoded QR metadata is also encrypted (ADR-023).
+   FileVault remains strongly recommended for whole-device protection.
 4. **Logs never contain clipboard content.** `os.Logger` records events and counts only.
 
 ## Recording passwords — explicit opt-in
@@ -27,8 +28,8 @@ By explicit decision of the project owner, Permafrost supports recording conceal
   > **Record passwords in clipboard history?**
   > Passwords you copy will be encrypted in Permafrost's local database with a key stored
   > in your macOS Keychain. They can appear in the history panel only after deliberate
-  > reveal, can be pinned, and encrypted exports can be restored only with this Mac user's
-  > Keychain key. Clipboard contents are still exposed whenever they are copied or pasted.
+  > reveal, can be pinned, and are included in backups. Clipboard contents are still exposed
+  > whenever they are copied or pasted. This setting does not enable sensitive QR capture.
   > [Cancel] [I Understand the Risk]
 
 - Cancel reverts the toggle. Acknowledgment is stored; the dialog isn't shown again unless
@@ -62,9 +63,15 @@ before writing it, so an incorrect passphrase or damaged archive does not partia
 The same all-or-nothing guarantee applies to a This Mac Only import: every entry is validated
 and decrypted before anything is written, in one transaction, so an archive with one bad entry
 (e.g. a concealed item encrypted under a different Mac's Keychain key) leaves the store exactly
-as it was rather than partially importing. That hash permits offline confirmation of guessed
-weak secrets for someone who can read the database. Encrypted archives contain ciphertext and
-are only importable with the same Keychain key; they are not portable backups.
+as it was rather than partially importing. The deterministic concealed-text content hash
+permits offline confirmation of guessed weak secrets by someone who can read the database.
+Only the This Mac Only format requires the original Keychain key; portable backups use their
+export passphrase and re-encrypt concealed content with the destination key.
+
+v0.5.0 exports use same-Mac format version 3 and portable format version 4. Imports still
+support legacy versions 1 and 2. Older apps reject new archives instead of silently dropping
+sensitive QR metadata. Same-Mac imports authenticate encrypted QR envelopes against the image
+hash before inserting anything; portable imports validate and reseal QR secrets atomically.
 
 ## OCR text in images
 
@@ -79,29 +86,35 @@ Disable image OCR if you want screenshots stored only as images without searchab
 recognized text. Existing OCR metadata is not automatically deleted when the setting is
 turned off.
 
-## QR code decoding (ADR-022)
+## QR code decoding (ADR-022, ADR-023)
 
-QR codes in captured images are decoded on-device with Vision and stored in the same
-`ocr_text` metadata as OCR — searchable, previewable, exportable — controlled by its own
-Settings → Images → "Decode QR codes in images" toggle, independent of OCR.
+QR decoding runs on-device and independently of OCR. Ordinary decoded payloads join the
+`ocr_text` metadata and can be searched, previewed, copied, pasted, and exported.
 
-**QR payloads in known secret-bearing formats are never recorded**, even with decoding
-enabled: `otpauth:` and `otpauth-migration:` (authenticator setup keys — the TOTP/HOTP shared
-secret itself) and `WIFI:` (network passphrases). These are dropped in memory before any
-database write; only the reason is logged, never the payload. The image itself is still
-captured, and ordinary text or payloads from the same snip are still stored.
+Known sensitive formats (`otpauth:`, `otpauth-migration:`, and `WIFI:`) are omitted by
+**default**. A persisted status produces a visible omission notice in the card and preview;
+notices never become copied, pasted, or searchable text. The original image is still saved.
 
-This matters because the concealed-content protection above **cannot** see screen snips: it
-keys off the pasteboard's `org.nspasteboard.ConcealedType` marker, which a screenshot never
-carries. Without this gate, snipping a 2FA enrollment screen would write your second factor
-into the history database in the clear.
+Settings → Images → **Save sensitive QR payloads encrypted** is a separate default-off
+opt-in, with its own risk acknowledgment even for users who already record concealed text.
+When enabled, sensitive decoded payloads are AES-GCM encrypted with the persistent Keychain
+key into `encrypted_qr_data`, excluded from ordinary OCR/search, and redacted in preview.
+An authenticated envelope binds the payload to the image's content hash. Reveal is explicit;
+Copy Sensitive QR becomes available after reveal and marks the outgoing clipboard concealed,
+while suppressing Permafrost's own recapture. Ordinary Copy/Paste All, drag and share do not
+include the decoded secret. Image exports and shares still contain the original QR pixels.
 
-**Known limit, stated plainly:** this is an allowlist of standardized secret formats, not a
-general secret detector. A QR code carrying a credential in a bespoke or proprietary format
-is indistinguishable from an ordinary URL and *will* be recorded in plaintext. Turn QR
-decoding off if you routinely snip codes whose contents you don't want stored. Note also that
-nothing currently tells you when a payload was dropped — you'll simply see an image with no
-decoded text.
+If the Keychain key is unavailable, the image is retained but the decoded sensitive payload
+is discarded, with an explicit notice to allow Keychain access and copy the image again.
+There is no fallback key or extra plaintext retry queue. Turning off the setting affects
+future captures, not already saved metadata; re-copying without opt-in does not erase an
+existing encrypted payload. Delete the image to delete its associated metadata.
+
+**Limits:** this is classification of known decoded formats, not general secret detection.
+Proprietary secrets can still be stored as ordinary payloads. Screenshot pixels and visible
+OCR text—including a printed password or authenticator setup key—remain unencrypted and
+may be searchable even when QR decoding omits the machine-readable payload. This feature
+neither redacts images nor detects secrets in arbitrary visible text.
 
 ## Threat model (MVP, honest version)
 
@@ -109,7 +122,7 @@ decoded text.
 |---|---|
 | Other apps reading the pasteboard | Out of scope — any macOS app can read the pasteboard; that's the platform. |
 | Password-manager copies leaking into history | Skipped by default via concealed/transient types; opted-in concealed text is AES-GCM encrypted and redacted by default. |
-| Secrets in snipped QR codes (2FA seeds, Wi-Fi passwords) | Known secret-bearing payload formats (`otpauth:`, `otpauth-migration:`, `WIFI:`) are dropped before any write (ADR-022). Best-effort: an unrecognized secret format is still recorded. |
+| Secrets in snipped QR codes (2FA seeds, Wi-Fi passwords) | Known decoded formats are omitted by default or encrypted after separate consent (ADR-023). Screenshot pixels and visible OCR remain ordinary history; unknown formats are not protected. |
 | Another user account on the Mac | POSIX permissions (0700/0600). |
 | Stolen/lost machine | FileVault (recommended loudly in README); concealed text additionally uses a Keychain-backed AES-GCM key. |
 | Malicious build of Permafrost | Build from source; v1.0 adds Developer ID + notarization. |

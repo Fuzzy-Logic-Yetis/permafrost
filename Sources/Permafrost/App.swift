@@ -2,7 +2,7 @@ import AppKit
 import PermafrostCore
 
 enum PermafrostVersion {
-    static let string = "0.4.0"
+    static let string = "0.5.0"
 }
 
 extension Notification.Name {
@@ -10,7 +10,7 @@ extension Notification.Name {
     /// preset (review M-1). userInfo["failedShortcut"] is the display string
     /// of the shortcut that failed to register.
     static let hotkeyRegistrationFailed = Notification.Name("PermafrostHotkeyRegistrationFailed")
-    static let ocrTextSaved = Notification.Name("PermafrostOCRTextSaved")
+    static let captureSaved = Notification.Name("PermafrostCaptureSaved")
 }
 
 @main
@@ -51,10 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         purge()
 
         captureSaveQueue = CaptureSaveQueue(store: store)
-        captureSaveQueue.onOCRTextSaved = { itemID in
+        captureSaveQueue.onCaptureSaved = { itemID in
             DispatchQueue.main.async {
                 NotificationCenter.default.post(
-                    name: .ocrTextSaved,
+                    name: .captureSaved,
                     object: nil,
                     userInfo: ["itemID": itemID]
                 )
@@ -93,7 +93,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     capturedAt: Date(),
                     retentionPolicy: self.settings.retentionPolicy,
                     recognizeTextInImages: self.settings.recognizeTextInImages,
-                    decodeQRCodes: self.settings.decodeQRCodes
+                    decodeQRCodes: self.settings.decodeQRCodes,
+                    recordSensitiveQRCodes: self.settings.recordSensitiveQRCodes
                 )
             )
         }

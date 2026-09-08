@@ -21,7 +21,8 @@ flag), import path-traversal validation, and error surfacing on destructive acti
   for details and dates.
 - Deferred out of this milestone: paste-as-plain-text, drag-out (docs/BACKLOG.md "Later").
 - Performance pass with Instruments at 10k+ items — deferred until Instruments is available
-  (no Xcode installed yet, see docs/PROJECT_PLAN.md environment notes).
+  (the original tooling blocker is resolved: Xcode and xctrace are installed as of
+  2026-09-08; measurement remains in BACKLOG.md).
 
 ## v0.3.1 — Hardening (done 2026-07-07)
 
@@ -57,24 +58,20 @@ blocks the main actor. See docs/DECISIONS.md for the ADR.
   all fixed the same day, with regression tests for each. See BACKLOG.md item 4's
   follow-ups and ADR-021's 2026-07-22 entry for the full list.
 
-## v0.5.0 — QR codes (in progress, now)
+## v0.5.0 — QR codes (done 2026-09-08)
 
-- ~~QR code decoding on captured images~~ — **shipped 2026-09-07, ADR-022.** Snipped QR
-  codes are decoded on-device with Vision and stored in the same `ocr_text` metadata as OCR,
-  so they are searchable, previewable, pasteable, and exportable with no schema change.
-  Payloads in known secret-bearing formats (`otpauth:`, `otpauth-migration:`, `WIFI:`) are
-  dropped before any database write — screen snips never carry the pasteboard's concealed
-  marker, so ADR-011's protection cannot cover them.
-- **Still open in this milestone** (see docs/BACKLOG.md "Next up (v0.5)" for full context):
-  - Tell the user when a sensitive payload was dropped — today a gated snip is
-    indistinguishable from a code that simply didn't decode. Needs a real schema field.
-  - Optionally record sensitive payloads *encrypted* rather than dropping them, for users who
-    want that history — needs ADR-021's concealed path extended to image metadata.
+- QR decoding via on-device Vision, with ordinary decoded content searchable/copyable
+  alongside OCR (ADR-022).
+- Persisted omission/encryption/key-unavailable notices, separate from user content (ADR-023).
+- Separate default-off consent for encrypted sensitive QR payloads; explicit Reveal and Copy
+  Sensitive QR in preview. Images and visible OCR remain ordinary history.
+- Same-Mac and portable backups preserve QR status and encrypted metadata; legacy archives
+  still import. New archives require v0.5.0 or later, avoiding silent loss in old apps.
+- Export privacy preflight and selection-preserving capture notifications from the independent
+  review. Remaining review findings are explicitly deferred in BACKLOG.md.
 
-**Version strings deliberately still read 0.4.0** (`PermafrostVersion.string`,
-`scripts/make-app.sh`, README Status). Per CLAUDE.md's Definition of Done they bump when a
-ROADMAP milestone *completes*, and the two items above are still open. Bump all three
-together when this milestone closes.
+All three version strings now read 0.5.0. This records completed implementation, not a new
+published GitHub release; tagging and the full release checklist remain separate operations.
 
 ## v1.0 — Distribution
 

@@ -31,10 +31,11 @@ Core requirements (MVP):
 The table above covers the MVP only and stops at M5 by design — post-MVP work is tracked by
 version in [ROADMAP.md](ROADMAP.md), not by milestone here.
 
-**Current state (2026-09-07):** v0.1.0–v0.4.0 shipped; **v0.5.0 (QR codes) is in progress** —
-decoding shipped, two follow-ups still open. Start at [ROADMAP.md](ROADMAP.md) for what
-shipped and [BACKLOG.md](BACKLOG.md) for what's next; version strings still read 0.4.0 until
-v0.5.0 closes (see the note in ROADMAP.md).
+**Current state (2026-09-08):** v0.1.0–v0.5.0 implementation complete, including QR
+omission notices and opt-in encrypted sensitive QR metadata. Version strings read 0.5.0.
+The last published GitHub release remains v0.1.0; no v0.5.0 tag has been published.
+See [ROADMAP.md](ROADMAP.md) and [BACKLOG.md](BACKLOG.md) for the remaining review hardening
+and distribution work. Xcode and Instruments are available on the development Mac.
 
 ## Workflow
 

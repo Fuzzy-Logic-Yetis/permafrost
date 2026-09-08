@@ -107,8 +107,9 @@ you just copied, and must never steal the `⌘1` slot from it either.
 
 Concealed text is redacted whenever the panel opens. Hover a concealed card and click the eye
 icon to reveal it for the current panel session; closing and reopening the panel, moving
-selection to a different item (including in the preview pane), or completing a Share action,
-redacts it again. Share is shown only after this explicit reveal.
+selection to a different item in the preview pane, or completing a Share action redacts it
+again. List-card reveals remain visible within that panel session until hidden or shared.
+Share becomes available only after explicit reveal.
 
 If a concealed item's content can't be resolved yet (the Keychain key hasn't loaded — normally
 sub-second after launch), pasting it shows a distinct "Can't paste this yet" alert rather than
@@ -205,3 +206,16 @@ prompts for its passphrase automatically. A wrong passphrase or damaged archive 
 - No sounds. No animation longer than 150 ms. No badge counts. No onboarding carousel.
 - Never steal focus from the app the user is working in.
 - Never require the mouse for any core flow.
+
+## Sensitive QR metadata (v0.5.0)
+
+Cards and previews distinguish **Sensitive QR payload omitted**, **encrypted**, and **not
+saved** (Keychain unavailable). The image preview is mouse-reachable via the recognition
+icon even when only an omission notice exists. Encrypted payloads start redacted; Reveal
+Sensitive QR (`⌥⌘R`) exposes the text and Copy Sensitive QR (`⇧⌘C`) button. Switching preview items or
+reopening preview redacts it again. Ordinary Copy/Paste All never includes this secret.
+
+Settings → Images → Save sensitive QR payloads encrypted defaults off and requires separate
+risk acknowledgment. Cancel leaves it off. Disabling QR decoding disables the dependent
+control. Existing encrypted history is retained when future capture is turned off. The
+original image and visible OCR text remain ordinary history; consent and preview state this.

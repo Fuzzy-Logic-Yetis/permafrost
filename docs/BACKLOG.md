@@ -151,15 +151,46 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    carry the concealed pasteboard marker, so ADR-011's protection can't cover them. Separate
    `decodeQRCodes` setting, default on.
 
-   **Deferred follow-ups from ADR-022** (neither blocks the feature):
-   - **Tell the user when a sensitive payload was dropped.** Today a gated snip looks
-     identical to a QR that simply didn't decode. Needs a real schema field — writing a
-     notice into `ocr_text` was rejected because `⇧⏎` would paste that notice into the
-     user's document and it would be exported/searched as content.
-   - **Optionally record sensitive payloads encrypted** instead of dropping them, for users
-     who *want* their 2FA/Wi-Fi QR history. Requires extending ADR-021's concealed path to
-     image metadata — `markConcealed` is text-only today — behind the same opt-in
-     risk-acknowledgment prompt as ADR-011.
+2. ~~Explain omitted sensitive QR payloads~~ — **DONE 2026-09-08, ADR-023.** Persisted
+   status distinguishes omission, encrypted storage, and unavailable-key failure. Card and
+   preview notices are separate from searchable/copyable OCR content.
+3. ~~Optionally save sensitive QR payloads encrypted~~ — **DONE 2026-09-08, ADR-023.**
+   Separate default-off consent, persistent-key encryption, explicit preview reveal/copy,
+   ciphertext same-Mac export and portable re-encryption. Original screenshots remain ordinary
+   history. Both archive formats still import legacy versions; old apps reject new exports.
+
+## Review follow-ups (2026-09-07 assessment, curated 2026-09-08)
+
+The raw review was curated here and in ADR-023; no finding was silently discarded.
+
+- **H1 — Fixed:** same-Mac export preflights concealed rows before any writes; ADR-021 follow-up.
+- **H2 — Deferred, next hardening priority:** separate pinned access from the panel's 200-recent
+  limit, including concealed pins that cannot be found by content search. Preserve recent-only
+  quick-paste and avoid loading unlimited image blobs.
+- **M1 — Deferred:** reject symlinked archive ancestors and enforce safe reads of manifests and
+  blobs in both formats, including mutable-folder races. Existing direct symlink checks remain.
+- **M2 — Fixed:** capture/OCR refresh preserves the selected ID; regression test in PanelModelTests.
+- **M3 — Deferred:** coordinate Clear Everything/Clear Unpinned with captures, pending concealed
+  text and delayed retries so pre-clear content cannot reappear.
+- **M4 — Deferred:** build a replacement ZIP at a temporary sibling and atomically replace the
+  destination only on success; failed export must preserve the previous backup.
+- **M5 — Deferred:** lightweight list rows with on-demand image payloads; measure screenshot-heavy
+  list/search/export memory and latency with Instruments (now installed).
+- **M6 — Deferred:** bound portable KDF iteration parameters and archive expansion/allocation;
+  add cancellation and malformed-input tests.
+- **M7 — Deferred:** restore preset configuration as well as actual hotkey registration after
+  conflicts; explicitly report double failure.
+- **M8 — Capture path fixed:** all successful capture jobs notify the panel, including text and
+  omitted QR. General import/purge observation remains deferred as a separate store-event task.
+- **L1 — Fixed:** consent, QR privacy limits, portable-backup wording, operating manual and
+  profiling-tool availability synchronized for v0.5.0.
+- **L2 — Deferred:** choose consistent list-card/preview reveal lifetime. Current list cards
+  remain revealed until hidden, shared, or a new panel session; UX now states this accurately.
+- **Release tracking:** clarify issue #5 (whole-store versus shipped scoped encryption), reconcile
+  merged v0.2–v0.5 functionality with the last published v0.1.0 tag before the next public release.
+- **Further validation:** SQLite/FTS remanence after retroactive concealment, existing-directory
+  permission failures, external-resource HTML conversion, and native partial-copy handling of
+  revealed concealed text remain unverified concerns, not confirmed findings.
 
 ## Later
 

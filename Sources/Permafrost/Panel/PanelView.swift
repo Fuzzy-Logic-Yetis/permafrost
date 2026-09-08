@@ -28,7 +28,9 @@ struct PanelView: View {
                     onCopyOCRText: { model.copySelectedOCRText() },
                     onPasteOCRText: { model.pasteSelectedOCRText() },
                     onCopyOCRSelection: { model.scheduleReloadAfterExternalCopy() },
-                    revealConcealedText: { model.revealConcealedText(for: item) }
+                    revealConcealedText: { model.revealConcealedText(for: item) },
+                    revealSensitiveQRText: { model.revealSensitiveQRText(for: item) },
+                    onCopySensitiveQR: { model.copySelectedSensitiveQRText() }
                 )
                 // Keyed by item identity, same as each ItemCard in the list below: without
                 // this, arrow-key navigation to a different item while the preview stays
@@ -277,7 +279,7 @@ private struct ItemCard: View {
     private var trailing: some View {
         if isHovering || isSharing {
             HStack(spacing: 6) {
-                if item.hasOCRText {
+                if item.hasOCRText || item.qrSensitiveStatus != nil {
                     Button(action: onPreviewOCR) {
                         Image(systemName: "text.viewfinder")
                     }
@@ -285,7 +287,7 @@ private struct ItemCard: View {
                     .frame(width: 20, height: 20)
                     .contentShape(Rectangle())
                     .foregroundStyle(.blue)
-                    .help("Open recognized text")
+                    .help("Preview image and recognized content")
                 }
 
                 // ADR-018: text-only — `.image` items have no plain-text representation
@@ -384,7 +386,7 @@ private struct ItemCard: View {
                         .font(.caption2)
                         .foregroundStyle(.yellow)
                 }
-                if item.hasOCRText {
+                if item.hasOCRText || item.qrSensitiveStatus != nil {
                     Button(action: onPreviewOCR) {
                         Label("OCR", systemImage: "text.viewfinder")
                             .labelStyle(.iconOnly)
@@ -392,7 +394,7 @@ private struct ItemCard: View {
                     .buttonStyle(.plain)
                     .font(.caption2)
                     .foregroundStyle(.blue)
-                    .help("Open recognized text")
+                    .help("Preview image and recognized content")
                 }
                 if let quickPasteIndex {
                     Text("⌘\(quickPasteIndex)")
@@ -436,6 +438,10 @@ private struct ItemCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
+            }
+            if let status = item.qrSensitiveStatus {
+                Label(status.shortLabel, systemImage: "qrcode")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             caption
         }
@@ -601,6 +607,8 @@ private struct PreviewPane: View {
     let onPasteOCRText: () -> Void
     let onCopyOCRSelection: () -> Void
     let revealConcealedText: () -> String?
+    let revealSensitiveQRText: () -> String?
+    let onCopySensitiveQR: () -> Void
 
     @State private var copiedSelectionMessage: String?
     /// ADR-021: redacted by default, same as the card — a fresh preview open (new
@@ -653,6 +661,10 @@ private struct PreviewPane: View {
                     Label("Image unavailable", systemImage: "photo")
                         .foregroundStyle(.secondary)
                 }
+                if let status = item.qrSensitiveStatus {
+                    SensitiveQRView(status: status, encryptedData: item.encryptedQRData,
+                                    reveal: revealSensitiveQRText, copy: onCopySensitiveQR)
+                }
                 if item.hasOCRText, let ocrText = item.ocrText {
                     Divider()
                     VStack(alignment: .leading, spacing: 8) {
@@ -691,7 +703,7 @@ private struct PreviewPane: View {
                             )
                     }
                 } else {
-                    Text("OCR text will appear here after recognition finishes.")
+                    Text("No ordinary recognized text is available.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

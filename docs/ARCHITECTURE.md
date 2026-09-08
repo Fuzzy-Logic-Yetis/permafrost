@@ -113,6 +113,8 @@ CREATE TABLE clipboard_item (
   content_hash  TEXT NOT NULL UNIQUE,   -- SHA-256 of content; dedup key
   kind          TEXT NOT NULL,          -- 'text' | 'image'
   text          TEXT,                   -- plain text (also FTS5-indexed)
+  qr_sensitive_status TEXT,            -- omitted/encrypted/keyUnavailable; NULL if none
+  encrypted_qr_data BLOB,              -- Keychain-encrypted, image-hash-bound QR envelope
   ocr_text      TEXT,                   -- recognized text for image rows; not a dedup key
   rich_data     BLOB,                   -- RTF alternate representation, if any
   image_data    BLOB,                   -- original PNG for images/snips
@@ -175,3 +177,14 @@ alive (ADR-010).
   to copy-only mode without it.
 - **Build without Xcode**: plain SPM + `scripts/make-app.sh` assembles the `.app` bundle and
   ad-hoc signs it. CI uses GitHub Actions macOS runners (ADR-009).
+
+## QR privacy metadata (ADR-023)
+
+CaptureSaveQueue separates known sensitive QR strings from ordinary OCR/payload text before
+persistence. ClipboardStore.setImageRecognition commits OCR, status and encrypted metadata
+together; no status prose enters FTS. Missing keys retain the image with a failure notice,
+dropping the decoded secret until a fresh capture. Each successful capture posts captureSaved;
+PanelModel reloads while preserving selected identity. SensitiveQRView owns reveal state and
+exposes only explicit copy, whose PasteService path marks the clipboard concealed and ignores
+its own write. Backups preserve status; portable QR plaintext exists only inside the in-memory
+passphrase-encrypted payload construction and is resealed on import.

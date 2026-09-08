@@ -3,7 +3,7 @@ import Foundation
 /// A portable archive encrypts every clipboard field with an export passphrase. Unlike the
 /// normal archive, it does not depend on the source Mac's Keychain key after export.
 public enum PortableArchive {
-    private static let version = 2
+    private static let version = 4
     private static let format = "permafrost-portable-passphrase"
     private static let payloadFile = "payload.encrypted"
 
@@ -51,6 +51,8 @@ public enum PortableArchive {
         var kind: ClipboardItemKind
         var text: String?
         var ocrText: String?
+        var qrSensitiveStatus: QRSensitiveStatus?
+        var sensitiveQRText: String?
         var richData: Data?
         var imageData: Data?
         var thumbnail: Data?
@@ -68,13 +70,16 @@ public enum PortableArchive {
             throw Error.missingManifest
         }
         let header = try JSONDecoder().decode(Header.self, from: Data(contentsOf: manifestURL))
-        return header.version == version
+        return [2, version].contains(header.version)
     }
 
     public static func exportArchive(from store: ClipboardStore, to directory: URL, passphrase: String) throws {
         let salt = PortableArchiveCipher.makeSalt()
         var items: [Item] = []
         for item in try store.allItems() {
+            try ClipboardStore.validateQRMetadata(item)
+            let sensitiveQRText = try store.revealSensitiveQRText(for: item)
+            if item.encryptedQRData != nil && sensitiveQRText == nil { throw Error.sourceKeyUnavailable }
             let text: String?
             if item.kind == .text {
                 // Exporting requires the source Keychain key; never make a portable archive
@@ -88,6 +93,7 @@ public enum PortableArchive {
             }
             items.append(Item(
                 contentHash: item.contentHash, kind: item.kind, text: text, ocrText: item.ocrText,
+                qrSensitiveStatus: item.qrSensitiveStatus, sensitiveQRText: sensitiveQRText,
                 richData: item.richData, imageData: item.imageData, thumbnail: item.thumbnail,
                 sourceApp: item.sourceApp, createdAt: item.createdAt, lastUsedAt: item.lastUsedAt,
                 isPinned: item.isPinned, pinOrder: item.pinOrder, isConcealed: item.isConcealed))
@@ -114,7 +120,7 @@ public enum PortableArchive {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let manifest = try decoder.decode(Manifest.self, from: Data(contentsOf: manifestURL))
-        guard manifest.version == version, manifest.format == format,
+        guard [2, version].contains(manifest.version), manifest.format == format,
             manifest.payloadFile == payloadFile, manifest.salt.count == PortableArchiveCipher.saltByteCount,
             manifest.iterations >= PortableArchiveCipher.iterations
         else { throw Error.notPortableArchive }
@@ -129,7 +135,17 @@ public enum PortableArchive {
         } catch {
             throw Error.malformedArchive
         }
-        let items = try payload.items.map { try validatedClipboardItem(from: $0) }
+        let items = try payload.items.map { entry in
+            var item = try validatedClipboardItem(from: entry)
+            guard (entry.qrSensitiveStatus == .encrypted) == (entry.sensitiveQRText != nil),
+                entry.qrSensitiveStatus == nil || entry.kind == .image
+            else { throw Error.malformedArchive }
+            if let text = entry.sensitiveQRText {
+                item.encryptedQRData = try store.sealSensitiveQRText(text, contentHash: item.contentHash)
+            }
+            try ClipboardStore.validateQRMetadata(item)
+            return item
+        }
         // The store seals concealed plaintext with this Mac's Keychain-backed cipher inside
         // one transaction. Nothing is inserted if decryption/validation failed above.
         return try store.insertPreservingMetadata(items)
@@ -148,7 +164,7 @@ public enum PortableArchive {
         }
         return ClipboardItem(
             contentHash: entry.contentHash, kind: entry.kind, text: entry.text,
-            ocrText: entry.ocrText, richData: entry.richData, imageData: entry.imageData,
+            ocrText: entry.ocrText, qrSensitiveStatus: entry.qrSensitiveStatus, richData: entry.richData, imageData: entry.imageData,
             thumbnail: entry.thumbnail, sourceApp: entry.sourceApp, createdAt: entry.createdAt,
             lastUsedAt: entry.lastUsedAt, isPinned: entry.isPinned, pinOrder: entry.pinOrder,
             isConcealed: entry.isConcealed)

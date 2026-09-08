@@ -20,14 +20,16 @@ enum PasteOutcome: Equatable {
 @MainActor
 final class PasteService {
     private let store: ClipboardStore
+    private let pasteboard: NSPasteboard
     /// Notifies `PasteboardWatcher` that this pasteboard write was ours, not an incoming
     /// user copy — see `PasteboardWatcher.ignoreOwnWrite()` (found 2026-07-21: without this,
     /// every paste got re-captured as if it were new, which silently self-deduped for a
     /// normal rich paste but caused real data loss for plain-text paste).
     private let onPasteboardWritten: () -> Void
 
-    init(store: ClipboardStore, onPasteboardWritten: @escaping () -> Void = {}) {
+    init(store: ClipboardStore, pasteboard: NSPasteboard = .general, onPasteboardWritten: @escaping () -> Void = {}) {
         self.store = store
+        self.pasteboard = pasteboard
         self.onPasteboardWritten = onPasteboardWritten
     }
 
@@ -37,7 +39,6 @@ final class PasteService {
 
     @discardableResult
     func copyToPasteboard(_ item: ClipboardItem) -> Bool {
-        let pasteboard = NSPasteboard.general
         switch item.kind {
         case .text:
             // Resolve before clearing the pasteboard. A missing Keychain key or corrupt
@@ -57,8 +58,14 @@ final class PasteService {
         return true
     }
 
+    func copySensitiveTextToPasteboard(_ text: String) {
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        pasteboard.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        onPasteboardWritten()
+    }
+
     func copyOCRTextToPasteboard(_ item: ClipboardItem) {
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(item.ocrText ?? "", forType: .string)
         onPasteboardWritten()
@@ -69,7 +76,6 @@ final class PasteService {
     @discardableResult
     func copyPlainTextToPasteboard(_ item: ClipboardItem) -> Bool {
         guard let text = revealedText(for: item) else { return false }
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         onPasteboardWritten()

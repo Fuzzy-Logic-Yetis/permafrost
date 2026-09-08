@@ -399,3 +399,25 @@ outside the app (e.g. CI or a broken build that won't launch):
   open `⌥⌘V`, and confirm the panel remains responsive while the capture is saved in the
   background. The image should appear shortly after save completes; later copies should
   preserve recency order based on capture time, not thumbnail/write completion time.
+
+## v0.5.0 QR acceptance checks
+
+Automated: real generated QR fixtures through Vision; opt-in/default capture policy; omitted
+and unavailable-key persistence; migration preserving old rows; ordinary OCR unchanged; QR
+secrets absent from content search; ciphertext bound to image hash; same-Mac and portable
+round trips, foreign-key rejection, legacy archives and malformed-status atomicity.
+Final verification on 2026-09-08: 154 tests in 17 suites passed. The isolated AppKit
+pasteboard test verifies the concealed marker, self-write callback, default capture exclusion,
+and removal of the marker on a subsequent ordinary copy.
+
+Native fixture smoke (passed 2026-09-08, in-memory store and synthetic payloads): card labels
+and preview notices for all three statuses; default redaction; explicit Reveal exposing Copy
+Sensitive QR; preview item changes re-redacting; consent Cancel leaving the toggle off and
+acknowledgment enabling only sensitive QR capture. No real user Keychain or history was used.
+
+Before tagging a release, additionally run the full existing cross-app/TCC/Keychain checklist
+and verify Copy Sensitive QR in a native destination. Confirm its concealed marker and
+self-write suppression prevent new ordinary-history capture; full AppKit pasteboard delivery
+is outside the isolated fixture (its paste service is a fake). Copy a fresh screenshot after
+resolving a delayed Keychain prompt to replace the unavailable-key notice with encrypted
+metadata. Test ordinary and portable ZIP dialogs and a restore on a second Mac.
