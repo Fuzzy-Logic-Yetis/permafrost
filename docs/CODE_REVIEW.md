@@ -12,6 +12,8 @@ a meaningful implementation batch.
 - The repository is the source of truth; screenshots or chat summaries are context only.
 - Findings should be objective and categorized by risk, not style preference.
 - Recommendations should be actionable for a future implementation agent.
+- The raw review artifact is temporary working material, not a permanent project record —
+  see **Post-review curation** below for what happens to it and why.
 
 ## Review artifact naming
 
@@ -29,6 +31,27 @@ docs/YYYY-MM-DD_codex_review_03.md
 ```
 
 Do not overwrite prior reviews.
+
+## Post-review curation (required before the raw review is deleted)
+
+The raw review file is scratch material for producing the durable record — it is not the
+durable record itself, and it must not stay committed once curation is done.
+
+Before deleting it, every finding — Critical, High, Medium, and Low — must get one of these
+three dispositions recorded in `DECISIONS.md` or `BACKLOG.md`:
+
+- **Fixed** — recorded in the relevant ADR entry in `DECISIONS.md` (new or existing): what
+  changed and why.
+- **Deferred** — a concrete item added to `BACKLOG.md`.
+- **Rejected / won't fix** — recorded too, one line in the ADR entry naming the finding and
+  why it was rejected. This is the disposition people skip, and it's the one that matters
+  most: an unrecorded rejection means the next review has no way to know the finding was
+  already considered, re-discovers it, and burns a cycle re-litigating something already
+  settled.
+
+Only once every finding has a recorded disposition should the raw
+`docs/YYYY-MM-DD_codex_review.md` file be deleted (`git rm`), in the same commit as the
+fixes and the `DECISIONS.md`/`BACKLOG.md` updates it produced.
 
 ## Baseline review prompt
 

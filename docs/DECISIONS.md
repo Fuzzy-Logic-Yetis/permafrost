@@ -408,10 +408,10 @@ user toward next, so no dead-end state is introduced.
 
 ## ADR-017: Independent review fixes (2026-07-07 review, M-1 through M-4, L-1 through L-3)
 
-**Context.** `docs/2026-07-07_codex_review.md`, a read-only independent review following
-the v0.3 feature batch (docs/CODE_REVIEW.md process), found four Medium and three Low
-findings. No Critical or High findings — the review's overall verdict was "close, but not
-quite release-clean."
+**Context.** A read-only independent review (docs/CODE_REVIEW.md process) following the
+v0.3 feature batch, conducted 2026-07-07, found four Medium and three Low findings. No
+Critical or High findings — the review's overall verdict was "close, but not quite
+release-clean."
 
 **Decisions, one per finding:**
 

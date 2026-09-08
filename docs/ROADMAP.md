@@ -25,7 +25,7 @@ flag), import path-traversal validation, and error surfacing on destructive acti
 
 ## v0.3.1 — Hardening (done 2026-07-07)
 
-Driven by the 2026-07-07 review (`docs/2026-07-07_codex_review.md`): custom hotkey
+Driven by the 2026-07-07 independent code review: custom hotkey
 registration failure now rolls back to a working preset and surfaces the failure in
 Settings instead of claiming success silently; import validates recomputed content hashes,
 kind/field consistency, and rejects symlinked blobs instead of trusting the manifest;
