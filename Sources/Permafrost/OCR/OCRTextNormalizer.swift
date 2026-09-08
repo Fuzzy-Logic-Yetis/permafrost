@@ -16,13 +16,19 @@ enum OCRTextNormalizer {
     /// top-to-bottom) and then left-to-right, giving deterministic, stable output for the
     /// same image rather than whatever order Vision happened to return.
     static func orderedText(from lines: [RecognizedLine]) -> String {
-        let ordered = lines.sorted { lhs, rhs in
+        normalize(ordered(lines).map(\.text))
+    }
+
+    /// The ordering rule on its own, without the text normalization `orderedText` applies.
+    /// QR payloads (ADR-022) need the same deterministic reading order but must keep their
+    /// exact bytes — a multi-line payload such as a vCard would be mangled by `normalize`.
+    static func ordered(_ lines: [RecognizedLine]) -> [RecognizedLine] {
+        lines.sorted { lhs, rhs in
             if abs(lhs.boundingBox.origin.y - rhs.boundingBox.origin.y) > 0.01 {
                 return lhs.boundingBox.origin.y > rhs.boundingBox.origin.y
             }
             return lhs.boundingBox.origin.x < rhs.boundingBox.origin.x
         }
-        return normalize(ordered.map(\.text))
     }
 
     /// Trims each line, strips leading/trailing blank lines, and collapses runs of 2+

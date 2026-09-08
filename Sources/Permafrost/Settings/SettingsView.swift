@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage(AppSettings.Keys.recordConcealed) private var recordConcealed = false
     @AppStorage(AppSettings.Keys.maxImageMegabytes) private var maxImageMegabytes = 10
     @AppStorage(AppSettings.Keys.recognizeTextInImages) private var recognizeTextInImages = true
+    @AppStorage(AppSettings.Keys.decodeQRCodes) private var decodeQRCodes = true
 
     @State private var launchAtLogin = AppSettings.shared.launchAtLogin
     @State private var showConcealedWarning = false
@@ -53,11 +54,12 @@ struct SettingsView: View {
                 Text("50 MB").tag(50)
             }
             Toggle("Recognize text in images", isOn: $recognizeTextInImages)
+            Toggle("Decode QR codes in images", isOn: $decodeQRCodes)
         } header: {
             Text("Images")
         } footer: {
             Text(
-                "OCR runs locally with Apple's Vision framework. Recognized text is stored, searchable, shown in preview, and included in exports with the image."
+                "OCR and QR decoding run locally with Apple's Vision framework. Recognized text is stored, searchable, shown in preview, and included in exports with the image. QR codes that carry secrets — authenticator setup keys and Wi-Fi passwords — are never recorded, even with decoding on."
             )
             .font(.caption)
             .foregroundStyle(.secondary)

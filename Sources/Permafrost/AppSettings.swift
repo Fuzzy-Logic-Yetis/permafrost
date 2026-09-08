@@ -28,6 +28,7 @@ final class AppSettings: HotkeySettingsStore {
         static let capturePaused = "capturePaused"
         static let maxImageMegabytes = "maxImageMegabytes"
         static let recognizeTextInImages = "recognizeTextInImages"
+        static let decodeQRCodes = "decodeQRCodes"
         static let didShowWelcome = "didShowWelcome"
         static let excludedApps = "excludedApps"  // JSON-encoded [ExcludedApp]
     }
@@ -43,6 +44,7 @@ final class AppSettings: HotkeySettingsStore {
             Keys.capturePaused: false,
             Keys.maxImageMegabytes: 10,
             Keys.recognizeTextInImages: true,
+            Keys.decodeQRCodes: true,
         ])
     }
 
@@ -106,6 +108,10 @@ final class AppSettings: HotkeySettingsStore {
 
     var recognizeTextInImages: Bool {
         defaults.bool(forKey: Keys.recognizeTextInImages)
+    }
+
+    var decodeQRCodes: Bool {
+        defaults.bool(forKey: Keys.decodeQRCodes)
     }
 
     var didShowWelcome: Bool {

@@ -1040,3 +1040,71 @@ actually were, most severe first:
 
 All ten fixed in place rather than deferred — none required a schema or permission-model
 change, so no additional ADR beyond this entry.
+
+## ADR-022: QR code decoding on screen snips, with a sensitive-payload gate
+
+**Context.** Screen snips of QR codes are a natural extension of the OCR work (BACKLOG item
+13): the code is right there in the image, but its content is machine-readable rather than
+human-readable, so OCR returns nothing useful for it. Vision already ships
+`VNDetectBarcodesRequest` alongside the `VNRecognizeTextRequest` OCR uses, so the capability
+costs no new dependency (ADR-003's budget stays at one).
+
+The reason this needed an ADR is not the decoding — it's what the decoded bytes are. QR codes
+routinely carry secrets in well-defined formats: `otpauth://` (a TOTP/HOTP shared secret — the
+user's actual second factor), `otpauth-migration://` (a bulk authenticator export), and
+`WIFI:` (a network passphrase). "Snip the 2FA enrollment QR so I can set it up on another
+device later" is a *plausible* use of this feature, not a contrived one.
+
+ADR-011's concealed-content protection can't help here. It keys off the pasteboard's
+`org.nspasteboard.ConcealedType` marker, and a screen snip never carries one — the same
+capture-time/source-app blind spot that BACKLOG item 4's follow-up already found for
+passwords copied from apps that don't set the marker. Shipping naive QR decoding would
+therefore have written authenticator seeds into `clipboard_item` as plaintext, indexed into
+FTS5, rendered in the preview pane, and included in exports — created deliberately by this
+feature rather than inherited.
+
+**Decision.**
+
+1. **Decode QR only, via a `BarcodeDetecting` protocol seam** (`VisionBarcodeDetector` is the
+   real implementation), mirroring `TextRecognizing` exactly: synchronous Vision call, run on
+   `CaptureSaveQueue`'s serial background queue, fake-injectable so tests never touch Vision.
+   Restricting to the `.qr` symbology rather than everything Vision supports keeps the set of
+   payload shapes the classifier must reason about small and known.
+2. **Reuse the existing `ocr_text` column** rather than adding a `qr_text` field. No
+   migration, no schema change, and search (FTS5), the preview pane, Copy/Paste Text, and
+   both archive formats carry QR content with zero new plumbing. Decoded payloads are
+   appended after the OCR block, separated by a blank line; multiple codes are ordered by the
+   same top-to-bottom/left-to-right rule as OCR lines (`OCRTextNormalizer.ordered`, extracted
+   from `orderedText` so payloads get the ordering without the whitespace normalization that
+   would mangle a multi-line payload such as a vCard).
+3. **Known secret-bearing payloads are never recorded.** `QRPayloadClassifier` (pure, no
+   Vision) classifies each payload before storage; `.sensitive` payloads are dropped in
+   `CaptureSaveQueue.recognizedText(for:imageData:)` — the one point where the decoded secret
+   exists in memory but has not yet reached disk — and logged by *reason only*, never content
+   (CLAUDE.md security principles). The image itself is still captured normally, and ordinary
+   text/payloads from the same snip still stored: only the secret is dropped.
+4. **A separate `decodeQRCodes` setting**, defaulting on, rather than folding into
+   `recognizeTextInImages`. The privacy profiles genuinely differ — OCR transcribes text a
+   human looking at the screen could already read, while QR decoding extracts content that is
+   deliberately not human-readable — so a user may reasonably want one without the other.
+
+**Consequences and honest limits.**
+
+- The classifier is an **allowlist of known formats, not a secret detector.** A payload
+  carrying a credential in a bespoke or proprietary format is indistinguishable from an
+  ordinary URL and *will* be recorded in the clear. This is the intended, documented limit:
+  it defends the formats that are both standardized and unambiguously secret-bearing.
+- Every `WIFI:` payload is treated as sensitive, including a passwordless open network
+  (`T:nopass`), which is a false positive. Telling them apart means parsing the format's
+  backslash-escaping grammar for a payload rarely worth keeping; failing safe on a guest
+  network is the cheaper mistake.
+- **There is currently no UI indication that a sensitive payload was dropped** — the user sees
+  an image with no decoded text and no explanation. A visible indicator was deliberately
+  deferred rather than bodged: the obvious shortcut (writing a notice string into `ocr_text`)
+  would put UI copy in a data column that Paste Text (`⇧⏎`) pastes into the user's document,
+  and would be exported and searched as if it were content. Doing it properly needs a real
+  schema field, so it is tracked in docs/BACKLOG.md rather than half-done here.
+- Sensitive payloads are dropped outright rather than routed into ADR-021's encrypted
+  concealed storage, because `markConcealed` is text-only — an image item can't currently be
+  concealed. Recording them encrypted is a coherent future option (it would need the
+  concealed path extended to image metadata) and is likewise in BACKLOG.md.

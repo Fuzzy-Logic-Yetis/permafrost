@@ -15,6 +15,7 @@ final class CaptureSaveQueue: @unchecked Sendable {
         var capturedAt: Date
         var retentionPolicy: RetentionPolicy
         var recognizeTextInImages = true
+        var decodeQRCodes = true
     }
 
     /// Bounds in-memory retention of concealed plaintext awaiting a Keychain key. The
@@ -33,16 +34,19 @@ final class CaptureSaveQueue: @unchecked Sendable {
 
     private let store: ClipboardStore
     private let textRecognizer: any TextRecognizing
+    private let barcodeDetector: any BarcodeDetecting
     private let htmlRichTextConverter: any HTMLRichTextConverting
     private let queue = DispatchQueue(label: "com.fuzzylogicyetis.Permafrost.capture-save")
     private var pendingConcealedCaptures: [PendingCapture] = []
 
     init(
         store: ClipboardStore, textRecognizer: any TextRecognizing = VisionTextRecognizer(),
+        barcodeDetector: any BarcodeDetecting = VisionBarcodeDetector(),
         htmlRichTextConverter: any HTMLRichTextConverting = HTMLRichTextConverter()
     ) {
         self.store = store
         self.textRecognizer = textRecognizer
+        self.barcodeDetector = barcodeDetector
         self.htmlRichTextConverter = htmlRichTextConverter
     }
 
@@ -71,17 +75,17 @@ final class CaptureSaveQueue: @unchecked Sendable {
                 capture.richData = htmlRichTextConverter.rtfData(fromHTML: html)
             }
             let item = try store.save(capture, now: pending.capturedAt)
-            if pending.recognizeTextInImages,
-                pending.capture.kind == .image,
+            if pending.capture.kind == .image,
                 pending.capture.ocrText == nil,
                 let id = item.id,
-                let imageData = pending.capture.imageData,
-                let recognizedText = textRecognizer.recognizeText(in: imageData),
-                !recognizedText.isEmpty
+                let imageData = pending.capture.imageData
             {
-                try store.setOCRText(recognizedText, id: id)
-                Log.capture.info("OCR text saved for image item \(id)")
-                onOCRTextSaved(id)
+                let recognized = recognizedText(for: pending, imageData: imageData)
+                if !recognized.isEmpty {
+                    try store.setOCRText(recognized, id: id)
+                    Log.capture.info("recognized text saved for image item \(id)")
+                    onOCRTextSaved(id)
+                }
             }
             try store.purge(with: pending.retentionPolicy, now: pending.capturedAt)
         } catch ClipboardStore.ConcealedContentError.keyNotYetAvailable where retainIfKeyPending {
@@ -112,6 +116,37 @@ final class CaptureSaveQueue: @unchecked Sendable {
                 self?.save(pending, retainIfKeyPending: retainIfKeyPending, attempt: attempt + 1)
             }
         }
+    }
+
+    /// Visible text (OCR) and decoded QR payloads share the one `ocr_text` column, so search,
+    /// preview, Copy/Paste Text, and import/export cover QR content with no new plumbing
+    /// (ADR-022). Payloads follow the OCR block, separated by a blank line.
+    ///
+    /// Sensitive payloads are dropped here rather than filtered downstream: this is the only
+    /// point where the decoded secret exists in memory but has not yet reached disk.
+    private func recognizedText(for pending: PendingCapture, imageData: Data) -> String {
+        var parts: [String] = []
+
+        if pending.recognizeTextInImages, let text = textRecognizer.recognizeText(in: imageData),
+            !text.isEmpty
+        {
+            parts.append(text)
+        }
+
+        if pending.decodeQRCodes {
+            for payload in barcodeDetector.detectQRPayloads(in: imageData) {
+                switch QRPayloadClassifier.classify(payload) {
+                case .ordinary:
+                    parts.append(payload)
+                case .sensitive(let reason):
+                    // Never log the payload itself (CLAUDE.md: never log clipboard content).
+                    Log.capture.info(
+                        "QR payload not recorded — \(reason.rawValue, privacy: .public)")
+                }
+            }
+        }
+
+        return parts.joined(separator: "\n\n")
     }
 
     @discardableResult

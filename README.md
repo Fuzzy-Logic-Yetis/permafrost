@@ -26,6 +26,9 @@ Local-first. Keyboard-first. No cloud, no analytics, no network code at all.
   Desktop to materialize it as a real `.txt`/`.png` file
 - **OCR on screenshots** — recognized text from screen snips (on-device, via Apple's Vision
   framework) is searchable, previewable, and copyable as text
+- **QR codes** — snip a QR code and its content is decoded and kept with the image, just
+  like OCR text. Codes carrying secrets (authenticator setup keys, Wi-Fi passwords) are
+  deliberately never recorded — see [docs/SECURITY.md](docs/SECURITY.md)
 - **Preview pane** — `␣` opens a full-size, scrollable look at the selected item without
   leaving the panel
 - **Concealed (password) content — opt-in** — off by default; when enabled, content from

@@ -92,7 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     capture: capture,
                     capturedAt: Date(),
                     retentionPolicy: self.settings.retentionPolicy,
-                    recognizeTextInImages: self.settings.recognizeTextInImages
+                    recognizeTextInImages: self.settings.recognizeTextInImages,
+                    decodeQRCodes: self.settings.decodeQRCodes
                 )
             )
         }

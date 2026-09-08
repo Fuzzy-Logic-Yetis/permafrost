@@ -151,6 +151,13 @@ alive (ADR-010).
   search/preview. `TextRecognizing` is the protocol seam (mirrors `PanelPasteServing`) so
   recognition-dependent code can be tested with a fake recognizer instead of real Vision
   calls.
+- `VisionBarcodeDetector` (same directory, ADR-022) decodes QR codes under exactly the same
+  rules — synchronous Vision call, background queue only, `BarcodeDetecting` protocol seam
+  for fake-based tests — and shares the `ocr_text` column rather than adding a field, so
+  search/preview/paste/export need no QR-specific plumbing. Between decoding and storage,
+  `QRPayloadClassifier` (pure, no Vision) drops payloads in known secret-bearing formats
+  (`otpauth:`, `WIFI:`) so a snipped 2FA enrollment code never becomes searchable plaintext;
+  see ADR-022 for why the ADR-011 concealed path can't cover screen snips.
 - `ClipboardStore`'s concealed-content cipher is set late, from a background queue, once
   `ConcealedContentKeychain`'s Keychain fetch resolves (no timeout — see ADR-021). It's
   `NSLock`-protected so reads from the main actor (panel reveal, paste) and the write from

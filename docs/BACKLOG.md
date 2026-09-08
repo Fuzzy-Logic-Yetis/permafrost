@@ -141,6 +141,26 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    behind one misleading "Import failed" alert); portable-archive PBKDF2 key derivation ran
    on the main actor (froze the app during export/import).
 
+## Next up (v0.5)
+
+1. ~~QR code decoding on captured images~~ — **DONE 2026-09-07, ADR-022.** `VNDetectBarcodesRequest`
+   behind a `BarcodeDetecting` seam mirroring `TextRecognizing`, run on the same background
+   `CaptureSaveQueue` pass as OCR, sharing the `ocr_text` column so search/preview/paste/export
+   needed no new plumbing. `QRPayloadClassifier` drops known secret-bearing payloads
+   (`otpauth:`, `otpauth-migration:`, `WIFI:`) before any database write — screen snips never
+   carry the concealed pasteboard marker, so ADR-011's protection can't cover them. Separate
+   `decodeQRCodes` setting, default on.
+
+   **Deferred follow-ups from ADR-022** (neither blocks the feature):
+   - **Tell the user when a sensitive payload was dropped.** Today a gated snip looks
+     identical to a QR that simply didn't decode. Needs a real schema field — writing a
+     notice into `ocr_text` was rejected because `⇧⏎` would paste that notice into the
+     user's document and it would be exported/searched as content.
+   - **Optionally record sensitive payloads encrypted** instead of dropping them, for users
+     who *want* their 2FA/Wi-Fi QR history. Requires extending ADR-021's concealed path to
+     image metadata — `markConcealed` is text-only today — behind the same opt-in
+     risk-acknowledgment prompt as ADR-011.
+
 ## Later
 
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).

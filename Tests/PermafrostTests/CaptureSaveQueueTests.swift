@@ -195,6 +195,172 @@ import PermafrostCore
         #expect(converter.callCount == 0)
         #expect(try store.allItems().first?.richData == nil)
     }
+
+    // MARK: - QR decoding (ADR-022)
+
+    @Test func qrPayloadIsPersistedAndSearchable() throws {
+        let store = try ClipboardStore.inMemory()
+        let queue = CaptureSaveQueue(
+            store: store,
+            textRecognizer: FakeQueueTextRecognizer(result: nil),
+            barcodeDetector: FakeQueueBarcodeDetector(payloads: ["https://example.com/menu"])
+        )
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()
+            )
+        )
+        queue.waitUntilIdle()
+
+        let item = try #require(store.allItems().first)
+        #expect(item.ocrText == "https://example.com/menu")
+        #expect(try store.items(matching: "example").map(\.id) == [item.id])
+    }
+
+    /// A snip of a poster carries both printed text and a QR code; both belong in the one
+    /// `ocr_text` column, OCR first.
+    @Test func ocrTextAndQRPayloadAreCombined() throws {
+        let store = try ClipboardStore.inMemory()
+        let queue = CaptureSaveQueue(
+            store: store,
+            textRecognizer: FakeQueueTextRecognizer(result: "Scan to view the menu"),
+            barcodeDetector: FakeQueueBarcodeDetector(payloads: ["https://example.com/menu"])
+        )
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()
+            )
+        )
+        queue.waitUntilIdle()
+
+        #expect(
+            try store.allItems().first?.ocrText
+                == "Scan to view the menu\n\nhttps://example.com/menu"
+        )
+    }
+
+    /// The privacy gate that justifies the whole classifier: a snipped 2FA enrollment screen
+    /// must not put the authenticator seed in the database as searchable plaintext.
+    @Test func sensitiveQRPayloadIsNeverRecorded() throws {
+        let store = try ClipboardStore.inMemory()
+        let queue = CaptureSaveQueue(
+            store: store,
+            textRecognizer: FakeQueueTextRecognizer(result: nil),
+            barcodeDetector: FakeQueueBarcodeDetector(
+                payloads: ["otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP"]
+            )
+        )
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()
+            )
+        )
+        queue.waitUntilIdle()
+
+        let item = try #require(store.allItems().first)
+        #expect(item.ocrText == nil)
+        #expect(try store.items(matching: "JBSWY3DPEHPK3PXP").isEmpty)
+    }
+
+    /// The image itself is still kept — only the decoded secret is dropped — and surrounding
+    /// OCR text survives alongside a rejected payload.
+    @Test func sensitivePayloadIsDroppedButOrdinaryContentSurvives() throws {
+        let store = try ClipboardStore.inMemory()
+        let queue = CaptureSaveQueue(
+            store: store,
+            textRecognizer: FakeQueueTextRecognizer(result: "Set up your authenticator"),
+            barcodeDetector: FakeQueueBarcodeDetector(
+                payloads: ["https://example.com/help", "WIFI:T:WPA;S:Home;P:hunter2;;"]
+            )
+        )
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()
+            )
+        )
+        queue.waitUntilIdle()
+
+        let item = try #require(store.allItems().first)
+        #expect(item.ocrText == "Set up your authenticator\n\nhttps://example.com/help")
+        #expect(item.imageData != nil)
+        #expect(try store.items(matching: "hunter2").isEmpty)
+    }
+
+    @Test func imageCaptureSkipsQRDecodingWhenDisabled() throws {
+        let store = try ClipboardStore.inMemory()
+        let detector = FakeQueueBarcodeDetector(payloads: ["https://example.com"])
+        let queue = CaptureSaveQueue(
+            store: store,
+            textRecognizer: FakeQueueTextRecognizer(result: nil),
+            barcodeDetector: detector
+        )
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy(),
+                decodeQRCodes: false
+            )
+        )
+        queue.waitUntilIdle()
+
+        #expect(detector.callCount == 0)
+        #expect(try store.allItems().first?.ocrText == nil)
+    }
+
+    /// QR decoding is disabled independently of OCR, and vice versa.
+    @Test func qrDecodingStillRunsWhenOCRIsDisabled() throws {
+        let store = try ClipboardStore.inMemory()
+        let recognizer = FakeQueueTextRecognizer(result: "should not run")
+        let queue = CaptureSaveQueue(
+            store: store,
+            textRecognizer: recognizer,
+            barcodeDetector: FakeQueueBarcodeDetector(payloads: ["https://example.com/menu"])
+        )
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy(),
+                recognizeTextInImages: false
+            )
+        )
+        queue.waitUntilIdle()
+
+        #expect(recognizer.callCount == 0)
+        #expect(try store.allItems().first?.ocrText == "https://example.com/menu")
+    }
+
+    @Test func textCaptureDoesNotInvokeQRDecoding() throws {
+        let store = try ClipboardStore.inMemory()
+        let detector = FakeQueueBarcodeDetector(payloads: ["https://example.com"])
+        let queue = CaptureSaveQueue(store: store, barcodeDetector: detector)
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(text: "plain text"),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()
+            )
+        )
+        queue.waitUntilIdle()
+
+        #expect(detector.callCount == 0)
+    }
 }
 
 private final class FakeQueueTextRecognizer: TextRecognizing, @unchecked Sendable {
@@ -213,6 +379,25 @@ private final class FakeQueueTextRecognizer: TextRecognizing, @unchecked Sendabl
     func recognizeText(in imageData: Data) -> String? {
         lock.withLock { _callCount += 1 }
         return result
+    }
+}
+
+private final class FakeQueueBarcodeDetector: BarcodeDetecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private let payloads: [String]
+    private var _callCount = 0
+
+    init(payloads: [String]) {
+        self.payloads = payloads
+    }
+
+    var callCount: Int {
+        lock.withLock { _callCount }
+    }
+
+    func detectQRPayloads(in imageData: Data) -> [String] {
+        lock.withLock { _callCount += 1 }
+        return payloads
     }
 }
 

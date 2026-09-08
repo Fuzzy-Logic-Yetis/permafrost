@@ -65,6 +65,18 @@ Required coverage (these are the product's guarantees):
   involved. `VisionTextRecognizer` itself (the actual Vision call) has no automated test —
   it's a thin, side-effect-free wrapper around `VNImageRequestHandler.perform`; exercise it
   manually by copying a screenshot with visible text once the storage/UI wiring lands.
+- **QR payload classification** (ADR-022): `QRPayloadClassifier` — ordinary URLs and plain
+  text are recorded; `otpauth:`, `otpauth-migration:`, and `WIFI:` payloads are classified
+  sensitive; matching is case-insensitive (RFC 3986) and whitespace-tolerant; a sensitive
+  scheme appearing mid-payload (e.g. in a query string) does not make an ordinary URL
+  sensitive. Plain strings only, no Vision involved.
+- **QR capture wiring** (ADR-022): `CaptureSaveQueue` with a fake `BarcodeDetecting` —
+  payloads persist to `ocr_text` and are searchable; OCR text and payloads combine with a
+  blank line between; a sensitive payload is never written and never searchable while the
+  image and any ordinary content from the same snip survive; `decodeQRCodes: false` skips
+  the detector entirely; QR decoding and OCR can each be disabled without affecting the
+  other; text captures never invoke the detector. `VisionBarcodeDetector` itself is
+  untested for the same reason as `VisionTextRecognizer` — exercise it manually.
 
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).
@@ -171,6 +183,16 @@ outside the app (e.g. CI or a broken build that won't launch):
    present, newest first.
 3. **Capture snip**: `⌃⇧⌘4`, snip a region → `⌥⌘V` → thumbnail card present → `⏎` into
    Preview (File → New from Clipboard works too) → image intact.
+3b. **QR decode** (ADR-022): snip an ordinary QR code (e.g. a URL) → its payload appears in
+    the item's preview text shortly after capture (decoding is async), is searchable, and
+    `⇧⏎` pastes it as text. Snip a poster with both printed text and a QR code → OCR text
+    first, payload after a blank line.
+3c. **Sensitive QR is dropped** (ADR-022): snip a 2FA enrollment QR (`otpauth://`) or a
+    Wi-Fi join QR (`WIFI:`) → the image is captured, but **no decoded text ever appears**,
+    and searching for a fragment of the secret finds nothing. Verify the payload is absent
+    from the database itself (`sqlite3 … 'select ocr_text from clipboard_item'`), not just
+    from the panel. Note the known gap: nothing tells the user *why* there's no text —
+    tracked in BACKLOG.md.
 4. **Paste-on-select**: focus TextEdit, `⌥⌘V`, arrow to an item, `⏎` → text lands in
    TextEdit without clicking; TextEdit never lost focus.
 5. **Search**: `⌥⌘V`, type a fragment → list filters live; `Esc` clears search first, then

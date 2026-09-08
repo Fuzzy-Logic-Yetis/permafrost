@@ -79,12 +79,37 @@ Disable image OCR if you want screenshots stored only as images without searchab
 recognized text. Existing OCR metadata is not automatically deleted when the setting is
 turned off.
 
+## QR code decoding (ADR-022)
+
+QR codes in captured images are decoded on-device with Vision and stored in the same
+`ocr_text` metadata as OCR — searchable, previewable, exportable — controlled by its own
+Settings → Images → "Decode QR codes in images" toggle, independent of OCR.
+
+**QR payloads in known secret-bearing formats are never recorded**, even with decoding
+enabled: `otpauth:` and `otpauth-migration:` (authenticator setup keys — the TOTP/HOTP shared
+secret itself) and `WIFI:` (network passphrases). These are dropped in memory before any
+database write; only the reason is logged, never the payload. The image itself is still
+captured, and ordinary text or payloads from the same snip are still stored.
+
+This matters because the concealed-content protection above **cannot** see screen snips: it
+keys off the pasteboard's `org.nspasteboard.ConcealedType` marker, which a screenshot never
+carries. Without this gate, snipping a 2FA enrollment screen would write your second factor
+into the history database in the clear.
+
+**Known limit, stated plainly:** this is an allowlist of standardized secret formats, not a
+general secret detector. A QR code carrying a credential in a bespoke or proprietary format
+is indistinguishable from an ordinary URL and *will* be recorded in plaintext. Turn QR
+decoding off if you routinely snip codes whose contents you don't want stored. Note also that
+nothing currently tells you when a payload was dropped — you'll simply see an image with no
+decoded text.
+
 ## Threat model (MVP, honest version)
 
 | Threat | Mitigation |
 |---|---|
 | Other apps reading the pasteboard | Out of scope — any macOS app can read the pasteboard; that's the platform. |
 | Password-manager copies leaking into history | Skipped by default via concealed/transient types; opted-in concealed text is AES-GCM encrypted and redacted by default. |
+| Secrets in snipped QR codes (2FA seeds, Wi-Fi passwords) | Known secret-bearing payload formats (`otpauth:`, `otpauth-migration:`, `WIFI:`) are dropped before any write (ADR-022). Best-effort: an unrecognized secret format is still recorded. |
 | Another user account on the Mac | POSIX permissions (0700/0600). |
 | Stolen/lost machine | FileVault (recommended loudly in README); concealed text additionally uses a Keychain-backed AES-GCM key. |
 | Malicious build of Permafrost | Build from source; v1.0 adds Developer ID + notarization. |
