@@ -16,3 +16,7 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+      # Runs after the build so a compile failure is reported first; docs drift is real
+      # but never the more urgent signal.
+      - name: Check docs consistency
+        run: ./scripts/check-docs.sh

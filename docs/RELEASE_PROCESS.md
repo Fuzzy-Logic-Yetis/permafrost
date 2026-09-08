@@ -2,14 +2,19 @@
 
 ## Versioning
 
-SemVer, tags `vMAJOR.MINOR.PATCH`. Version lives in `scripts/make-app.sh`
-(`CFBundleShortVersionString`) — bump it in the release commit.
+SemVer, tags `vMAJOR.MINOR.PATCH`. The version lives in **three** places that must be bumped
+together in the release commit: `scripts/make-app.sh` (`VERSION`, which becomes
+`CFBundleShortVersionString`), `PermafrostVersion.string` in `Sources/Permafrost/App.swift`,
+and README.md's Status line. `./scripts/check-docs.sh` fails if they disagree or if the
+version has no `## vX.Y.Z` section in ROADMAP.md — run it before tagging; CI runs it too.
 
 ## v0.x releases (current: build-from-source, ad-hoc)
 
 1. Ensure `main` is green (CI) and the docs/TESTING.md manual checklist passes.
-2. Update version in `scripts/make-app.sh`; note highlights in the GitHub release draft.
-3. Update docs/PROJECT_PLAN.md milestone status if applicable.
+2. Bump all three version strings (see Versioning above); note highlights in the GitHub
+   release draft.
+3. Update docs/PROJECT_PLAN.md milestone status and docs/ROADMAP.md if applicable, then run
+   `./scripts/check-docs.sh`.
 4. `git tag -a vX.Y.Z -m "vX.Y.Z"` and `git push --tags`.
 5. Create the GitHub release from the tag. **No binary artifacts are attached to v0.x
    releases** — an unsigned/ad-hoc binary from the internet trains users to bypass
@@ -31,7 +36,8 @@ Additions to the process, in order:
 ```text
 - [ ] CI green on main
 - [ ] Manual smoke checklist passed (docs/TESTING.md)
-- [ ] Version bumped
-- [ ] Docs current (README, PROJECT_PLAN status)
+- [ ] All three version strings bumped together
+- [ ] Docs current (README, PROJECT_PLAN status, ROADMAP section for this version)
+- [ ] ./scripts/check-docs.sh passes
 - [ ] Tag pushed, release notes written
 ```

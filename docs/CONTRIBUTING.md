@@ -12,6 +12,7 @@ swift build            # fetches GRDB, compiles
 ./scripts/test.sh      # core unit tests (wraps `swift test`; required on CLT-only
                        # machines — the CLT hides Testing.framework, see the script)
 ./scripts/make-app.sh  # assembles dist/Permafrost.app (ad-hoc signed)
+./scripts/check-docs.sh  # doc-drift gate: version strings, doc links, ADR references
 ```
 
 Note: every ad-hoc re-sign is a new identity to macOS — re-grant Accessibility after
@@ -25,7 +26,9 @@ commit format, ADR rules). The short version:
 - Conventional Commits (`feat:`, `fix:`, `docs:`, …), each commit builds and tests green.
 - `PermafrostCore` never imports AppKit; all persistence stays behind `ClipboardStore`.
 - New logic in core ⇒ new tests. UI changes ⇒ run the relevant docs/TESTING.md checklist items.
-- Docs update in the same commit as the behavior they describe.
+- Docs update in the same commit as the behavior they describe, and `./scripts/check-docs.sh`
+  passes (CI runs it). It can't tell whether shipped work reached ROADMAP.md/BACKLOG.md,
+  though — that part is still on you.
 - New dependency ⇒ ADR, and expect pushback: the budget is one (GRDB) by design.
 - No TODO comments without a docs/BACKLOG.md entry.
 
