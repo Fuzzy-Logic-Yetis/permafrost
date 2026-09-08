@@ -26,6 +26,14 @@ public enum ImportExport {
         case concealedContentCannotBeImported(String)
     }
 
+    public enum ExportError: LocalizedError {
+        case unsafeConcealedContent
+
+        public var errorDescription: String? {
+            "Concealed history is not ready for a safe export. Wait for Keychain access and restart Permafrost if necessary, then try again."
+        }
+    }
+
     struct Manifest: Codable {
         var version: Int
         var exportedAt: Date
@@ -54,12 +62,21 @@ public enum ImportExport {
     // MARK: - Export
 
     public static func exportArchive(from store: ClipboardStore, to directory: URL) throws {
+        // Preflight the same immutable snapshot we serialize, before writing any files.
+        // Legacy rows can remain plaintext while the asynchronous key migration is pending.
+        let items = try store.allItems()
+        for item in items where item.kind == .text && item.isConcealed {
+            guard let encrypted = item.encryptedData, !encrypted.isEmpty,
+                item.text == nil, item.richData == nil, item.ocrText == nil,
+                item.imageData == nil, item.thumbnail == nil
+            else { throw ExportError.unsafeConcealedContent }
+        }
         let fm = FileManager.default
         let blobs = directory.appendingPathComponent("blobs", isDirectory: true)
         try fm.createDirectory(at: blobs, withIntermediateDirectories: true)
 
         var manifestItems: [ManifestItem] = []
-        for item in try store.allItems() {
+        for item in items {
             var entry = ManifestItem(
                 contentHash: item.contentHash,
                 kind: item.kind,

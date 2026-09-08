@@ -1108,3 +1108,11 @@ feature rather than inherited.
   concealed storage, because `markConcealed` is text-only — an image item can't currently be
   concealed. Recording them encrypted is a coherent future option (it would need the
   concealed path extended to image metadata) and is likewise in BACKLOG.md.
+
+### ADR-021 follow-up — 2026-09-07 export preflight (review H1)
+
+Same-Mac export now validates one immutable snapshot before writing files. Legacy concealed
+text awaiting key migration, and malformed mixed plaintext/ciphertext rows, fail the whole
+export with an actionable error. Existing ciphertext exports still work without loading the
+key. Regression tests cover mixed archives and every alternate content field. No fallback
+key, skipped secrets, schema change, or version bump. Review H1 is fixed.

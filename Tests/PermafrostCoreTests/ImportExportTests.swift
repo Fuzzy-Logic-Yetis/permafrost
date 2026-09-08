@@ -14,6 +14,46 @@ import Testing
         return url
     }
 
+    @Test func legacyConcealedExportFailsBeforeWritingAnyFiles() throws {
+        let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
+        try store.save(ClipboardCapture(text: "ordinary", richData: Data("rich".utf8)))
+        _ = try store.seedLegacyConcealedPlaintextRowForTesting(text: "legacy-secret", now: now)
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(throws: ImportExport.ExportError.unsafeConcealedContent) {
+            try ImportExport.exportArchive(from: store, to: dir)
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+    }
+
+    @Test func ciphertextExportDoesNotRequireLoadedKeyAndRejectsMixedRows() throws {
+        let source = try ClipboardStore.inMemory()
+        let sealed = try source.save(ClipboardCapture(text: "secret", isConcealed: true))
+        let target = try ClipboardStore.inMemoryWithoutConcealedContentKey()
+        try target.insertPreservingMetadata(sealed)
+        let dir = try tempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try ImportExport.exportArchive(from: target, to: dir)
+        let manifest = try String(contentsOf: dir.appendingPathComponent("manifest.json"), encoding: .utf8)
+        #expect(!manifest.contains("secret"))
+
+        for field in 0..<5 {
+            let mixedStore = try ClipboardStore.inMemory()
+            var mixed = sealed
+            switch field {
+            case 0: mixed.text = "plaintext"
+            case 1: mixed.richData = Data("plaintext".utf8)
+            case 2: mixed.ocrText = "plaintext"
+            case 3: mixed.imageData = Data("plaintext".utf8)
+            default: mixed.thumbnail = Data("plaintext".utf8)
+            }
+            try mixedStore.insertPreservingMetadata(mixed)
+            #expect(throws: ImportExport.ExportError.unsafeConcealedContent) {
+                try ImportExport.exportArchive(from: mixedStore, to: dir)
+            }
+        }
+    }
+
     @Test func roundTripPreservesContentPinsAndTimestamps() throws {
         // Same key on both ends simulates the real scenario: import/export happens on the
         // same machine against the same Keychain-backed key (ADR-021).

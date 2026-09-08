@@ -131,3 +131,8 @@ Recording, no camera/microphone, no network entitlements.
 
 Open a GitHub issue with the `security` label, or email the maintainer for anything
 sensitive. There is no bounty program; there is gratitude.
+
+Same-Mac exports fail before writing content if any concealed text remains in legacy
+plaintext form while Keychain migration is pending or failed. Wait for Keychain access,
+restart to retry migration if needed, and export again. Already encrypted rows can be
+exported without decrypting them.
