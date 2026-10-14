@@ -194,6 +194,22 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
 
 ## Next up (v0.7)
 
+0. ~~Independent review fixes for ADR-023/ADR-024 (sensitive-QR + search)~~ — **DONE
+   2026-10-13, ADR-025.** 10 findings from an 8-angle review, all verified against the code
+   before fixing, all fixed: sensitive QR secrets could be permanently lost if captured
+   before the Keychain key loaded (no retry, unlike concealed text); revealing/copying one
+   never marked the item used, so retention could purge it mid-use; a corrupted QR export
+   surfaced a raw unlocalized error; importing right after launch could reject an entire
+   valid archive over a transient timing issue; QR reveal failures were unlogged; every
+   image capture did a wasted DB write (a dropped guard); `app:` search had no escape for
+   content literally starting with "app:"; QR validation duplicated the codebase's one
+   declared integrity-check location; import built two `ClipboardItem`s per entry;
+   `SensitiveQRView` split state across two manually-synced variables. 5 new tests added,
+   168 total passing.
+   - **Deferred from this round**: a UI-level distinction between "key not ready, try
+     again" and "permanently corrupted" (ADR-025 consequence #1) — logging now makes the
+     distinction diagnosable, but the user-facing text is still generic for both.
+
 1. **Searchable concealed content, without weakening at-rest encryption (ADR-024 follow-up).**
    The actual trigger for ADR-024: a search for a fragment of a password found nothing —
    trigram indexing fixed that for *unconcealed* text, but concealed items still store

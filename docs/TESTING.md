@@ -32,6 +32,10 @@ Required coverage (these are the product's guarantees):
   everything. Performance measured directly (not assumed) at 5,000 seeded items: ~4.8ms
   content, ~6.9ms app-filter, ~9.9ms worst-case short/high-cardinality query — all under the
   `<16ms` budget in CLAUDE.md.
+- **Literal search escape** (ADR-025): a leading `\` forces content search even when the
+  rest of the query matches a recognized prefix — `\app: nginx` matches the literal text
+  "app: nginx" (e.g. a copied docker-compose line) instead of being hijacked into an
+  app-name filter for an app called "nginx".
 - **Ordering** (ADR-012): unpinned first by `last_used_at` desc, then pinned in their own
   section (most-recently-pinned first, stable `pin_order`) — unpinned entries must always
   precede pinned ones regardless of age, since the panel's `⌘1`–`⌘9` quick-paste bound
@@ -87,6 +91,16 @@ Required coverage (these are the product's guarantees):
   the detector entirely; QR decoding and OCR can each be disabled without affecting the
   other; text captures never invoke the detector. `VisionBarcodeDetector` itself is
   untested for the same reason as `VisionTextRecognizer` — exercise it manually.
+- **Review fixes** (ADR-025): a sensitive QR captured with no Keychain key ready throws and
+  queues for retry rather than committing a terminal status, then encrypts once the key
+  arrives (`optedInQRWithoutKeyQueuesForRetryAndEncryptsOnceKeyArrives`), and writes nothing
+  at all on the throw, not even unrelated OCR text from the same call
+  (`sensitivePayloadWithoutKeyThrowsAndWritesNothing`); revealing/copying a sensitive QR
+  secret marks the item used (`PasteServiceTests`); a plain image with nothing recognized
+  makes no database write (`imageCaptureWithNothingRecognizedLeavesRecognitionFieldsNil`); a
+  sensitive-QR row corrupted via the same ciphertext-substitution attack covered elsewhere
+  fails export with a distinct, localized error rather than an unlocalized one
+  (`corruptedSensitiveQRDataFailsExportAsCorruptionNotKeyUnavailable`).
 
 CI runs `swift build && swift test` on every push (`.github/workflows/ci.yml`). Green CI is
 a merge precondition (CLAUDE.md → Definition of Done).
@@ -210,7 +224,9 @@ outside the app (e.g. CI or a broken build that won't launch):
 5b. **Mid-word search** (ADR-024): copy something with a dense alphanumeric run (e.g. a
     generated password or order code), search a fragment from its *middle* → it matches.
     Then `app:` + part of an app's name (e.g. `app:edge`) → only items copied from that app
-    show.
+    show. Copy something that literally starts with "app:" (e.g. paste a docker-compose
+    line) → unescaped search for it gets hijacked into an app filter; `\` + the same text
+    (ADR-025) finds it as content instead.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.

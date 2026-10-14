@@ -413,7 +413,9 @@ private final class FakePasteService: PanelPasteServing {
         copiedOCRTexts.append(item.ocrText ?? "")
     }
 
-    func copySensitiveTextToPasteboard(_ text: String) { copiedSensitiveTexts.append(text) }
+    func copySensitiveTextToPasteboard(_ text: String, item: ClipboardItem) {
+        copiedSensitiveTexts.append(text)
+    }
 
     func pasteOCRText(_ item: ClipboardItem) -> Bool {
         pastedOCRTexts.append(item.ocrText ?? "")

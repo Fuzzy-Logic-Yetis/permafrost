@@ -33,26 +33,41 @@ import Testing
         #expect(saved.imageData == item.imageData)
     }
 
-    @Test func omittedAndUnavailableStatusesNeverBecomeOCRContent() throws {
-        for keyAvailable in [false, true] {
-            let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
-            let item = try image(in: store)
-            if keyAvailable { store.setConcealedContentKey(SymmetricKey(size: .bits256)) }
-            try store.setImageRecognition(ocrText: nil, sensitiveQRText: keyAvailable ? nil : secret,
+    @Test func omittedStatusNeverBecomesOCRContent() throws {
+        let store = try ClipboardStore.inMemory()
+        let item = try image(in: store)
+        try store.setImageRecognition(ocrText: nil, sensitiveQRText: nil,
+                                      detectedSensitiveQR: true, id: #require(item.id))
+        let saved = try #require(store.allItems().first)
+        #expect(saved.qrSensitiveStatus == .omitted)
+        #expect(saved.ocrText == nil)
+        #expect(saved.encryptedQRData == nil)
+        #expect(!saved.hasOCRText)
+    }
+
+    /// ADR-025: a sensitive payload with no cipher yet available must not silently commit
+    /// a terminal "not saved" status — it throws so `CaptureSaveQueue`'s retry mechanism
+    /// can pick it up, and nothing (not even unrelated OCR text in the same call) commits.
+    @Test func sensitivePayloadWithoutKeyThrowsAndWritesNothing() throws {
+        let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
+        let item = try image(in: store)
+        #expect(throws: ClipboardStore.ConcealedContentError.keyNotYetAvailable) {
+            try store.setImageRecognition(ocrText: "should not persist", sensitiveQRText: secret,
                                           detectedSensitiveQR: true, id: #require(item.id))
-            let saved = try #require(store.allItems().first)
-            #expect(saved.qrSensitiveStatus == (keyAvailable ? .omitted : .keyUnavailable))
-            #expect(saved.ocrText == nil)
-            #expect(saved.encryptedQRData == nil)
-            #expect(!saved.hasOCRText)
         }
+        let saved = try #require(store.allItems().first)
+        #expect(saved.qrSensitiveStatus == nil)
+        #expect(saved.ocrText == nil)
+        #expect(saved.encryptedQRData == nil)
     }
 
     @Test func recopyAfterKeyBecomesAvailableEncryptsAndLaterOptOutPreservesHistory() throws {
         let store = try ClipboardStore.inMemoryWithoutConcealedContentKey()
         let item = try image(in: store)
         let id = try #require(item.id)
-        try store.setImageRecognition(ocrText: nil, sensitiveQRText: secret, detectedSensitiveQR: true, id: id)
+        // Expected to throw (ADR-025, covered by sensitivePayloadWithoutKeyThrowsAndWritesNothing)
+        // -- this test is about the sticky-status transition once a key does exist, not retry.
+        try? store.setImageRecognition(ocrText: nil, sensitiveQRText: secret, detectedSensitiveQR: true, id: id)
         store.setConcealedContentKey(SymmetricKey(size: .bits256))
         try store.setImageRecognition(ocrText: nil, sensitiveQRText: secret, detectedSensitiveQR: true, id: id)
         try store.setImageRecognition(ocrText: nil, sensitiveQRText: nil, detectedSensitiveQR: true, id: id)
@@ -73,6 +88,29 @@ import Testing
         substituted.qrSensitiveStatus = .encrypted
         #expect(throws: ClipboardStore.ConcealedContentError.invalidConcealedContent) {
             try store.revealSensitiveQRText(for: substituted)
+        }
+    }
+
+    /// ADR-025: a corrupted sensitive-QR row (passes the shallow status/data-presence check
+    /// but fails the deeper content-hash binding on decrypt — the same substitution attack
+    /// sensitiveQRCiphertextCannotBeMovedToAnotherImage covers for reveal directly) must
+    /// surface as PortableArchive's own distinct, localized "corrupted" error at export
+    /// time, not an unlocalized internal error and not the unrelated "key unavailable" case.
+    @Test func corruptedSensitiveQRDataFailsExportAsCorruptionNotKeyUnavailable() throws {
+        let store = try ClipboardStore.inMemory()
+        let mismatchedCiphertext = try store.sealSensitiveQRText(secret, contentHash: "not-this-items-hash")
+        let corruptHash = ClipboardCapture(imageData: Data([5, 5, 5])).contentHash
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let corrupt = ClipboardItem(
+            contentHash: corruptHash, kind: .image, qrSensitiveStatus: .encrypted,
+            encryptedQRData: mismatchedCiphertext, imageData: Data([5, 5, 5]),
+            createdAt: now, lastUsedAt: now)
+        #expect(try store.insertPreservingMetadata([corrupt]) == 1)
+
+        let dir = try directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(throws: PortableArchive.Error.sourceQRDataCorrupted(corruptHash)) {
+            try PortableArchive.exportArchive(from: store, to: dir, passphrase: "synthetic passphrase")
         }
     }
 
@@ -120,7 +158,9 @@ import Testing
         #expect(throws: PortableArchive.Error.sourceKeyUnavailable) {
             try PortableArchive.exportArchive(from: keyless, to: dir, passphrase: passphrase)
         }
-        #expect(throws: ClipboardStore.ConcealedContentError.keyNotYetAvailable) {
+        // ADR-025: PortableArchive now wraps the raw ConcealedContentError into its own
+        // Error type here too, consistent with the export-side assertion above.
+        #expect(throws: PortableArchive.Error.sourceKeyUnavailable) {
             try PortableArchive.importArchive(from: dir, into: keyless, passphrase: passphrase)
         }
         #expect(try keyless.count() == 1)
@@ -184,7 +224,10 @@ import Testing
         json["items"] = items
         try JSONSerialization.data(withJSONObject: json).write(to: manifestURL)
         let target = try ClipboardStore.inMemory()
-        #expect(throws: ClipboardStore.ConcealedContentError.invalidConcealedContent) {
+        // ADR-025: ImportExport now wraps the raw ConcealedContentError into its own
+        // ImportError type (consistent with every other import-time failure), rather than
+        // letting a non-localized internal error type escape to the UI layer.
+        #expect(throws: ImportExport.ImportError.self) {
             try ImportExport.importArchive(from: dir, into: target)
         }
         #expect(try target.count() == 0)

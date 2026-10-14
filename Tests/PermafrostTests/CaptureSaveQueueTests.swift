@@ -27,6 +27,32 @@ import PermafrostCore
         #expect(try store.items(matching: "invoice").map(\.id) == [item.id])
     }
 
+    /// ADR-025: a plain screenshot with nothing to recognize must not touch recognition
+    /// metadata at all (restores a guard CaptureSaveQueue previously dropped, which cost
+    /// every image capture a wasted fetch+write transaction regardless of outcome).
+    @Test func imageCaptureWithNothingRecognizedLeavesRecognitionFieldsNil() throws {
+        let store = try ClipboardStore.inMemory()
+        let queue = CaptureSaveQueue(
+            store: store,
+            textRecognizer: FakeQueueTextRecognizer(result: nil),
+            barcodeDetector: FakeQueueBarcodeDetector(payloads: [])
+        )
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()
+            )
+        )
+        queue.waitUntilIdle()
+
+        let item = try #require(store.allItems().first)
+        #expect(item.ocrText == nil)
+        #expect(item.qrSensitiveStatus == nil)
+        #expect(item.encryptedQRData == nil)
+    }
+
     @Test func imageCaptureSkipsOCRWhenDisabled() throws {
         let store = try ClipboardStore.inMemory()
         let recognizer = FakeQueueTextRecognizer(result: "should not run")
@@ -232,7 +258,11 @@ import PermafrostCore
         }
     }
 
-    @Test func optedInQRWithoutKeySavesImageAndExplicitFailureStatus() throws {
+    /// ADR-025: a sensitive QR payload captured before the Keychain key is ready must not
+    /// be permanently discarded with a terminal `.keyUnavailable` status (the original,
+    /// buggy behavior this test used to assert as correct) — it retries and completes once
+    /// a cipher becomes available, the same guarantee concealed text already has.
+    @Test func optedInQRWithoutKeyQueuesForRetryAndEncryptsOnceKeyArrives() throws {
         let url = try tempStoreURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = try ClipboardStore.onDisk(at: url)
@@ -242,10 +272,22 @@ import PermafrostCore
         queue.enqueue(.init(capture: ClipboardCapture(imageData: Data([1, 2, 3])),
                             capturedAt: Date(), retentionPolicy: RetentionPolicy(), recordSensitiveQRCodes: true))
         queue.waitUntilIdle()
+
+        // The image row exists (its own save isn't gated on the cipher), but recognition
+        // metadata hasn't committed yet -- the capture is queued for retry, not dropped.
+        let pending = try #require(store.allItems().first)
+        #expect(pending.imageData != nil)
+        #expect(pending.qrSensitiveStatus == nil)
+        #expect(pending.encryptedQRData == nil && pending.ocrText == nil)
+
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))
+        queue.retryPendingConcealedCaptures()
+        queue.waitUntilIdle()
+
         let item = try #require(store.allItems().first)
-        #expect(item.imageData != nil)
-        #expect(item.qrSensitiveStatus == .keyUnavailable)
-        #expect(item.encryptedQRData == nil && item.ocrText == nil)
+        #expect(item.qrSensitiveStatus == .encrypted)
+        #expect(item.encryptedQRData != nil)
+        #expect(try store.revealSensitiveQRText(for: item) == "WIFI:P:synthetic;;")
     }
 
     @Test func qrPayloadIsPersistedAndSearchable() throws {

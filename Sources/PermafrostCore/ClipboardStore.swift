@@ -325,6 +325,18 @@ public final class ClipboardStore: Sendable {
         return try cipher.open(encryptedData)
     }
 
+    /// A leading backslash forces literal content search, bypassing `app:` (or any future
+    /// query-syntax prefix, e.g. the planned `is:concealed`) entirely (ADR-025). Content
+    /// that genuinely starts with a recognized prefix — a copied `docker-compose.yml` line
+    /// like `app: nginx`, a Kubernetes label, a log line `App: Zoom` — is a real, plausible
+    /// thing to search for verbatim, and without an escape it's silently reinterpreted as a
+    /// filter instead of matched as content, with no indication to the user why their
+    /// search came up empty.
+    static func stripLiteralSearchEscape(from trimmed: String) -> (text: String, isLiteral: Bool) {
+        guard trimmed.hasPrefix("\\") else { return (trimmed, false) }
+        return (String(trimmed.dropFirst()), true)
+    }
+
     /// The `app:` prefix that scopes a search to `source_app` instead of content
     /// (ADR-024). Case-insensitive on the prefix itself; `nil` for a bare content query or
     /// a lone `app:` with nothing after it, which falls back to literal content search of
@@ -358,9 +370,11 @@ public final class ClipboardStore: Sendable {
     /// not just from the start of a word — text rows match their body, image rows match
     /// recognized OCR/QR metadata. An `app:` prefix (e.g. `app:edge`) searches `source_app`
     /// instead, deliberately not merged into ordinary content search: a bare "edge" should
-    /// not also surface every unrelated item that merely came from Microsoft Edge.
+    /// not also surface every unrelated item that merely came from Microsoft Edge. A
+    /// leading `\` forces literal content search instead (ADR-025).
     public func items(matching query: String? = nil, limit: Int = 500) throws -> [ClipboardItem] {
-        let trimmed = (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let (trimmed, isLiteral) = Self.stripLiteralSearchEscape(
+            from: (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
         return try dbQueue.read { db in
             let ordering = """
                 ORDER BY is_pinned ASC,
@@ -376,7 +390,7 @@ public final class ClipboardStore: Sendable {
                 )
             }
             let pattern: FTS5Pattern?
-            if let appTerm = Self.appFilterTerm(in: trimmed) {
+            if !isLiteral, let appTerm = Self.appFilterTerm(in: trimmed) {
                 pattern = Self.columnRestrictedPattern(appTerm, columns: ["source_app"])
             } else {
                 pattern = Self.columnRestrictedPattern(trimmed, columns: ["text", "ocr_text"])
@@ -471,19 +485,25 @@ public final class ClipboardStore: Sendable {
     }
 
     /// Recognition metadata commits together; notices never become searchable content.
+    ///
+    /// A sensitive payload with no cipher yet available throws `keyNotYetAvailable` rather
+    /// than writing a terminal `.keyUnavailable` status — this lets `CaptureSaveQueue`'s
+    /// existing retry-on-key-pending mechanism pick it up and retry once the Keychain key
+    /// loads, the same guarantee concealed text already has. Writing `.keyUnavailable`
+    /// directly would permanently discard a secret captured during the normally-sub-second
+    /// launch window before the key resolves (ADR-025).
     public func setImageRecognition(
         ocrText: String?, sensitiveQRText: String?, detectedSensitiveQR: Bool, id: Int64
     ) throws {
+        if sensitiveQRText != nil, cipher == nil {
+            throw ConcealedContentError.keyNotYetAvailable
+        }
         try dbQueue.write { db in
             guard var item = try ClipboardItem.fetchOne(db, key: id), item.kind == .image else { return }
             if let ocrText, !ocrText.isEmpty { item.ocrText = ocrText }
             if let sensitiveQRText {
-                if cipher != nil {
-                    item.encryptedQRData = try sealSensitiveQRText(sensitiveQRText, contentHash: item.contentHash)
-                    item.qrSensitiveStatus = .encrypted
-                } else if item.encryptedQRData == nil {
-                    item.qrSensitiveStatus = .keyUnavailable
-                }
+                item.encryptedQRData = try sealSensitiveQRText(sensitiveQRText, contentHash: item.contentHash)
+                item.qrSensitiveStatus = .encrypted
             } else if detectedSensitiveQR, item.encryptedQRData == nil {
                 item.qrSensitiveStatus = .omitted
             }
@@ -511,14 +531,6 @@ public final class ClipboardStore: Sendable {
             throw ConcealedContentError.invalidConcealedContent
         }
         return secret.text
-    }
-
-    static func validateQRMetadata(_ item: ClipboardItem) throws {
-        if item.qrSensitiveStatus != nil || item.encryptedQRData != nil {
-            guard item.kind == .image,
-                (item.qrSensitiveStatus == .encrypted) == (item.encryptedQRData != nil)
-            else { throw ConcealedContentError.invalidConcealedContent }
-        }
     }
 
     public func setOCRText(_ ocrText: String?, id: Int64) throws {
@@ -624,7 +636,7 @@ public final class ClipboardStore: Sendable {
     }
 
     private func prepareForMetadataInsertion(_ item: ClipboardItem) throws -> ClipboardItem {
-        try Self.validateQRMetadata(item)
+        try ClipboardItemValidation.validateQRMetadata(item)
         var imported = item
         if imported.kind == .text, imported.isConcealed, imported.encryptedData == nil {
             guard let plaintext = imported.text else {

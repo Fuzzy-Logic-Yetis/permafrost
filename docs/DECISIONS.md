@@ -1217,3 +1217,93 @@ narrow results to "everything copied from Microsoft Edge."
   Making concealed content findable without weakening that guarantee needs a different
   mechanism (transient in-memory decrypt-and-match at query time, never persisted or
   indexed) and its own ADR — tracked in docs/BACKLOG.md, not folded into this change.
+
+## ADR-025: Independent review fixes (QR privacy/search review, 2026-10-13)
+
+**Context.** A high-effort, 8-angle independent review of the sensitive-QR feature (ADR-023)
+and the trigram/`app:` search feature (ADR-024) — both built the same day as this review —
+surfaced ten findings, verified independently against the actual code (not taken on the
+reviewers' word) before any fix was written. All ten were genuine; none were false positives.
+
+**Decisions, one per finding, most severe first:**
+
+1. **Sensitive QR secret permanently lost if the Keychain key wasn't ready yet.**
+   `setImageRecognition` wrote a terminal `.keyUnavailable` status directly instead of
+   throwing, so `CaptureSaveQueue`'s existing retry-on-key-pending mechanism — which already
+   protects concealed text — never engaged for QR. Fixed: throw
+   `ConcealedContentError.keyNotYetAvailable` before touching the database whenever a
+   sensitive payload is present and the cipher isn't ready, so the whole capture (OCR text
+   included) retries as a unit once the key arrives, exactly like concealed text. Accepted
+   trade-off: if a captured image *also* has ordinary OCR text, that text's display is
+   delayed by the same sub-second retry window rather than committing immediately — judged
+   acceptable since the window is normally sub-second and the alternative is losing the
+   secret outright.
+2. **Revealing/copying a sensitive QR secret never marked the item used.**
+   `copySensitiveTextToPasteboard` took a bare `String`, not an item, so it structurally
+   couldn't call `markUsed` — unlike every other copy/paste path. Retention could purge a
+   secret the user was actively relying on. Fixed: the method now takes the item and calls
+   `markUsed`, matching every sibling method.
+3. **A corrupted sensitive-QR export surfaced a raw, unlocalized error.**
+   `PortableArchive.exportArchive` called `revealSensitiveQRText` unguarded against its
+   thrown (not just nil-returning) failure mode; `ConcealedContentError` isn't
+   `LocalizedError`, so the alert fell back to Foundation's generic message instead of the
+   crafted one used one line below for the sibling case. Fixed with a new
+   `PortableArchive.Error.sourceQRDataCorrupted` case, distinct from `.sourceKeyUnavailable`
+   (transient/actionable) specifically so the two don't collapse into the same advice.
+4. **Importing right after launch could reject an entire valid archive.**
+   `ImportExport.importArchive`'s QR-reveal check converted both a transient "key not ready"
+   nil-return and genuine ciphertext corruption into the identical
+   `concealedContentCannotBeImported`, failing the whole atomic import (potentially hundreds
+   of items) for what might just be bad timing. Fixed with a new
+   `ImportError.sourceKeyUnavailable` case, and `ImportError` now conforms to
+   `LocalizedError` with real per-case messages (it didn't before this fix — every case fell
+   back to the same generic Foundation string, a gap wider than just this one finding).
+5. **Sensitive-QR reveal failures were unlogged and indistinguishable from corruption.**
+   `PanelModel.revealSensitiveQRText` caught every error identically with no trace, unlike
+   the parallel `revealConcealedText`. Fixed to log via `Log.store.error`, matching the
+   sibling exactly. A UI-level distinction between "try again" and "this is permanently
+   corrupted" was considered and deferred — see Consequences.
+6. **Every image capture did a wasted database write.** `CaptureSaveQueue.save` dropped the
+   guard that skipped calling into the store when nothing was recognized, so even a plain
+   screenshot cost a fetch+update transaction on this hot path. Restored the guard.
+7. **`app:` search had no escape for literal content.** Content genuinely starting with
+   "app:" — a copied `docker-compose.yml`/Kubernetes line, a log line — was silently
+   hijacked into an app-name filter with no indication why search came up empty, the same
+   class of confusing failure ADR-024 itself was built to fix. Fixed with a leading `\`
+   escape that forces literal content search, implemented generally (bypassing *any*
+   recognized query-prefix, not just `app:`) so it also covers the planned `is:concealed`
+   prefix in BACKLOG.md's v0.7 item 2 before that collision exists.
+8. **QR metadata validation duplicated the codebase's one declared integrity-check
+   location.** `ClipboardStore.validateQRMetadata` was a second, parallel validator even
+   though `ClipboardItemValidation.swift`'s own doc comment states its purpose is to be the
+   single place this logic lives. Relocated into `ClipboardItemValidation` unchanged in
+   behavior — a mechanical move, not a signature change, to avoid compounding risk on a
+   lower-severity architectural finding while fixing seven correctness bugs in the same
+   pass. Discovered and fixed three more unwrapped call sites of the same function while
+   relocating it (`PortableArchive` import, `ImportExport` export preflight and import) —
+   not individually reported by the review, but the identical bug class as #3/#4, so fixing
+   two instances and leaving two others would have been inconsistent.
+9. **Import built two `ClipboardItem`s per archive entry.** A throwaway instance existed
+   solely to validate/reveal QR metadata before a second, fully-populated instance was built
+   for insertion, re-passing the same fields — real drift risk if a future field update
+   landed in one construction and not the other. Collapsed to one construction per entry,
+   for both the QR path and, as a direct consequence of the restructure, the pre-existing
+   concealed-text branch's identical pattern (not separately reported, same fix for free).
+10. **`SensitiveQRView` split reveal/hide state across two manually-synced `@State`
+    variables.** `revealedText: String?` and `unavailable: Bool` had to be kept in sync by
+    hand at three call sites even though `unavailable` was fully derivable. Collapsed into
+    one `RevealState` enum (`hidden` / `revealed(String)` / `unavailable`).
+
+**Consequences and what's still deliberately open**, tracked in docs/BACKLOG.md:
+
+- Finding #5's UI-level distinction (different user-facing text for "key not ready" vs.
+  "permanently corrupted") was scoped out of this round — logging fixes the diagnosability
+  gap the finding actually demonstrated; a richer UI treatment is a larger design surface
+  than this fix pass.
+- `ImportError.unsupportedVersion`'s new `errorDescription` and the other pre-existing cases
+  now have real messages for the first time — verify against the manual import-failure
+  checklist in docs/TESTING.md before the next release, since these paths were previously
+  untested against their actual displayed text (only their case/associated value).
+- This review did not re-examine ADR-022's original deferred items (concealed-content
+  search, the `is:concealed` filter) — those remain BACKLOG.md's v0.7 priority, unaffected
+  by this round.

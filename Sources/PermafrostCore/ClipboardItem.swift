@@ -10,6 +10,10 @@ public enum ClipboardItemKind: String, Codable, Sendable {
 public enum QRSensitiveStatus: String, Codable, Sendable {
     case omitted
     case encrypted
+    /// Legacy only as of ADR-025: pre-fix builds wrote this as a terminal status when the
+    /// Keychain key wasn't ready, permanently discarding the secret. Current code retries
+    /// instead (matching concealed text, ClipboardStore.setImageRecognition) and never
+    /// writes this case — kept only so old rows and archives still display correctly.
     case keyUnavailable
 }
 

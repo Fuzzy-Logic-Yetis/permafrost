@@ -7,7 +7,7 @@ protocol PanelPasteServing {
     func paste(_ item: ClipboardItem) -> PasteOutcome
     func pasteAsPlainText(_ item: ClipboardItem) -> PasteOutcome
     func copyOCRTextToPasteboard(_ item: ClipboardItem)
-    func copySensitiveTextToPasteboard(_ text: String)
+    func copySensitiveTextToPasteboard(_ text: String, item: ClipboardItem)
     func pasteOCRText(_ item: ClipboardItem) -> Bool
 }
 
@@ -110,9 +110,18 @@ final class PanelModel: ObservableObject {
         }
     }
 
+    /// Logged, not surfaced as an alert — matches `revealConcealedText`'s rationale.
+    /// Unlike that sibling, a failure here can mean genuine data corruption (a tampered
+    /// content-hash binding), not only an unavailable key, so the log line is the only
+    /// place that distinction is currently recorded (ADR-025 defers a UI-level distinction
+    /// to BACKLOG.md).
     func revealSensitiveQRText(for item: ClipboardItem) -> String? {
-        do { return try store.revealSensitiveQRText(for: item) }
-        catch { return nil }
+        do {
+            return try store.revealSensitiveQRText(for: item)
+        } catch {
+            Log.store.error("sensitive QR reveal failed: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     func copySelectedSensitiveQRText() {
@@ -121,7 +130,7 @@ final class PanelModel: ObservableObject {
             onContentUnavailable()
             return
         }
-        pasteService.copySensitiveTextToPasteboard(text)
+        pasteService.copySensitiveTextToPasteboard(text, item: item)
     }
 
     var countLabel: String {

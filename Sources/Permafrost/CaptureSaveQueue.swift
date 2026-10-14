@@ -82,9 +82,16 @@ final class CaptureSaveQueue: @unchecked Sendable {
                 let imageData = pending.capture.imageData
             {
                 let recognized = recognizedText(for: pending, imageData: imageData)
-                try store.setImageRecognition(
-                    ocrText: recognized.ordinary, sensitiveQRText: recognized.sensitive,
-                    detectedSensitiveQR: recognized.detectedSensitive, id: id)
+                // Skip the write entirely when there's nothing to persist (ADR-025) — a
+                // plain screenshot with no text, no QR, and nothing detected shouldn't cost
+                // a database transaction on this hot path (CLAUDE.md idle-CPU goal).
+                if !recognized.ordinary.isEmpty || recognized.sensitive != nil
+                    || recognized.detectedSensitive
+                {
+                    try store.setImageRecognition(
+                        ocrText: recognized.ordinary, sensitiveQRText: recognized.sensitive,
+                        detectedSensitiveQR: recognized.detectedSensitive, id: id)
+                }
             }
             try store.purge(with: pending.retentionPolicy, now: pending.capturedAt)
             if let id = item.id { onCaptureSaved(id) }

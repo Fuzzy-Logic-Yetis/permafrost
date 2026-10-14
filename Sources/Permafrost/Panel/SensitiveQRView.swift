@@ -13,12 +13,22 @@ extension QRSensitiveStatus {
 
 /// Explicit reveal/copy keeps sensitive text out of ordinary OCR, drag and share paths.
 struct SensitiveQRView: View {
+    /// Collapses what were two independently-mutated `@State` variables (`revealedText:
+    /// String?` and `unavailable: Bool`) into one (ADR-025) — `unavailable` was always
+    /// exactly "a reveal attempt returned nil," so the two could only drift out of the
+    /// three states they're meant to represent if a future call site updated one and not
+    /// the other. One enum makes each transition a single assignment instead of two.
+    private enum RevealState: Equatable {
+        case hidden
+        case revealed(String)
+        case unavailable
+    }
+
     let status: QRSensitiveStatus
     let encryptedData: Data?
     let reveal: () -> String?
     let copy: () -> Void
-    @State private var revealedText: String?
-    @State private var unavailable = false
+    @State private var revealState: RevealState = .hidden
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -31,21 +41,25 @@ struct SensitiveQRView: View {
                 Text("The Keychain key was unavailable, so the decoded secret was not saved. Allow Keychain access, then copy this image again.")
             case .encrypted:
                 HStack {
-                    Button(revealedText == nil ? "Reveal Sensitive QR" : "Hide Sensitive QR") {
-                        if revealedText != nil { revealedText = nil; unavailable = false }
-                        else { revealedText = reveal(); unavailable = revealedText == nil }
+                    Button(revealState == .hidden || revealState == .unavailable ? "Reveal Sensitive QR" : "Hide Sensitive QR") {
+                        switch revealState {
+                        case .hidden, .unavailable:
+                            if let text = reveal() { revealState = .revealed(text) } else { revealState = .unavailable }
+                        case .revealed:
+                            revealState = .hidden
+                        }
                     }
                     .keyboardShortcut("r", modifiers: [.option, .command])
                     .help("Reveal or hide sensitive QR (⌥⌘R)")
-                    if revealedText != nil {
+                    if case .revealed = revealState {
                         Button("Copy Sensitive QR", action: copy)
                             .keyboardShortcut("c", modifiers: [.shift, .command])
                             .help("Copy sensitive QR (⇧⌘C)")
                     }
                 }
-                Text(revealedText ?? "••••••••••••")
+                Text({ if case .revealed(let text) = revealState { text } else { "••••••••••••" } }())
                     .font(.system(.body, design: .monospaced))
-                if unavailable {
+                if revealState == .unavailable {
                     Text("Cannot unlock this payload. Allow Keychain access and retry; a damaged backup may require restoring another copy.")
                         .foregroundStyle(.secondary)
                 }
@@ -53,6 +67,6 @@ struct SensitiveQRView: View {
             Text("The screenshot and visible OCR text remain ordinary history.")
                 .font(.caption).foregroundStyle(.secondary)
         }
-        .onChange(of: encryptedData) { revealedText = nil; unavailable = false }
+        .onChange(of: encryptedData) { revealState = .hidden }
     }
 }

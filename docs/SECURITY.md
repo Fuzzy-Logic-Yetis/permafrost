@@ -104,11 +104,13 @@ Copy Sensitive QR becomes available after reveal and marks the outgoing clipboar
 while suppressing Permafrost's own recapture. Ordinary Copy/Paste All, drag and share do not
 include the decoded secret. Image exports and shares still contain the original QR pixels.
 
-If the Keychain key is unavailable, the image is retained but the decoded sensitive payload
-is discarded, with an explicit notice to allow Keychain access and copy the image again.
-There is no fallback key or extra plaintext retry queue. Turning off the setting affects
-future captures, not already saved metadata; re-copying without opt-in does not erase an
-existing encrypted payload. Delete the image to delete its associated metadata.
+If the Keychain key isn't ready yet, the image is retained and the decoded sensitive
+payload stays only in memory, retried once the persistent key becomes available (ADR-025) —
+the same bounded, capped-at-20 retry queue concealed text already uses, not an extra one. A
+payload is only discarded outright if the Keychain key never resolves before the app quits;
+there is no fallback key. Turning off the setting affects future captures, not already saved
+metadata; re-copying without opt-in does not erase an existing encrypted payload. Delete the
+image to delete its associated metadata.
 
 **Limits:** this is classification of known decoded formats, not general secret detection.
 Proprietary secrets can still be stored as ordinary payloads. Screenshot pixels and visible

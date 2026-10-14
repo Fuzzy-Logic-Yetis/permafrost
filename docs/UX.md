@@ -15,7 +15,9 @@ If an interaction needs the mouse, it's a bug in the design.
 - `app:` + part of an app's name (e.g. `app:edge`) filters to items copied from that app,
   via the already-captured, already-displayed source-app metadata. Scoped deliberately:
   plain search never matches on source app, and `app:` never matches on content — the two
-  modes don't blend into each other.
+  modes don't blend into each other. A leading `\` forces literal content search instead,
+  for content that happens to start with a recognized prefix (ADR-025) — e.g. `\app: nginx`
+  searches for that literal text rather than filtering to an app named "nginx".
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 

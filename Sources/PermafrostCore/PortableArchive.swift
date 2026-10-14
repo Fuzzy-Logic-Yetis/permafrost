@@ -15,6 +15,11 @@ public enum PortableArchive {
         case sourceKeyUnavailable
         case contentHashMismatch(String)
         case kindFieldMismatch(String)
+        /// A sensitive QR payload's encrypted data couldn't be decrypted/decoded for a
+        /// reason other than the key being unavailable (ADR-025) — distinct from
+        /// sourceKeyUnavailable, which is transient and actionable by granting Keychain
+        /// access; this means the stored ciphertext itself is unreadable.
+        case sourceQRDataCorrupted(String)
 
         public var errorDescription: String? {
             switch self {
@@ -25,6 +30,7 @@ public enum PortableArchive {
             case .sourceKeyUnavailable: return "Concealed content is unavailable until its Keychain key can be opened."
             case .contentHashMismatch: return "The archive failed an integrity check."
             case .kindFieldMismatch: return "The archive contains an invalid clipboard item."
+            case .sourceQRDataCorrupted: return "A sensitive QR payload's encrypted data is corrupted and cannot be exported."
             }
         }
     }
@@ -77,8 +83,13 @@ public enum PortableArchive {
         let salt = PortableArchiveCipher.makeSalt()
         var items: [Item] = []
         for item in try store.allItems() {
-            try ClipboardStore.validateQRMetadata(item)
-            let sensitiveQRText = try store.revealSensitiveQRText(for: item)
+            let sensitiveQRText: String?
+            do {
+                try ClipboardItemValidation.validateQRMetadata(item)
+                sensitiveQRText = try store.revealSensitiveQRText(for: item)
+            } catch {
+                throw Error.sourceQRDataCorrupted(item.contentHash)
+            }
             if item.encryptedQRData != nil && sensitiveQRText == nil { throw Error.sourceKeyUnavailable }
             let text: String?
             if item.kind == .text {
@@ -141,9 +152,19 @@ public enum PortableArchive {
                 entry.qrSensitiveStatus == nil || entry.kind == .image
             else { throw Error.malformedArchive }
             if let text = entry.sensitiveQRText {
-                item.encryptedQRData = try store.sealSensitiveQRText(text, contentHash: item.contentHash)
+                do {
+                    item.encryptedQRData = try store.sealSensitiveQRText(text, contentHash: item.contentHash)
+                } catch ClipboardStore.ConcealedContentError.keyNotYetAvailable {
+                    throw Error.sourceKeyUnavailable
+                } catch {
+                    throw Error.sourceQRDataCorrupted(item.contentHash)
+                }
             }
-            try ClipboardStore.validateQRMetadata(item)
+            do {
+                try ClipboardItemValidation.validateQRMetadata(item)
+            } catch {
+                throw Error.sourceQRDataCorrupted(item.contentHash)
+            }
             return item
         }
         // The store seals concealed plaintext with this Mac's Keychain-backed cipher inside

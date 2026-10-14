@@ -10,7 +10,7 @@ public enum ImportExport {
     public static let manifestVersion = 3
     public static let manifestFileName = "manifest.json"
 
-    public enum ImportError: Error, Equatable {
+    public enum ImportError: LocalizedError, Equatable {
         case missingManifest
         case unsupportedVersion(Int)
         case missingBlob(String)
@@ -21,9 +21,34 @@ public enum ImportExport {
         /// Review M-2: recomputing the hash from the entry's actual content didn't
         /// match the manifest's claimed `contentHash` — the archive is malformed or hostile.
         case contentHashMismatch(String)
-        /// Ciphertext from another Keychain key cannot be imported safely. Failing loudly is
-        /// preferable to reporting a misleading successful import with silently skipped secrets.
+        /// Ciphertext (concealed text or sensitive QR) is unreadable for a reason other
+        /// than the Keychain key being unavailable — genuine corruption, not a timing
+        /// issue. Distinct from sourceKeyUnavailable (ADR-025): failing loudly here is
+        /// preferable to reporting a misleading successful import with silently skipped
+        /// secrets, but it should not be confused with a retry-and-it'll-work condition.
         case concealedContentCannotBeImported(String)
+        /// The Keychain key needed to verify a sensitive QR payload wasn't ready yet —
+        /// transient (ADR-025), e.g. an import triggered in the brief window right after
+        /// launch before the async key fetch resolves. Distinct from
+        /// concealedContentCannotBeImported so the user gets "try again in a moment"
+        /// instead of a message implying the archive itself is broken.
+        case sourceKeyUnavailable(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .missingManifest: return "The archive has no manifest."
+            case .unsupportedVersion(let version):
+                return "This archive (format version \(version)) isn't supported by this version of Permafrost."
+            case .missingBlob(let name): return "The archive is missing an expected file: \(name)."
+            case .unsafeBlobPath(let name): return "The archive references an unsafe file path: \(name)."
+            case .kindFieldMismatch: return "The archive contains an invalid clipboard item."
+            case .contentHashMismatch: return "The archive failed an integrity check."
+            case .concealedContentCannotBeImported:
+                return "Concealed content in this archive could not be verified and was not imported."
+            case .sourceKeyUnavailable:
+                return "Permafrost's Keychain key isn't ready yet. Wait a moment and try the import again."
+            }
+        }
     }
 
     public enum ExportError: LocalizedError {
@@ -67,7 +92,11 @@ public enum ImportExport {
         // Preflight the same immutable snapshot we serialize, before writing any files.
         // Legacy rows can remain plaintext while the asynchronous key migration is pending.
         let items = try store.allItems()
-        for item in items { try ClipboardStore.validateQRMetadata(item) }
+        do {
+            for item in items { try ClipboardItemValidation.validateQRMetadata(item) }
+        } catch {
+            throw ExportError.unsafeConcealedContent
+        }
         for item in items where item.kind == .text && item.isConcealed {
             guard let encrypted = item.encryptedData, !encrypted.isEmpty,
                 item.text == nil, item.richData == nil, item.ocrText == nil,
@@ -195,20 +224,6 @@ public enum ImportExport {
             let thumbnail = try blob(entry.thumbnailFile)
             let encryptedData = try blob(entry.encryptedDataFile)
             let encryptedQRData = try blob(entry.encryptedQRDataFile)
-            let qrItem = ClipboardItem(
-                contentHash: entry.contentHash, kind: entry.kind,
-                qrSensitiveStatus: entry.qrSensitiveStatus, encryptedQRData: encryptedQRData,
-                createdAt: entry.createdAt, lastUsedAt: entry.lastUsedAt)
-            try ClipboardStore.validateQRMetadata(qrItem)
-            if encryptedQRData != nil {
-                do {
-                    guard try store.revealSensitiveQRText(for: qrItem) != nil else {
-                        throw ImportError.concealedContentCannotBeImported(entry.contentHash)
-                    }
-                } catch {
-                    throw ImportError.concealedContentCannotBeImported(entry.contentHash)
-                }
-            }
 
             // ADR-021: a concealed text item is exported as ciphertext, never plaintext.
             // Verify its decrypted plaintext before inserting. A different-machine/key archive
@@ -217,12 +232,18 @@ public enum ImportExport {
                 guard entry.text == nil, entry.ocrText == nil, imageData == nil else {
                     throw ImportError.kindFieldMismatch(entry.contentHash)
                 }
-                let placeholder = ClipboardItem(
-                    contentHash: entry.contentHash, kind: .text, encryptedData: encryptedData,
-                    createdAt: entry.createdAt, lastUsedAt: entry.lastUsedAt, isConcealed: true)
+                // Built once, as the real item to insert — also what revealText checks
+                // against, since it only reads kind/isConcealed/encryptedData, all already
+                // populated with their final values here.
+                let item = ClipboardItem(
+                    id: nil, contentHash: entry.contentHash, kind: .text, text: nil,
+                    ocrText: nil, richData: nil, encryptedData: encryptedData, imageData: nil,
+                    thumbnail: nil, sourceApp: entry.sourceApp, createdAt: entry.createdAt,
+                    lastUsedAt: entry.lastUsedAt, isPinned: entry.isPinned,
+                    pinOrder: entry.pinOrder, isConcealed: true)
                 let plaintext: String?
                 do {
-                    plaintext = try store.revealText(for: placeholder)
+                    plaintext = try store.revealText(for: item)
                 } catch {
                     throw ImportError.concealedContentCannotBeImported(entry.contentHash)
                 }
@@ -232,24 +253,7 @@ public enum ImportExport {
                 guard ClipboardCapture(text: plaintext).contentHash == entry.contentHash else {
                     throw ImportError.contentHashMismatch(entry.contentHash)
                 }
-                itemsToInsert.append(
-                    ClipboardItem(
-                        id: nil,
-                        contentHash: entry.contentHash,
-                        kind: .text,
-                        text: nil,
-                        ocrText: nil,
-                        richData: nil,
-                        encryptedData: encryptedData,
-                        imageData: nil,
-                        thumbnail: nil,
-                        sourceApp: entry.sourceApp,
-                        createdAt: entry.createdAt,
-                        lastUsedAt: entry.lastUsedAt,
-                        isPinned: entry.isPinned,
-                        pinOrder: entry.pinOrder,
-                        isConcealed: true
-                    ))
+                itemsToInsert.append(item)
                 continue
             }
 
@@ -267,24 +271,39 @@ public enum ImportExport {
                 throw ImportError.contentHashMismatch(entry.contentHash)
             }
 
-            itemsToInsert.append(
-                ClipboardItem(
-                    id: nil,
-                    contentHash: entry.contentHash,
-                    kind: entry.kind,
-                    text: entry.text,
-                    ocrText: entry.ocrText,
-                    qrSensitiveStatus: entry.qrSensitiveStatus, encryptedQRData: encryptedQRData,
-                    richData: richData,
-                    imageData: imageData,
-                    thumbnail: thumbnail,
-                    sourceApp: entry.sourceApp,
-                    createdAt: entry.createdAt,
-                    lastUsedAt: entry.lastUsedAt,
-                    isPinned: entry.isPinned,
-                    pinOrder: entry.pinOrder,
-                    isConcealed: entry.isConcealed
-                ))
+            // Built once — the real item to insert, and also what the QR checks below
+            // verify, instead of a separate throwaway instance built just for that check.
+            let item = ClipboardItem(
+                id: nil, contentHash: entry.contentHash, kind: entry.kind, text: entry.text,
+                ocrText: entry.ocrText, qrSensitiveStatus: entry.qrSensitiveStatus,
+                encryptedQRData: encryptedQRData, richData: richData, imageData: imageData,
+                thumbnail: thumbnail, sourceApp: entry.sourceApp, createdAt: entry.createdAt,
+                lastUsedAt: entry.lastUsedAt, isPinned: entry.isPinned,
+                pinOrder: entry.pinOrder, isConcealed: entry.isConcealed)
+
+            do {
+                try ClipboardItemValidation.validateQRMetadata(item)
+            } catch {
+                throw ImportError.kindFieldMismatch(entry.contentHash)
+            }
+
+            if encryptedQRData != nil {
+                // nil here unambiguously means "this Mac's Keychain key isn't ready yet"
+                // (revealSensitiveQRText's only nil-producing path once kind/data are
+                // already known non-nil) — transient, distinct from a thrown error, which
+                // means the ciphertext itself is unreadable (ADR-025).
+                let revealed: String?
+                do {
+                    revealed = try store.revealSensitiveQRText(for: item)
+                } catch {
+                    throw ImportError.concealedContentCannotBeImported(entry.contentHash)
+                }
+                guard revealed != nil else {
+                    throw ImportError.sourceKeyUnavailable(entry.contentHash)
+                }
+            }
+
+            itemsToInsert.append(item)
         }
         return try store.insertPreservingMetadata(itemsToInsert)
     }

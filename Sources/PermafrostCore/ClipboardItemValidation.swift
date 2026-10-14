@@ -6,10 +6,23 @@ import Foundation
 /// check (Review M-2) — they only differ in how they represent blobs on disk (separate
 /// blob files vs. inline `Data`), which the caller resolves to plain values before calling
 /// this, so the security-relevant validation logic itself lives in exactly one place.
+/// `validateQRMetadata` (ADR-025) extends that same "one place" to QR consistency checks,
+/// which previously lived as a second, parallel validator on `ClipboardStore`.
 enum ClipboardItemValidation {
     enum Error: Swift.Error {
         case kindFieldMismatch
         case contentHashMismatch
+    }
+
+    /// A row claiming `.encrypted` status must carry ciphertext, and vice versa; QR status
+    /// only makes sense on an image row. Throws `ConcealedContentError.invalidConcealedContent`
+    /// (not a local error) since this is the same "this data can't be trusted" condition
+    /// `ClipboardStore.revealSensitiveQRText` throws for a tampered row.
+    static func validateQRMetadata(_ item: ClipboardItem) throws {
+        guard item.qrSensitiveStatus != nil || item.encryptedQRData != nil else { return }
+        guard item.kind == .image,
+            (item.qrSensitiveStatus == .encrypted) == (item.encryptedQRData != nil)
+        else { throw ClipboardStore.ConcealedContentError.invalidConcealedContent }
     }
 
     @discardableResult

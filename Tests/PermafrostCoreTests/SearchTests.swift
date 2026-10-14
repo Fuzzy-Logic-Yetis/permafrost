@@ -172,4 +172,31 @@ import Testing
         #expect(ClipboardStore.appFilterTerm(in: "application:edge") == nil)
         #expect(ClipboardStore.appFilterTerm(in: "edge") == nil)
     }
+
+    // MARK: - Literal search escape (ADR-025)
+
+    /// The bug a leading `\` exists to fix: content that genuinely starts with "app:" —
+    /// a copied docker-compose.yml/Kubernetes label — must still be searchable as content.
+    @Test func backslashEscapesAppFilterForLiteralContentSearch() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "app: nginx"), now: now)
+        try store.save(
+            ClipboardCapture(text: "unrelated", sourceApp: "nginx"), now: now.addingTimeInterval(1))
+
+        // Unescaped: hijacked into an app: filter, matches the Edge-equivalent row only.
+        #expect(try store.items(matching: "app: nginx").map(\.text) == ["unrelated"])
+        // Escaped: literal content search, matches the docker-compose-style line instead.
+        #expect(try store.items(matching: "\\app: nginx").map(\.text) == ["app: nginx"])
+    }
+
+    @Test func stripLiteralSearchEscapeParsing() {
+        #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\app: nginx").text == "app: nginx")
+        #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\app: nginx").isLiteral == true)
+        #expect(ClipboardStore.stripLiteralSearchEscape(from: "app:edge").text == "app:edge")
+        #expect(ClipboardStore.stripLiteralSearchEscape(from: "app:edge").isLiteral == false)
+        // A bare backslash still forces literal mode, even though nothing remains after it —
+        // same degenerate-but-sane fallback as a lone "app:".
+        #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\").text == "")
+        #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\").isLiteral == true)
+    }
 }

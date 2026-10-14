@@ -58,11 +58,12 @@ final class PasteService {
         return true
     }
 
-    func copySensitiveTextToPasteboard(_ text: String) {
+    func copySensitiveTextToPasteboard(_ text: String, item: ClipboardItem) {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         pasteboard.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
         onPasteboardWritten()
+        markUsed(item)
     }
 
     func copyOCRTextToPasteboard(_ item: ClipboardItem) {
