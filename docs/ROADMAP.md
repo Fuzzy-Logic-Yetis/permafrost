@@ -97,10 +97,12 @@ context on why each was cut from this milestone rather than built smaller:
 - A "show concealed only" quick filter — collapses to `is_concealed`, already a column,
   effectively free, just not built yet.
 - `app:` syntax discoverability (so it doesn't have to be memorized) — UI-only, no schema.
-- A tabbed/visual Pinned-vs-Recent split and a general tag system — both considered and
-  not pursued: tags collapsed into the (deferred) concealed-only filter once a concrete use
-  case was pinned down, and tabs were never confirmed as fixing the actual reported problem
-  once real search was the root cause, not list layout.
+
+A tabbed/visual Pinned-vs-Recent split and a general tag system were also considered and
+are **not** queued for v0.7 or later — see "Deliberately rejected" in BACKLOG.md. Tags
+collapsed into the concealed-only filter above once a concrete use case was pinned down;
+tabs were never confirmed as fixing the actual reported problem once real search turned out
+to be the root cause, not list layout.
 
 ## v1.0 — Distribution
 

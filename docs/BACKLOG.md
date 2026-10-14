@@ -214,16 +214,6 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    discovery as a follow-up: nothing today suggests `app:` exists or which app names are
    valid. A lightweight autocomplete/hint in the search field (e.g. suggest `app:Edge` once
    a few characters narrow to one known source app) — UI-only, no schema impact.
-4. **Tabbed or visual Pinned/Recent split — reconsidered, not confirmed needed.** The
-   original ask that started this whole thread ("I was scrolling through hundreds of pinned
-   items"). Deliberately not built this round: the actual incident turned out to be a search
-   bug (items 1 above) and a missing filter (item 2), not a list-layout problem — scrolling
-   was the symptom of search not working, not evidence that visual navigation is the fix.
-   Revisit only if items 1–2 ship and scrolling-to-find is still reported as a problem.
-5. **General tag system — rejected in favor of cheaper mechanisms, not deferred.** Explored
-   at length; no concrete use case survived that wasn't already covered by `app:` filtering,
-   content search, or item 2's concealed-only filter. Revisit only with a real example that
-   doesn't fit any of those.
 
 ## Later
 
@@ -237,3 +227,13 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
 - Mac App Store distribution (ADR-007)
 - Cloud sync (CLAUDE.md non-goals)
 - Sandboxing (ADR-007)
+- **Tabbed or visual Pinned/Recent split** (ADR-024 discussion) — the original ask that
+  prompted ADR-024 ("scrolling through hundreds of pinned items looking for one"). Not
+  pursued: the actual incident was a search bug (fixed by ADR-024) and a missing filter
+  (BACKLOG "Next up" item 2), not a list-layout problem — scrolling was the symptom of
+  search not working, not evidence that visual navigation was the fix. Revisit only if a
+  findability problem is reported *after* items 1–3 above ship and search genuinely works.
+- **General tag system** (ADR-024 discussion) — explored at length; no concrete use case
+  survived that wasn't already covered by `app:` filtering, content search, or the
+  concealed-only filter above. Revisit only with a real example that doesn't fit any of
+  those.
