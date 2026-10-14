@@ -199,6 +199,32 @@ public final class ClipboardStore: Sendable {
                 t.add(column: "encrypted_qr_data", .blob)
             }
         }
+        migrator.registerMigration("v5_trigram_search") { db in
+            // ADR-024: unicode61 only matches from the start of a token, so a remembered
+            // fragment from the middle of a dense alphanumeric run (a password, a code) could
+            // never match even though the plaintext is sitting right there in `text`. trigram
+            // indexes every overlapping 3-character sequence instead, so matching works
+            // anywhere in the string. Also index `source_app` (captured since v1, never
+            // searchable) so `app:` queries have something to match against — see
+            // `items(matching:)`, which deliberately keeps it out of the default/content
+            // search rather than merging it in and making ordinary results ambiguous.
+            try db.execute(sql: "DROP TRIGGER IF EXISTS __clipboard_item_fts_ai")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS __clipboard_item_fts_ad")
+            try db.execute(sql: "DROP TRIGGER IF EXISTS __clipboard_item_fts_au")
+            try db.drop(table: "clipboard_item_fts")
+            try db.create(virtualTable: "clipboard_item_fts", using: FTS5()) { t in
+                t.synchronize(withTable: "clipboard_item")
+                t.column("text")
+                t.column("ocr_text")
+                t.column("source_app")
+                // Explicit rather than relying on the documented default (case-insensitive)
+                // — CLAUDE.md: a future maintainer shouldn't need to look up SQLite's FTS5
+                // docs to know why "ACO" matches "mY7C0ACO2h".
+                t.tokenizer = FTS5TokenizerDescriptor(
+                    components: ["trigram", "case_sensitive", "0"])
+            }
+            try db.execute(sql: "INSERT INTO clipboard_item_fts(clipboard_item_fts) VALUES ('rebuild')")
+        }
         return migrator
     }
 
@@ -299,12 +325,40 @@ public final class ClipboardStore: Sendable {
         return try cipher.open(encryptedData)
     }
 
+    /// The `app:` prefix that scopes a search to `source_app` instead of content
+    /// (ADR-024). Case-insensitive on the prefix itself; `nil` for a bare content query or
+    /// a lone `app:` with nothing after it, which falls back to literal content search of
+    /// the text "app:" rather than matching everything.
+    static func appFilterTerm(in trimmed: String) -> String? {
+        let prefix = "app:"
+        guard trimmed.lowercased().hasPrefix(prefix) else { return nil }
+        let remainder = trimmed.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
+        return remainder.isEmpty ? nil : remainder
+    }
+
+    /// Builds an FTS5 pattern restricted to the given column(s), reusing GRDB's own
+    /// tokenization/escaping (`matchingAllPrefixesIn`) for the term itself rather than
+    /// hand-rolling it, then wrapping the already-validated pattern in an FTS5 column
+    /// filter and re-validating the combined string. `nil` on anything that doesn't
+    /// produce a valid pattern (empty input, FTS-hostile characters) — same safe-empty
+    /// contract as the plain convenience initializers.
+    private static func columnRestrictedPattern(_ text: String, columns: [String]) -> FTS5Pattern? {
+        guard let base = FTS5Pattern(matchingAllPrefixesIn: text) else { return nil }
+        let raw = "{\(columns.joined(separator: " "))}: \(base.rawPattern)"
+        return try? FTS5Pattern(rawPattern: raw, allowedColumns: columns)
+    }
+
     /// Unpinned entries first (by recency), pinned entries in their own section at
     /// the bottom (most-recently-pinned first). This ordering is a product
     /// guarantee (ADR-012): pinning something never displaces your latest copy from
     /// the front of the list or from the `⌘1`–`⌘9` quick-paste slots, which address
-    /// only the unpinned prefix. A non-empty query filters via FTS5 prefix matching;
-    /// text rows match their body and image rows match recognized OCR metadata when present.
+    /// only the unpinned prefix.
+    ///
+    /// A non-empty query matches anywhere in the text via FTS5 trigram indexing (ADR-024),
+    /// not just from the start of a word — text rows match their body, image rows match
+    /// recognized OCR/QR metadata. An `app:` prefix (e.g. `app:edge`) searches `source_app`
+    /// instead, deliberately not merged into ordinary content search: a bare "edge" should
+    /// not also surface every unrelated item that merely came from Microsoft Edge.
     public func items(matching query: String? = nil, limit: Int = 500) throws -> [ClipboardItem] {
         let trimmed = (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return try dbQueue.read { db in
@@ -321,9 +375,13 @@ public final class ClipboardStore: Sendable {
                     arguments: [limit]
                 )
             }
-            guard let pattern = FTS5Pattern(matchingAllPrefixesIn: trimmed) else {
-                return []
+            let pattern: FTS5Pattern?
+            if let appTerm = Self.appFilterTerm(in: trimmed) {
+                pattern = Self.columnRestrictedPattern(appTerm, columns: ["source_app"])
+            } else {
+                pattern = Self.columnRestrictedPattern(trimmed, columns: ["text", "ocr_text"])
             }
+            guard let pattern else { return [] }
             return try ClipboardItem.fetchAll(
                 db,
                 sql: """

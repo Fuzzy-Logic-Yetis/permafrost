@@ -22,6 +22,16 @@ Required coverage (these are the product's guarantees):
   queries with FTS-hostile characters (`"`, `*`, `(`) fall back safely, image items with no
   OCR metadata are excluded from text search but present in unfiltered list, and image rows
   with `ocr_text` can match recognized text without changing image paste behavior.
+- **Trigram mid-word matching and `app:` filtering** (ADR-024): a query matches anywhere in
+  the text, not just from a word's start (`aco` finds `mY7C0ACO2h`), case-insensitively; a
+  query under 3 characters returns no matches (trigram's floor, not a crash); `app:edge`
+  matches only `source_app`, case-insensitive on the prefix; a bare query never matches
+  `source_app` and an `app:`-scoped query never matches content — both directions are
+  regression-tested since either breaking is easy to miss in review; `app:` with nothing
+  after it falls back to a literal content search for the text "app:" rather than matching
+  everything. Performance measured directly (not assumed) at 5,000 seeded items: ~4.8ms
+  content, ~6.9ms app-filter, ~9.9ms worst-case short/high-cardinality query — all under the
+  `<16ms` budget in CLAUDE.md.
 - **Ordering** (ADR-012): unpinned first by `last_used_at` desc, then pinned in their own
   section (most-recently-pinned first, stable `pin_order`) — unpinned entries must always
   precede pinned ones regardless of age, since the panel's `⌘1`–`⌘9` quick-paste bound
@@ -197,6 +207,10 @@ outside the app (e.g. CI or a broken build that won't launch):
    TextEdit without clicking; TextEdit never lost focus.
 5. **Search**: `⌥⌘V`, type a fragment → list filters live; `Esc` clears search first, then
    closes.
+5b. **Mid-word search** (ADR-024): copy something with a dense alphanumeric run (e.g. a
+    generated password or order code), search a fragment from its *middle* → it matches.
+    Then `app:` + part of an app's name (e.g. `app:edge`) → only items copied from that app
+    show.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.

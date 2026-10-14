@@ -1157,3 +1157,63 @@ fixture UI checks verify notices, reveal/copy affordances, re-redaction and cons
 acknowledgment without using real clipboard history or Keychain. Review M2 and capture-path
 M8 are fixed; L1 wording is synchronized. All other findings and M8's broader import/purge
 observation follow-up are explicitly recorded in BACKLOG.md before removal of the raw review.
+
+## ADR-024: Trigram search (mid-word matching) and `app:` source-app filtering
+
+**Context.** Real bug report from live use: the project owner pinned a password-manager
+password, remembered a fragment from the *middle* of it (`ACO` from `mY7C0ACO2h`), searched
+for it, got "No matches" — despite the item being unencrypted, pinned, and directly visible
+in the panel. `items(matching:)` used `FTS5Pattern(matchingAllPrefixesIn:)` against an FTS5
+table tokenized with `unicode61`, which only matches **from the start of a token**.
+`mY7C0ACO2h` is one unbroken alphanumeric run under that tokenizer, so a mid-token fragment
+structurally cannot match no matter how the text is stored — not a bug in the data, a limit
+in how it's indexed. This isn't password-specific: the same limit means searching "script"
+would never find a clip containing only "JavaScript" either, since the match only begins at
+a word boundary. Dense strings (passwords, codes, license keys) just make it obvious.
+
+A second, related gap reported in the same conversation: `source_app` has been captured and
+displayed per item since v1, but was never added to the FTS5 index, so there was no way to
+narrow results to "everything copied from Microsoft Edge."
+
+**Decision.**
+
+1. **Migration v5** rebuilds `clipboard_item_fts` (same drop/recreate/rebuild pattern as
+   `v2_ocr_text`) with two changes: the tokenizer becomes `trigram` (explicit
+   `case_sensitive 0`, matching the documented default but stated rather than relied upon),
+   and a `source_app` column is added to the index.
+2. **Trigram indexes every overlapping 3-character sequence** rather than whole tokens, so
+   a query matches anywhere in the string, not just from a word's start. Verified directly
+   against the project's SQLite 3.51.0 (not assumed from documentation) before writing any
+   Swift: `mY7C0ACO2h` matches `aco` and `ACO` identically (case-insensitive), column
+   restriction (`{text ocr_text}: term`) and GRDB's existing prefix-pattern escaping both
+   compose correctly with the trigram tokenizer, and queries under 3 characters correctly
+   return zero rows rather than erroring.
+3. **`app:` prefix syntax** (e.g. `app:edge`), parsed in `ClipboardStore.appFilterTerm(in:)`
+   before the FTS5 query is built, routes to a pattern restricted to the `source_app` column
+   only (`columnRestrictedPattern`). Deliberately **not** merged into the default/bare
+   search: a bare "edge" query must not also surface unrelated content that merely happened
+   to be copied while Microsoft Edge was frontmost — that would make ordinary content search
+   results depend on an unrelated coincidence. `bareQueryDoesNotMatchSourceApp` and
+   `appFilterDoesNotMatchContentText` in SearchTests.swift are the regression tests for that
+   boundary specifically, since it's the easiest part of this to accidentally regress.
+4. Discoverability of the `app:` syntax (so a user isn't stuck memorizing it) is left as a
+   UI-only follow-up with no schema impact — see docs/BACKLOG.md — rather than bundled into
+   this migration.
+
+**Consequences.**
+
+- Trigram indexes are larger than whole-token indexes (every overlapping 3-char window, not
+  one entry per word). Measured directly rather than assumed: with 5,000 seeded items, a
+  mid-token content search took ~4.8ms, an `app:` filter ~6.9ms, and the worst case tried (a
+  short, high-cardinality 3-character query matching most rows) ~9.9ms — all comfortably
+  under CLAUDE.md's `<16ms @ 5,000 items` budget, but worth re-measuring if history size
+  assumptions change materially.
+- A query under 3 characters cannot match mid-word content at all (no trigram exists to
+  index). This is a real, user-visible behavior change from the old prefix search — accepted
+  because the alternative (keeping unicode61) is the bug this ADR exists to fix.
+- Explicitly **not** addressed here, and not accidentally fixed as a side effect: searching
+  inside *concealed* content. Concealed items still store `text = nil` — there is nothing in
+  the `text` column to trigram-index regardless of tokenizer, by the design in ADR-011/021.
+  Making concealed content findable without weakening that guarantee needs a different
+  mechanism (transient in-memory decrypt-and-match at query time, never persisted or
+  indexed) and its own ADR — tracked in docs/BACKLOG.md, not folded into this change.

@@ -79,4 +79,97 @@ import Testing
         let results = try store.items(matching: "hello").map(\.text)
         #expect(results == ["hello permafrost", "Hello world"])
     }
+
+    // MARK: - Trigram substring matching and app: filtering (ADR-024)
+
+    /// The exact bug report that drove ADR-024: a search for a fragment from the *middle*
+    /// of a dense alphanumeric run (what a password or code looks like) found nothing under
+    /// unicode61's prefix-only matching, even though the plaintext was sitting right there
+    /// in the `text` column — unicode61 only matches from the start of a token.
+    @Test func midTokenSubstringMatchesViaTrigram() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "mY7C0ACO2h"), now: now)
+
+        let results = try store.items(matching: "ACO")
+
+        #expect(results.map(\.text) == ["mY7C0ACO2h"])
+    }
+
+    @Test func midTokenMatchIsCaseInsensitive() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "mY7C0ACO2h"), now: now)
+
+        #expect(try store.items(matching: "aco").map(\.text) == ["mY7C0ACO2h"])
+    }
+
+    /// Trigram indexes 3-character sequences, so a query under that length has no index
+    /// entries to match against — documented in ADR-024 as an accepted limit, not a crash.
+    @Test func queryShorterThanThreeCharsReturnsNoMatches() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "mY7C0ACO2h"), now: now)
+
+        #expect(try store.items(matching: "ac").isEmpty)
+    }
+
+    @Test func appFilterMatchesSourceApp() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "from edge", sourceApp: "Microsoft Edge"), now: now)
+        try store.save(
+            ClipboardCapture(text: "from textedit", sourceApp: "TextEdit"),
+            now: now.addingTimeInterval(1))
+
+        let results = try store.items(matching: "app:edge")
+
+        #expect(results.map(\.text) == ["from edge"])
+    }
+
+    @Test func appFilterPrefixIsCaseInsensitive() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "from edge", sourceApp: "Microsoft Edge"), now: now)
+
+        #expect(try store.items(matching: "APP:edge").map(\.text) == ["from edge"])
+        #expect(try store.items(matching: "App:edge").map(\.text) == ["from edge"])
+    }
+
+    /// The design decision this whole feature hinges on: a bare content search must never
+    /// surface an item just because it happened to come from an app whose name matches the
+    /// query — otherwise "edge" would return every clipping ever copied from Microsoft Edge,
+    /// unrelated content included, which is not what a content search means.
+    @Test func bareQueryDoesNotMatchSourceApp() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(
+            ClipboardCapture(text: "unrelated content", sourceApp: "Microsoft Edge"), now: now)
+
+        #expect(try store.items(matching: "edge").isEmpty)
+    }
+
+    /// The inverse: once scoped with `app:`, the term must not fall through to matching
+    /// content text — `app:` means "search source_app," not "search everything."
+    @Test func appFilterDoesNotMatchContentText() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(
+            ClipboardCapture(text: "I love Microsoft Edge", sourceApp: "TextEdit"), now: now)
+
+        #expect(try store.items(matching: "app:edge").isEmpty)
+    }
+
+    /// A lone "app:" with nothing after it isn't a valid filter — falls back to a literal
+    /// content search for the text "app:" rather than matching every item.
+    @Test func appPrefixWithNoRemainderFallsBackToContentSearch() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "see app: for details"), now: now)
+        try store.save(ClipboardCapture(text: "unrelated"), now: now.addingTimeInterval(1))
+
+        #expect(try store.items(matching: "app:").map(\.text) == ["see app: for details"])
+    }
+
+    @Test func appFilterTermParsing() {
+        #expect(ClipboardStore.appFilterTerm(in: "app:edge") == "edge")
+        #expect(ClipboardStore.appFilterTerm(in: "app: edge") == "edge")
+        #expect(ClipboardStore.appFilterTerm(in: "APP:Edge") == "Edge")
+        #expect(ClipboardStore.appFilterTerm(in: "app:") == nil)
+        #expect(ClipboardStore.appFilterTerm(in: "app:   ") == nil)
+        #expect(ClipboardStore.appFilterTerm(in: "application:edge") == nil)
+        #expect(ClipboardStore.appFilterTerm(in: "edge") == nil)
+    }
 }

@@ -7,7 +7,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
-VERSION="0.5.0"
+VERSION="0.6.0"
 IDENTIFIER="com.fuzzylogicyetis.Permafrost"
 APP="dist/Permafrost.app"
 REVISION="$(git rev-parse --short=12 HEAD 2>/dev/null || echo development)"

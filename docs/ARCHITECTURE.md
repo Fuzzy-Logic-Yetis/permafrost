@@ -78,7 +78,9 @@ Menu-bar-only agent app (`LSUIElement`), no Dock icon. Two Swift modules:
    existing hash bumps `last_used_at` and refreshes capture metadata, otherwise a new row +
    thumbnail (images) is inserted, then retention runs.
 2. **Recall**: `⌥⌘V` → `PanelController` shows the panel *without activating the app* (the
-   target app keeps focus) → typing filters via FTS5 over text rows and image OCR metadata
+   target app keeps focus) → typing filters via FTS5 over text rows and image OCR metadata,
+   trigram-tokenized so a match can start anywhere in the text, not just at a word boundary
+   (ADR-024); an `app:` prefix (e.g. `app:edge`) instead restricts the match to `source_app`
    → `⏎` (or `⇧⏎` for plain text, ADR-018) → `PasteService` decrypts concealed content on
    demand, writes the item to the pasteboard, and synthesizes `⌘V` into the still-focused
    target app → panel closes, `last_used_at` bumps. List order is unpinned-first-by-recency,
@@ -128,7 +130,10 @@ CREATE TABLE clipboard_item (
   pin_order     INTEGER,                -- stable ordering among pinned items
   is_concealed  BOOLEAN NOT NULL DEFAULT 0  -- password-manager content, opt-in (ADR-011)
 );
--- + clipboard_item_fts: FTS5 external-content table on (text, ocr_text), trigger-synchronized
+-- + clipboard_item_fts: FTS5 external-content table on (text, ocr_text, source_app),
+--   trigger-synchronized, trigram-tokenized (ADR-024) so matches aren't anchored to word
+--   starts; `app:` queries restrict matching to source_app only (never merged into default
+--   content search — see ADR-024's bareQueryDoesNotMatchSourceApp test)
 ```
 
 Expiry is measured from `last_used_at`, not `created_at`: an entry you keep pasting stays

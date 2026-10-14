@@ -9,7 +9,13 @@ If an interaction needs the mouse, it's a bug in the design.
 - The app you were using **keeps focus** (the panel is non-activating); whatever you pick
   pastes into it.
 - Search field is focused on open. Typing filters immediately, including OCR-recognized
-  text attached to image/snipping rows once OCR has run.
+  text attached to image/snipping rows once OCR has run. Matching works anywhere in the
+  text, not just from a word's start (ADR-024) — a fragment from the middle of a password
+  or code matches, though a query under 3 characters won't (the index granularity's floor).
+- `app:` + part of an app's name (e.g. `app:edge`) filters to items copied from that app,
+  via the already-captured, already-displayed source-app metadata. Scoped deliberately:
+  plain search never matches on source app, and `app:` never matches on content — the two
+  modes don't blend into each other.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 

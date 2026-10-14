@@ -2,7 +2,7 @@ import AppKit
 import PermafrostCore
 
 enum PermafrostVersion {
-    static let string = "0.5.0"
+    static let string = "0.6.0"
 
     static var revision: String {
         Bundle.main.object(forInfoDictionaryKey: "PermafrostGitRevision") as? String

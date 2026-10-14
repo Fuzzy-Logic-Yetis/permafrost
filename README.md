@@ -113,7 +113,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full story.
 
 ## Status
 
-**v0.5.0** — under active development, daily-driver-ready. See
+**v0.6.0** — under active development, daily-driver-ready. See
 [docs/ROADMAP.md](docs/ROADMAP.md) for what shipped and what's next.
 
 ## License

@@ -73,6 +73,35 @@ blocks the main actor. See docs/DECISIONS.md for the ADR.
 All three version strings now read 0.5.0. This records completed implementation, not a new
 published GitHub release; tagging and the full release checklist remain separate operations.
 
+## v0.6.0 — Findability: trigram search and app filtering (done 2026-10-13)
+
+Driven by a real search failure in live use: a pinned, unconcealed password's middle
+fragment didn't match search at all, because the prior `unicode61` tokenizer only matched
+from a word's start.
+
+- ~~Trigram-indexed search~~ — a query now matches anywhere in the text, not just from a
+  word boundary (ADR-024). Verified against real SQLite before implementation, and measured
+  (not assumed) against CLAUDE.md's `<16ms @ 5,000 items` budget: ~4.8–9.9ms depending on
+  query shape.
+- ~~`app:` source-app filtering~~ — `app:edge` restricts results to items copied from that
+  app, using source-app metadata that's been captured and displayed since v1 but was never
+  searchable. Deliberately kept separate from content search in both directions (neither
+  mode's results leak into the other).
+
+**Explicitly deferred, not forgotten** — see docs/BACKLOG.md "Next up (v0.7)" for full
+context on why each was cut from this milestone rather than built smaller:
+
+- Searching *inside* concealed (password) content without weakening ADR-011/021's
+  at-rest-encryption guarantee — the actual trigger for the original bug report, but its
+  own security-sensitive design, not a trigram-tokenizer problem.
+- A "show concealed only" quick filter — collapses to `is_concealed`, already a column,
+  effectively free, just not built yet.
+- `app:` syntax discoverability (so it doesn't have to be memorized) — UI-only, no schema.
+- A tabbed/visual Pinned-vs-Recent split and a general tag system — both considered and
+  not pursued: tags collapsed into the (deferred) concealed-only filter once a concrete use
+  case was pinned down, and tabs were never confirmed as fixing the actual reported problem
+  once real search was the root cause, not list layout.
+
 ## v1.0 — Distribution
 
 Gate: project owner joins the Apple Developer Program ($99/yr) — deliberately deferred

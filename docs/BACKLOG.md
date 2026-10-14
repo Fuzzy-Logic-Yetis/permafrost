@@ -192,6 +192,39 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
   permission failures, external-resource HTML conversion, and native partial-copy handling of
   revealed concealed text remain unverified concerns, not confirmed findings.
 
+## Next up (v0.7)
+
+1. **Searchable concealed content, without weakening at-rest encryption (ADR-024 follow-up).**
+   The actual trigger for ADR-024: a search for a fragment of a password found nothing —
+   trigram indexing fixed that for *unconcealed* text, but concealed items still store
+   `text = nil` (ADR-011/021), so there's structurally nothing to index regardless of
+   tokenizer. Proposed approach, not yet designed in detail: decrypt `encrypted_data`
+   transiently in memory at query time (never persisted, never indexed), check for a
+   substring match, and surface the item in results still fully redacted — exactly as today
+   — unless the user separately hits Reveal. Matching ≠ displaying, so this doesn't weaken
+   the redact-by-default/reveal-on-demand guarantee, but it's a real change to a guarantee
+   CLAUDE.md calls out by name and needs its own ADR before implementation, including a cost
+   bound on how many concealed items get decrypted per keystroke.
+2. **"Show concealed only" quick filter.** Emerged from the same conversation: the user's
+   "tag items as Password" idea collapses into something that already exists —
+   `is_concealed` is already a boolean on every item. A filter (`is:concealed`, or a UI
+   toggle) to narrow to just those costs close to nothing: no schema change, no ADR. Cheap
+   enough to ship independent of item 1 above.
+3. **`app:` syntax discoverability.** ADR-024 shipped the filter but deliberately left
+   discovery as a follow-up: nothing today suggests `app:` exists or which app names are
+   valid. A lightweight autocomplete/hint in the search field (e.g. suggest `app:Edge` once
+   a few characters narrow to one known source app) — UI-only, no schema impact.
+4. **Tabbed or visual Pinned/Recent split — reconsidered, not confirmed needed.** The
+   original ask that started this whole thread ("I was scrolling through hundreds of pinned
+   items"). Deliberately not built this round: the actual incident turned out to be a search
+   bug (items 1 above) and a missing filter (item 2), not a list-layout problem — scrolling
+   was the symptom of search not working, not evidence that visual navigation is the fix.
+   Revisit only if items 1–2 ship and scrolling-to-find is still reported as a problem.
+5. **General tag system — rejected in favor of cheaper mechanisms, not deferred.** Explored
+   at length; no concrete use case survived that wasn't already covered by `app:` filtering,
+   content search, or item 2's concealed-only filter. Revisit only with a real example that
+   doesn't fit any of those.
+
 ## Later
 
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).
