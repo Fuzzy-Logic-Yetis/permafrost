@@ -1307,3 +1307,33 @@ reviewers' word) before any fix was written. All ten were genuine; none were fal
 - This review did not re-examine ADR-022's original deferred items (concealed-content
   search, the `is:concealed` filter) — those remain BACKLOG.md's v0.7 priority, unaffected
   by this round.
+
+## ADR-026: Adopt the org engineering standards (Ridgeline) where they fit
+
+**Context.** Fuzzy Logic Yetis now keeps cross-project standards in Ridgeline, a private
+org repo (<https://github.com/Fuzzy-Logic-Yetis/Ridgeline>): model roles for agent work,
+independent review of security-sensitive changes, and a handoff routine for clearing
+agent sessions. Some of those standards exist for a different setup: Bivouac has an
+autonomous lead agent, Linear, and several machines. Permafrost is solo, merged directly
+by the owner, and already has its own independent-review process (docs/CODE_REVIEW.md).
+A `/clear` wipes a Claude session without letting it write anything first, so session
+state has been lost unless the session happened to record it.
+
+**Decision.** Adopt the parts that fit, written out in CLAUDE.md's "Org standards" section
+so no session has to open Ridgeline to follow them:
+
+- Model roles: Lead = Fable (Opus if Fable access ends), Worker = Sonnet, Mechanical = Haiku.
+- Independent review before merge for named security-sensitive areas, using the existing
+  docs/CODE_REVIEW.md process.
+- A living docs/HANDOFF.md note, written by a project `/handoff` command
+  (`.claude/commands/handoff.md`) before the owner clears a session. A `SessionStart` hook
+  (`.claude/settings.json`, matcher `startup|clear`) loads it into each new session.
+
+Not adopted: the agent merge gate script and machine identity, Linear, and the
+multi-machine topology. Revisit if an agent starts merging PRs on its own, or if the
+project gains contributors.
+
+**Consequences.** Every session ends with `/handoff`, one more doc to keep current, and
+`check-docs.sh` validates it like any other doc. References to Ridgeline must be full URLs
+without Ridgeline's ADR numbers: the doc checker would read them as missing Permafrost
+files and ADRs.

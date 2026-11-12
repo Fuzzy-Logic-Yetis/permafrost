@@ -122,14 +122,40 @@ A change is done when:
 3. Will a future maintainer understand it? If it needs a comment to explain *what*, rewrite it.
 4. Uncertain? Research first (docs/RESEARCH.md pattern), decide, record the ADR, move on.
 
+## Org standards (Ridgeline)
+
+Permafrost follows the Fuzzy Logic Yetis engineering standards in Ridgeline, a private org
+repo: <https://github.com/Fuzzy-Logic-Yetis/Ridgeline>. What applies here is written out
+below, so a session never needs to open Ridgeline to follow it (ADR-026):
+
+- **Model roles.** Lead = Fable (Opus if Fable access ends): planning, ADRs, security
+  design, hard debugging. Worker = Sonnet, the default sub-agent model: implementation,
+  tests, docs. Mechanical = Haiku: searches, inventories, formatting. Name roles, not
+  models. Prefer one sub-agent with a clear brief over many; about 4 at once at most.
+- **Independent review** before merge for changes to these security-sensitive areas:
+  concealed/transient pasteboard handling, encryption at rest (concealed opt-in, sensitive
+  QR metadata), file permissions, import/export, the permission model, signing and
+  notarization, and any network code. The review follows docs/CODE_REVIEW.md: a separate
+  model or a separate Lead-model Claude session that did not write the change.
+- **Never merge red CI.** No unresolved review threads (already in the PR expectations
+  above).
+- **Handoff.** Before a session is cleared, run `/handoff`. It rewrites docs/HANDOFF.md
+  and says when it is safe to `/clear`. A session-start hook (`.claude/settings.json`)
+  loads that note and `git status` into every new or cleared session.
+- **Not adopted here:** the agent merge gate script and machine identity (the owner merges
+  solo work directly), Linear (GitHub issues and milestones; see docs/PROJECT_PLAN.md),
+  and the multi-machine topology.
+
 ## How future Claude sessions should work
 
-1. Read this file, then docs/PROJECT_PLAN.md (current state) and docs/BACKLOG.md (what's next).
+1. Read this file, then docs/HANDOFF.md (last session's state), docs/PROJECT_PLAN.md
+   (current state) and docs/BACKLOG.md (what's next).
 2. Work autonomously through backlog items; commit at logical milestones.
 3. Keep docs synchronized in the same commit as code.
 4. Never leave the repo in a non-building state.
 5. When you make a non-trivial choice, add an ADR — future sessions can't read your mind.
 6. Update docs/PROJECT_PLAN.md status when a milestone completes.
+7. End every session with `/handoff` (rewrites docs/HANDOFF.md).
 
 ## Rules for updating documentation
 

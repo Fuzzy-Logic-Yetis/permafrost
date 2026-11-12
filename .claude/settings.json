@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && { echo '## Handoff note (loaded at session start)'; cat docs/HANDOFF.md 2>/dev/null || echo 'No handoff note yet.'; echo; echo '## git status'; git status -sb | head -20; }"
+          }
+        ]
+      }
+    ]
+  }
+}
