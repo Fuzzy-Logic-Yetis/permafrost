@@ -1337,3 +1337,36 @@ project gains contributors.
 `check-docs.sh` validates it like any other doc. References to Ridgeline must be full URLs
 without Ridgeline's ADR numbers: the doc checker would read them as missing Permafrost
 files and ADRs.
+
+## ADR-027: Every change through a pull request; adopt the newer org rules
+
+**Context.** Until now almost every change went straight to `main`: one PR in the
+project's history. Independent reviews ran in batches after the code had landed (ADR-017,
+ADR-025), so a finding in the encryption or concealed-content code was already on `main`,
+and in the owner's daily-use build, by the time it was found. Agent sessions now work on
+this repo too. Ridgeline has also adopted rules that came out of heavy agent use in another
+project: how review findings are handled, and how decisions travel between agent sessions
+(<https://github.com/Fuzzy-Logic-Yetis/Ridgeline/blob/main/docs/merge-and-review-policy.md>,
+<https://github.com/Fuzzy-Logic-Yetis/Ridgeline/blob/main/docs/agent-operating-manual.md>).
+
+**Decision.**
+
+- Every change reaches `main` through a PR. `main` is protected on GitHub: no direct pushes
+  (the owner included), and the CI `test` check (build, tests, `check-docs.sh`) must pass.
+  No approving review is required, because the owner is the only reviewer and merges by hand.
+- The independent review for the security-sensitive areas listed in CLAUDE.md happens on
+  the PR, before merge. Batch reviews of the whole repo (docs/CODE_REVIEW.md) continue.
+- Adopt, written out in CLAUDE.md: fix review findings directly unless the fix changes a
+  decision; messages between agent sessions are not owner approval; the agent comment
+  prefix.
+- GitHub secret scanning and Dependabot security updates are turned on. Dependabot opens
+  PRs; it never merges anything.
+
+Still not adopted: the merge gate script, the wait script, a machine identity and Linear.
+The owner merges every PR, so there is nothing for a gate to guard.
+
+**Consequences.** A one-line fix now takes a branch, a PR and a CI run (about a minute on
+the macOS runner) before it reaches `main`. In exchange, nothing reaches the build the owner
+runs every day without passing CI first. The owner's local build is unaffected: protection
+applies only to the GitHub branch. In an emergency the owner can lift the protection in
+the repository settings, push, and turn it back on.
