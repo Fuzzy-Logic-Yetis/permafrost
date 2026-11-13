@@ -5,6 +5,7 @@ import SwiftUI
 
 struct SettingsView: View {
     let store: ClipboardStore
+    let clearHistory: (Bool) throws -> Void
 
     @AppStorage(AppSettings.Keys.retentionDays) private var retentionDays = 30
     @AppStorage(AppSettings.Keys.maxUnpinnedCount) private var maxUnpinnedCount = 2000
@@ -371,7 +372,7 @@ struct SettingsView: View {
         .alert("Clear unpinned history?", isPresented: $showClearUnpinnedConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Clear", role: .destructive) {
-                runHistoryOperation { try store.clearHistory(keepPinned: true) }
+                runHistoryOperation { try clearHistory(true) }
             }
         } message: {
             Text("Pinned entries are kept. This cannot be undone.")
@@ -390,7 +391,7 @@ struct SettingsView: View {
         .alert("Clear everything?", isPresented: $showClearEverythingConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Clear Everything", role: .destructive) {
-                runHistoryOperation { try store.clearHistory(keepPinned: false) }
+                runHistoryOperation { try clearHistory(false) }
             }
         } message: {
             Text("This deletes all clipboard history, including pinned items. This cannot be undone.")

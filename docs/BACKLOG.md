@@ -173,8 +173,15 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
 - **M1 — Deferred:** reject symlinked archive ancestors and enforce safe reads of manifests and
   blobs in both formats, including mutable-folder races. Existing direct symlink checks remain.
 - **M2 — Fixed:** capture/OCR refresh preserves the selected ID; regression test in PanelModelTests.
-- **M3 — Deferred:** coordinate Clear Everything/Clear Unpinned with captures, pending concealed
-  text and delayed retries so pre-clear content cannot reappear.
+- **M3 — Fixed 2026-11-13:** Clear Everything/Clear Unpinned now run through
+  `CaptureSaveQueue.clearHistory`, on the capture queue. Saves already queued finish first and
+  are then cleared; pending concealed plaintext awaiting the Keychain key is dropped; a delayed
+  retry of a pre-clear capture is skipped (a clear-generation counter, not a timestamp, so a
+  clock step can't make new captures look old). A failed clear changes nothing else. The clear
+  blocks its caller until in-flight work such as OCR of a large screenshot finishes (no
+  timeout; accepted because clearing is rare). Not covered: Import (a separate path, not a
+  clear). Independent review of PR #18: no Critical/High; two Low/Medium findings fixed, the
+  blocking cost accepted, and one test-quality note addressed.
 - **M4 — Deferred:** build a replacement ZIP at a temporary sibling and atomically replace the
   destination only on success; failed export must preserve the previous backup.
 - **M5 — Deferred:** lightweight list rows with on-demand image payloads; measure screenshot-heavy

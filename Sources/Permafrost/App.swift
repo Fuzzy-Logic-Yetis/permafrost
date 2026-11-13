@@ -389,7 +389,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         if settingsWindowController == nil {
-            settingsWindowController = SettingsWindowController(store: store)
+            settingsWindowController = SettingsWindowController(
+                store: store,
+                clearHistory: { [weak self] keepPinned in
+                    try self?.captureSaveQueue.clearHistory(keepPinned: keepPinned)
+                })
         }
         settingsWindowController?.showWindow()
     }
@@ -420,7 +424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
-            try store.clearHistory(keepPinned: true)
+            try captureSaveQueue.clearHistory(keepPinned: true)
         } catch {
             presentOperationFailure(error)
         }
@@ -454,7 +458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
-            try store.clearHistory(keepPinned: false)
+            try captureSaveQueue.clearHistory(keepPinned: false)
         } catch {
             presentOperationFailure(error)
         }

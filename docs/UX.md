@@ -39,6 +39,9 @@ If an interaction needs the mouse, it's a bug in the design.
 - The panel lists up to 200 unpinned and up to 200 pinned items, capped separately, so a long
   history never hides your pinned section. The count in the footer shows `N+` when either
   cap is hit.
+- Clearing history (menu or Settings) waits for any in-flight capture work, then deletes;
+  nothing copied before the clear can reappear afterwards, including concealed text that was
+  still waiting for the Keychain key.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 
