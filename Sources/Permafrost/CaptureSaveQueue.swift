@@ -39,6 +39,9 @@ final class CaptureSaveQueue: @unchecked Sendable {
     private let htmlRichTextConverter: any HTMLRichTextConverting
     private let queue = DispatchQueue(label: "com.fuzzylogicyetis.Permafrost.capture-save")
     private var pendingConcealedCaptures: [PendingCapture] = []
+    /// Captures made at or before this moment belong to history the user cleared and must
+    /// not be saved. Only read and written on `queue`.
+    private var discardBoundary: Date?
 
     init(
         store: ClipboardStore, textRecognizer: any TextRecognizing = VisionTextRecognizer(),
@@ -57,6 +60,19 @@ final class CaptureSaveQueue: @unchecked Sendable {
         queue.async { [weak self] in self?.save(pending, retainIfKeyPending: true, attempt: 1) }
     }
 
+    /// Clears history on the capture queue, so no save runs concurrently with the clear and
+    /// nothing captured before it can reappear afterwards (backlog M3): saves already queued
+    /// finish first and are then cleared, pending concealed plaintext is dropped, and a
+    /// delayed retry of a pre-clear capture is skipped via `discardBoundary`. Blocks the
+    /// caller until in-flight work (for example OCR of a large screenshot) finishes.
+    func clearHistory(keepPinned: Bool, now: Date = Date()) throws {
+        try queue.sync {
+            discardBoundary = now
+            pendingConcealedCaptures.removeAll()
+            try store.clearHistory(keepPinned: keepPinned)
+        }
+    }
+
     /// Called only after the app has installed a successfully read/persisted Keychain key.
     func retryPendingConcealedCaptures() {
         queue.async { [weak self] in
@@ -68,6 +84,10 @@ final class CaptureSaveQueue: @unchecked Sendable {
     }
 
     private func save(_ pending: PendingCapture, retainIfKeyPending: Bool, attempt: Int) {
+        if let boundary = discardBoundary, pending.capturedAt <= boundary {
+            Log.capture.info("dropped a capture made before history was cleared")
+            return
+        }
         do {
             var capture = pending.capture
             // ADR-019: prefer native .rtf (already in richData); only synthesize from
