@@ -237,6 +237,10 @@ outside the app (e.g. CI or a broken build that won't launch):
 5e. **`is:pinned`**: pin an item containing "login", copy another containing "login", then
     type `is:pinned` → only pinned items; `is:pinned login` → only the pinned one. The
     placeholder mentions `is:pinned`.
+5f. **Open Filtered Apps**: Settings → Open Filtered Apps → Add App… → pick an app you have
+    copied from. Open the panel with that app frontmost → the search field starts as
+    `app:<name>` showing only its items; `Esc` clears to the full list. Open from another
+    app → full list. Add an app you have never copied from → opens on the full list.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.

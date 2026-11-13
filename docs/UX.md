@@ -31,6 +31,11 @@ If an interaction needs the mouse, it's a bug in the design.
   Pinned items sit below unpinned ones (ADR-012), so this is the way to reach a saved
   login without scrolling the whole history. `is:pinnedx` is plain content, and `\` forces
   literal search as with the other prefixes.
+- Settings → Open Filtered Apps: when the panel opens while a listed app is frontmost, the
+  query starts as `app:<that app>` (visible in the field; `Esc` clears it). The frontmost
+  app is read before the panel takes focus, by bundle ID, and the filter uses the app's
+  name as capture recorded it. If that app has no history (or its name is under 3
+  characters), the panel opens on the full list. Unlisted apps always open unfiltered.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 

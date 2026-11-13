@@ -81,11 +81,30 @@ final class PanelModel: ObservableObject {
         query = "app:\(app)"
     }
 
-    func prepareForShow() {
+    /// The app name to open pre-filtered to, or nil to open on the full list. Only apps the
+    /// user listed in Settings qualify; the name is the frontmost app's `localizedName`,
+    /// the same value capture stores as `source_app`, so the filter matches its history.
+    static func openingFilterApp(
+        bundleID: String?, name: String?, listedBundleIDs: Set<String>
+    ) -> String? {
+        guard let bundleID, listedBundleIDs.contains(bundleID),
+            let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty
+        else { return nil }
+        return name
+    }
+
+    /// `openingFilterApp` starts the query as `app:<name>`, visible in the search field and
+    /// cleared like any query. If that leaves nothing to show (no history for the app, or a
+    /// name under the 3-character trigram floor), the panel opens on the full list instead.
+    func prepareForShow(openingFilterApp: String? = nil) {
         query = ""
         knownSourceApps = (try? store.distinctSourceApps()) ?? []
         isPreviewShown = false
         reload(resetSelection: true)
+        if let openingFilterApp {
+            query = "app:\(openingFilterApp)"
+            if items.isEmpty { query = "" }
+        }
         focusToken = UUID()
     }
 

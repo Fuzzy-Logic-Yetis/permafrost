@@ -53,7 +53,13 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        model.prepareForShow()
+        // Read before the panel takes key status. Permafrost's own windows never count.
+        let front = NSWorkspace.shared.frontmostApplication
+        let filterApp = PanelModel.openingFilterApp(
+            bundleID: front?.bundleIdentifier,
+            name: front?.localizedName,
+            listedBundleIDs: AppSettings.shared.openFilteredBundleIDs)
+        model.prepareForShow(openingFilterApp: filterApp)
         position(on: screenWithMouse())
         panel.makeKeyAndOrderFront(nil)
         installKeyMonitor()

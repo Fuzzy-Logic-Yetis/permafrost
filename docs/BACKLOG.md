@@ -235,11 +235,15 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    past the whole history, because pinned items sort last (ADR-012, unchanged). `is:pinned`
    restricts to pinned items and composes with content, `app:` and `is:concealed` terms.
    No schema change, no ADR.
-5. **Per-app "open filtered" list.** Settings list of apps (like Excluded Apps); when the
-   panel opens with one of them frontmost, the query starts as `app:<that app>` with a
-   clearable chip, falling back to the full list when that app has no history. Motivated by
-   work that stays inside one app (herdr). Other apps keep the plain recency list. No
-   schema change.
+5. ~~Per-app "open filtered" list~~ — **DONE 2026-11-13.** Settings → Open Filtered Apps
+   (same shape as Excluded Apps). When the panel opens with a listed app frontmost, the query
+   starts as `app:<name>`; Esc clears it, and an app with no history falls back to the full
+   list. Motivated by work that stays inside one app (herdr). No schema change, no ADR.
+   - **Deferred:** a "last pasted into" mode (needs a paste-target field, so a schema
+     change and ADR); build only if copy-origin filtering proves insufficient.
+   - **Known limit:** the match is the app-name substring `app:` already uses, so a short
+     name can also match other apps whose name contains it (for example "Code" and
+     "Xcode").
 
 ## Later
 
