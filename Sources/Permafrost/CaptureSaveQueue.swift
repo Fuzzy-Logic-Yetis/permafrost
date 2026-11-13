@@ -39,9 +39,11 @@ final class CaptureSaveQueue: @unchecked Sendable {
     private let htmlRichTextConverter: any HTMLRichTextConverting
     private let queue = DispatchQueue(label: "com.fuzzylogicyetis.Permafrost.capture-save")
     private var pendingConcealedCaptures: [PendingCapture] = []
-    /// Captures made at or before this moment belong to history the user cleared and must
-    /// not be saved. Only read and written on `queue`.
-    private var discardBoundary: Date?
+    /// Bumped by every successful clear. A save remembers the value from when it first ran
+    /// and is dropped if a clear has happened since, so a delayed retry of a pre-clear
+    /// capture can't reappear. A counter rather than a timestamp: a wall-clock step backwards
+    /// could otherwise make new captures look older than the clear. Only used on `queue`.
+    private var clearGeneration = 0
 
     init(
         store: ClipboardStore, textRecognizer: any TextRecognizing = VisionTextRecognizer(),
@@ -57,19 +59,24 @@ final class CaptureSaveQueue: @unchecked Sendable {
     var onCaptureSaved: @Sendable (Int64) -> Void = { _ in }
 
     func enqueue(_ pending: PendingCapture) {
-        queue.async { [weak self] in self?.save(pending, retainIfKeyPending: true, attempt: 1) }
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.save(
+                pending, retainIfKeyPending: true, attempt: 1, generation: self.clearGeneration)
+        }
     }
 
     /// Clears history on the capture queue, so no save runs concurrently with the clear and
     /// nothing captured before it can reappear afterwards (backlog M3): saves already queued
     /// finish first and are then cleared, pending concealed plaintext is dropped, and a
-    /// delayed retry of a pre-clear capture is skipped via `discardBoundary`. Blocks the
-    /// caller until in-flight work (for example OCR of a large screenshot) finishes.
-    func clearHistory(keepPinned: Bool, now: Date = Date()) throws {
+    /// delayed retry of a pre-clear capture is skipped via `clearGeneration`. If the store
+    /// clear throws, nothing else changes. Blocks the caller until in-flight work (for example
+    /// OCR of a large screenshot) finishes.
+    func clearHistory(keepPinned: Bool) throws {
         try queue.sync {
-            discardBoundary = now
-            pendingConcealedCaptures.removeAll()
             try store.clearHistory(keepPinned: keepPinned)
+            clearGeneration += 1
+            pendingConcealedCaptures.removeAll()
         }
     }
 
@@ -79,12 +86,17 @@ final class CaptureSaveQueue: @unchecked Sendable {
             guard let self else { return }
             let pending = self.pendingConcealedCaptures
             self.pendingConcealedCaptures.removeAll()
-            pending.forEach { self.save($0, retainIfKeyPending: false, attempt: 1) }
+            pending.forEach {
+                self.save(
+                    $0, retainIfKeyPending: false, attempt: 1, generation: self.clearGeneration)
+            }
         }
     }
 
-    private func save(_ pending: PendingCapture, retainIfKeyPending: Bool, attempt: Int) {
-        if let boundary = discardBoundary, pending.capturedAt <= boundary {
+    private func save(
+        _ pending: PendingCapture, retainIfKeyPending: Bool, attempt: Int, generation: Int
+    ) {
+        guard generation == clearGeneration else {
             Log.capture.info("dropped a capture made before history was cleared")
             return
         }
@@ -140,7 +152,9 @@ final class CaptureSaveQueue: @unchecked Sendable {
             Log.store.error(
                 "save attempt \(attempt) failed, retrying: \(error.localizedDescription)")
             queue.asyncAfter(deadline: .now() + Self.retryDelay) { [weak self] in
-                self?.save(pending, retainIfKeyPending: retainIfKeyPending, attempt: attempt + 1)
+                self?.save(
+                    pending, retainIfKeyPending: retainIfKeyPending, attempt: attempt + 1,
+                    generation: generation)
             }
         }
     }

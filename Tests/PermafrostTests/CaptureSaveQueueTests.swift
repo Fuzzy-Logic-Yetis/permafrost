@@ -158,21 +158,39 @@ import PermafrostCore
         #expect(try store.count() == 0)  // the pre-clear secret did not reappear
     }
 
-    @Test func captureMadeBeforeTheClearIsSkippedAndOneAfterIsSaved() throws {
+    /// The only way a pre-clear capture can still be saved after the clear is a delayed
+    /// retry: here the key arrives, a retry is scheduled, and the clear lands before it fires.
+    @Test func delayedRetryOfAPreClearCaptureIsSkipped() throws {
+        let url = try tempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = try ClipboardStore.onDisk(at: url)
+        let queue = CaptureSaveQueue(store: store)
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(text: "secret", isConcealed: true),
+                capturedAt: Date(),
+                retentionPolicy: RetentionPolicy()))
+        queue.waitUntilIdle()  // parked in the pending list: no key yet
+
+        queue.retryPendingConcealedCaptures()  // fails again (still no key): retry in 0.1 s
+        queue.waitUntilIdle()
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))  // the retry would now succeed
+        try queue.clearHistory(keepPinned: false)
+        Thread.sleep(forTimeInterval: CaptureSaveQueue.retryDelay * Double(CaptureSaveQueue.maxSaveAttempts) * 2)
+        queue.waitUntilIdle()
+
+        #expect(try store.count() == 0)
+    }
+
+    @Test func capturesMadeAfterAClearAreSavedNormally() throws {
         let store = try ClipboardStore.inMemory()
         let queue = CaptureSaveQueue(store: store)
-        let clearedAt = Date(timeIntervalSince1970: 2_000_000_000)
-        try queue.clearHistory(keepPinned: false, now: clearedAt)
+        try queue.clearHistory(keepPinned: false)
 
         queue.enqueue(
             CaptureSaveQueue.PendingCapture(
-                capture: ClipboardCapture(text: "copied before the clear"),
-                capturedAt: clearedAt.addingTimeInterval(-1),
-                retentionPolicy: RetentionPolicy()))
-        queue.enqueue(
-            CaptureSaveQueue.PendingCapture(
                 capture: ClipboardCapture(text: "copied after the clear"),
-                capturedAt: clearedAt.addingTimeInterval(1),
+                capturedAt: Date(timeIntervalSince1970: 1_000_000_000),  // even a clock-skewed one
                 retentionPolicy: RetentionPolicy()))
         queue.waitUntilIdle()
 
