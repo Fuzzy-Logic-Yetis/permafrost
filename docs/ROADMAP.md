@@ -94,8 +94,8 @@ context on why each was cut from this milestone rather than built smaller:
 - Searching *inside* concealed (password) content without weakening ADR-011/021's
   at-rest-encryption guarantee — the actual trigger for the original bug report, but its
   own security-sensitive design, not a trigram-tokenizer problem.
-- A "show concealed only" quick filter — collapses to `is_concealed`, already a column,
-  effectively free, just not built yet.
+- ~~A "show concealed only" quick filter~~ — built as `is:concealed`, no schema change and
+  no ADR (a filter on the existing `is_concealed` column; it never reads content).
 - `app:` syntax discoverability (so it doesn't have to be memorized) — UI-only, no schema.
 
 A tabbed/visual Pinned-vs-Recent split and a general tag system were also considered and

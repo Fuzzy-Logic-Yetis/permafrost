@@ -221,11 +221,10 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    the redact-by-default/reveal-on-demand guarantee, but it's a real change to a guarantee
    CLAUDE.md calls out by name and needs its own ADR before implementation, including a cost
    bound on how many concealed items get decrypted per keystroke.
-2. **"Show concealed only" quick filter.** Emerged from the same conversation: the user's
-   "tag items as Password" idea collapses into something that already exists —
-   `is_concealed` is already a boolean on every item. A filter (`is:concealed`, or a UI
-   toggle) to narrow to just those costs close to nothing: no schema change, no ADR. Cheap
-   enough to ship independent of item 1 above.
+2. ~~"Show concealed only" quick filter~~ — **DONE 2026-11-13.** `is:concealed` (whole
+   query) lists items with `is_concealed = 1`, still redacted. No schema change, no ADR: it
+   filters on the existing flag and never reads or decrypts content. Extra text or a
+   leading `\` falls back to content search.
 3. **`app:` syntax discoverability.** ADR-024 shipped the filter but deliberately left
    discovery as a follow-up: nothing today suggests `app:` exists or which app names are
    valid. A lightweight autocomplete/hint in the search field (e.g. suggest `app:Edge` once

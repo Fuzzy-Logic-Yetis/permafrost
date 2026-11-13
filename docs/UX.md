@@ -18,6 +18,10 @@ If an interaction needs the mouse, it's a bug in the design.
   modes don't blend into each other. A leading `\` forces literal content search instead,
   for content that happens to start with a recognized prefix (ADR-025) — e.g. `\app: nginx`
   searches for that literal text rather than filtering to an app named "nginx".
+- `is:concealed` (the whole query) lists only items captured as concealed, still redacted.
+  It filters on the existing `is_concealed` flag and never reads or decrypts content, so
+  concealed items remain excluded from content search. Pinned items still sort last.
+  `\is:concealed` or any extra text falls back to ordinary content search.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 

@@ -348,6 +348,30 @@ public final class ClipboardStore: Sendable {
         return remainder.isEmpty ? nil : remainder
     }
 
+    /// `is:concealed` (exact, case-insensitive) narrows the list to items captured as
+    /// concealed. It filters on the `is_concealed` flag only: it never reads or decrypts
+    /// content, so it does not weaken the concealed-content search exclusion (ADR-011,
+    /// ADR-021). Extra text after the prefix is not a filter, so such a query falls back
+    /// to ordinary content search, same as a lone `app:`.
+    static func isConcealedFilter(in trimmed: String) -> Bool {
+        trimmed.lowercased() == "is:concealed"
+    }
+
+    /// Distinct, non-empty `source_app` values, most recently used first. Feeds the
+    /// `app:` suggestions in the panel.
+    public func distinctSourceApps() throws -> [String] {
+        try dbQueue.read { db in
+            try String.fetchAll(
+                db,
+                sql: """
+                    SELECT source_app FROM clipboard_item
+                    WHERE source_app IS NOT NULL AND source_app <> ''
+                    GROUP BY source_app
+                    ORDER BY MAX(last_used_at) DESC
+                    """)
+        }
+    }
+
     /// Builds an FTS5 pattern restricted to the given column(s), reusing GRDB's own
     /// tokenization/escaping (`matchingAllPrefixesIn`) for the term itself rather than
     /// hand-rolling it, then wrapping the already-validated pattern in an FTS5 column
@@ -371,7 +395,8 @@ public final class ClipboardStore: Sendable {
     /// recognized OCR/QR metadata. An `app:` prefix (e.g. `app:edge`) searches `source_app`
     /// instead, deliberately not merged into ordinary content search: a bare "edge" should
     /// not also surface every unrelated item that merely came from Microsoft Edge. A
-    /// leading `\` forces literal content search instead (ADR-025).
+    /// leading `\` forces literal content search instead (ADR-025). `is:concealed` lists
+    /// only concealed items, still redacted like everywhere else.
     public func items(matching query: String? = nil, limit: Int = 500) throws -> [ClipboardItem] {
         let (trimmed, isLiteral) = Self.stripLiteralSearchEscape(
             from: (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
@@ -386,6 +411,13 @@ public final class ClipboardStore: Sendable {
                 return try ClipboardItem.fetchAll(
                     db,
                     sql: "SELECT * FROM clipboard_item \(ordering)",
+                    arguments: [limit]
+                )
+            }
+            if !isLiteral, Self.isConcealedFilter(in: trimmed) {
+                return try ClipboardItem.fetchAll(
+                    db,
+                    sql: "SELECT * FROM clipboard_item WHERE is_concealed = 1 \(ordering)",
                     arguments: [limit]
                 )
             }
