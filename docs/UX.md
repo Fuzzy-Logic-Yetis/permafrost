@@ -18,7 +18,7 @@ If an interaction needs the mouse, it's a bug in the design.
   modes don't blend into each other. A leading `\` forces literal content search instead,
   for content that happens to start with a recognized prefix (ADR-025) — e.g. `\app: nginx`
   searches for that literal text rather than filtering to an app named "nginx".
-- Discoverability: the search placeholder names both filters ("try app: or is:concealed").
+- Discoverability: the search placeholder names both filters ("try is:pinned or app:").
   Typing `app:` shows up to four known source apps as buttons under the field, narrowed as
   you type; clicking one fills in `app:<name>`. The list is read when the panel opens, and
   the row disappears once the typed name is the only match. Mouse-only for now (backlog).
@@ -26,6 +26,11 @@ If an interaction needs the mouse, it's a bug in the design.
   It filters on the existing `is_concealed` flag and never reads or decrypts content, so
   concealed items remain excluded from content search. Pinned items still sort last.
   `\is:concealed` or any extra text falls back to ordinary content search.
+- `is:pinned` as the first word restricts results to pinned items, and whatever follows is
+  searched as usual: `is:pinned login`, `is:pinned app:edge`, `is:pinned is:concealed`.
+  Pinned items sit below unpinned ones (ADR-012), so this is the way to reach a saved
+  login without scrolling the whole history. `is:pinnedx` is plain content, and `\` forces
+  literal search as with the other prefixes.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 
