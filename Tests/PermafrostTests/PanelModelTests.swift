@@ -17,6 +17,36 @@ import PermafrostCore
         return (store, model, pasteService)
     }
 
+    @Test func appSuggestionsOfferKnownAppsOnlyWhileTypingAppFilter() throws {
+        let apps = ["Microsoft Edge", "TextEdit", "Safari"]
+
+        #expect(PanelModel.appSuggestions(for: "", among: apps).isEmpty)
+        #expect(PanelModel.appSuggestions(for: "edge", among: apps).isEmpty)
+        #expect(PanelModel.appSuggestions(for: "app:", among: apps) == apps)
+        #expect(PanelModel.appSuggestions(for: "APP:ed", among: apps) == ["Microsoft Edge", "TextEdit"])
+        #expect(PanelModel.appSuggestions(for: "app:saf", among: apps) == ["Safari"])
+        #expect(PanelModel.appSuggestions(for: "app:zzz", among: apps).isEmpty)
+        // Fully typed, single match: nothing left to suggest.
+        #expect(PanelModel.appSuggestions(for: "app:safari", among: apps).isEmpty)
+        #expect(PanelModel.appSuggestions(for: "app:", among: apps, limit: 2).count == 2)
+    }
+
+    @Test func showLoadsKnownAppsAndSuggestionFiltersTheList() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "a", sourceApp: "Safari"), now: now)
+        try store.save(
+            ClipboardCapture(text: "b", sourceApp: "TextEdit"), now: now.addingTimeInterval(1))
+        model.prepareForShow()
+        model.query = "app:"
+
+        #expect(model.appSuggestions == ["TextEdit", "Safari"])
+
+        model.applyAppSuggestion("Safari")
+
+        #expect(model.query == "app:Safari")
+        #expect(model.items.map(\.text) == ["a"])
+    }
+
     @Test func prepareForShowResetsQuerySelectionAndRefocuses() throws {
         let (store, model, _) = try makeModel()
         try store.save(ClipboardCapture(text: "first"), now: now)

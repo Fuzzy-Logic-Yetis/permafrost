@@ -225,10 +225,11 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    query) lists items with `is_concealed = 1`, still redacted. No schema change, no ADR: it
    filters on the existing flag and never reads or decrypts content. Extra text or a
    leading `\` falls back to content search.
-3. **`app:` syntax discoverability.** ADR-024 shipped the filter but deliberately left
-   discovery as a follow-up: nothing today suggests `app:` exists or which app names are
-   valid. A lightweight autocomplete/hint in the search field (e.g. suggest `app:Edge` once
-   a few characters narrow to one known source app) — UI-only, no schema impact.
+3. ~~`app:` syntax discoverability~~ — **DONE 2026-11-13.** Placeholder text names `app:`
+   and `is:concealed`; typing `app:` shows up to four known source apps as buttons
+   (`ClipboardStore.distinctSourceApps()`, read at panel open). UI-only, no schema.
+   - **Deferred:** keyboard acceptance of a suggestion (Tab/arrows). The row is
+     mouse-only, which is out of step with the keyboard-first goal.
 
 ## Later
 

@@ -20,6 +20,9 @@ final class PanelModel: ObservableObject {
         didSet { if query != oldValue { reload(resetSelection: true) } }
     }
     @Published private(set) var items: [ClipboardItem] = []
+    /// Source apps seen in history, most recent first. Loaded when the panel opens, not per
+    /// keystroke, so `appSuggestions` stays a pure in-memory filter.
+    @Published private(set) var knownSourceApps: [String] = []
     @Published private(set) var selectedIndex = 0
     /// Bumped on every show so the view can re-focus the search field.
     @Published private(set) var focusToken = UUID()
@@ -56,8 +59,31 @@ final class PanelModel: ObservableObject {
         items.indices.contains(selectedIndex) ? items[selectedIndex] : nil
     }
 
+    /// Apps to offer while the user is typing an `app:` filter (backlog v0.7 item 3).
+    /// Empty unless the query starts with `app:`, and empty once the typed term already
+    /// equals the only match, so the hint disappears when there is nothing left to suggest.
+    var appSuggestions: [String] {
+        Self.appSuggestions(for: query, among: knownSourceApps)
+    }
+
+    static func appSuggestions(
+        for query: String, among apps: [String], limit: Int = 4
+    ) -> [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.lowercased().hasPrefix("app:") else { return [] }
+        let term = trimmed.dropFirst(4).trimmingCharacters(in: .whitespaces).lowercased()
+        let matches = apps.filter { term.isEmpty || $0.lowercased().contains(term) }
+        if matches.count == 1, matches[0].lowercased() == term { return [] }
+        return Array(matches.prefix(limit))
+    }
+
+    func applyAppSuggestion(_ app: String) {
+        query = "app:\(app)"
+    }
+
     func prepareForShow() {
         query = ""
+        knownSourceApps = (try? store.distinctSourceApps()) ?? []
         isPreviewShown = false
         reload(resetSelection: true)
         focusToken = UUID()

@@ -18,6 +18,10 @@ If an interaction needs the mouse, it's a bug in the design.
   modes don't blend into each other. A leading `\` forces literal content search instead,
   for content that happens to start with a recognized prefix (ADR-025) — e.g. `\app: nginx`
   searches for that literal text rather than filtering to an app named "nginx".
+- Discoverability: the search placeholder names both filters ("try app: or is:concealed").
+  Typing `app:` shows up to four known source apps as buttons under the field, narrowed as
+  you type; clicking one fills in `app:<name>`. The list is read when the panel opens, and
+  the row disappears once the typed name is the only match. Mouse-only for now (backlog).
 - `is:concealed` (the whole query) lists only items captured as concealed, still redacted.
   It filters on the existing `is_concealed` flag and never reads or decrypts content, so
   concealed items remain excluded from content search. Pinned items still sort last.

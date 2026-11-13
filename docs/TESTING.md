@@ -230,6 +230,10 @@ outside the app (e.g. CI or a broken build that won't launch):
 5c. **`is:concealed`**: with a concealed item in history (copy from a password manager that
     sets the concealed marker, with the opt-in on), type `is:concealed` → only concealed
     items show, still redacted. `\is:concealed` searches for that literal text instead.
+5d. **`app:` hint**: the empty search field's placeholder mentions `app:` and `is:concealed`.
+    Type `app:` → up to four recent source apps appear below the field; keep typing
+    (`app:ed`) → the list narrows; click one → the query becomes `app:<name>` and the list
+    filters. Type a full single app name → the buttons disappear.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.

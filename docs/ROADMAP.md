@@ -96,7 +96,8 @@ context on why each was cut from this milestone rather than built smaller:
   own security-sensitive design, not a trigram-tokenizer problem.
 - ~~A "show concealed only" quick filter~~ — built as `is:concealed`, no schema change and
   no ADR (a filter on the existing `is_concealed` column; it never reads content).
-- `app:` syntax discoverability (so it doesn't have to be memorized) — UI-only, no schema.
+- ~~`app:` syntax discoverability~~ — search placeholder names the filters, and typing
+  `app:` offers known source apps as buttons. UI-only, no schema.
 
 A tabbed/visual Pinned-vs-Recent split and a general tag system were also considered and
 are **not** queued for v0.7 or later — see "Deliberately rejected" in BACKLOG.md. Tags
