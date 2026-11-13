@@ -36,6 +36,9 @@ If an interaction needs the mouse, it's a bug in the design.
   app is read before the panel takes focus, by bundle ID, and the filter uses the app's
   name as capture recorded it. If that app has no history (or its name is under 3
   characters), the panel opens on the full list. Unlisted apps always open unfiltered.
+- The panel lists up to 200 unpinned and up to 200 pinned items, capped separately, so a long
+  history never hides your pinned section. The count in the footer shows `N+` when either
+  cap is hit.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 

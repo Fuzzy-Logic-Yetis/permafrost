@@ -164,9 +164,12 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
 The raw review was curated here and in ADR-023; no finding was silently discarded.
 
 - **H1 — Fixed:** same-Mac export preflights concealed rows before any writes; ADR-021 follow-up.
-- **H2 — Deferred, next hardening priority:** separate pinned access from the panel's 200-recent
-  limit, including concealed pins that cannot be found by content search. Preserve recent-only
-  quick-paste and avoid loading unlimited image blobs.
+- **H2 — Fixed 2026-11-13:** pinned items no longer share the panel's 200-row cap. The store
+  caps unpinned and pinned rows separately (`items(limit:pinnedLimit:)`; the panel uses 200 and
+  200), so with more than 200 unpinned items the pinned section, concealed pins included, is
+  still listed. ADR-012 ordering and recent-only quick-paste are unchanged; both limits are
+  bounded, so image loading stays bounded too. Image blobs are still loaded eagerly for each
+  listed row, which remains M5.
 - **M1 — Deferred:** reject symlinked archive ancestors and enforce safe reads of manifests and
   blobs in both formats, including mutable-folder races. Existing direct symlink checks remain.
 - **M2 — Fixed:** capture/OCR refresh preserves the selected ID; regression test in PanelModelTests.

@@ -327,4 +327,49 @@ import Testing
         #expect(ClipboardStore.pinnedFilterRemainder(in: "is:pinnedx") == nil)
         #expect(ClipboardStore.pinnedFilterRemainder(in: "pinned") == nil)
     }
+
+    // MARK: - Separate pinned limit (backlog H2)
+
+    @Test func longUnpinnedHistoryCannotPushPinnedItemsOutOfTheResult() throws {
+        let store = try ClipboardStore.inMemory()
+        let old = try store.save(ClipboardCapture(text: "pinned login oldest"), now: now)
+        try store.setPinned(true, id: try #require(old.id))
+        for n in 1...6 {
+            try store.save(
+                ClipboardCapture(text: "recent \(n)"), now: now.addingTimeInterval(Double(n)))
+        }
+
+        let results = try store.items(limit: 3)
+
+        // 3 newest unpinned, then the pinned item despite being the oldest row.
+        #expect(results.map(\.text) == ["recent 6", "recent 5", "recent 4", "pinned login oldest"])
+    }
+
+    @Test func pinnedLimitCapsPinnedRowsKeepingMostRecentlyPinned() throws {
+        let store = try ClipboardStore.inMemory()
+        for n in 1...4 {
+            let item = try store.save(
+                ClipboardCapture(text: "pin \(n)"), now: now.addingTimeInterval(Double(n)))
+            try store.setPinned(true, id: try #require(item.id))
+        }
+
+        #expect(try store.items(limit: 10, pinnedLimit: 2).map(\.text) == ["pin 4", "pin 3"])
+        #expect(try store.items(matching: "is:pinned", limit: 1, pinnedLimit: 3).count == 3)
+    }
+
+    @Test func concealedPinsAreReachableBeyondTheUnpinnedLimit() throws {
+        let store = try ClipboardStore.inMemory()
+        let secret = try store.save(
+            ClipboardCapture(text: "hunter2hunter2", isConcealed: true), now: now)
+        try store.setPinned(true, id: try #require(secret.id))
+        for n in 1...5 {
+            try store.save(
+                ClipboardCapture(text: "recent \(n)"), now: now.addingTimeInterval(Double(n)))
+        }
+
+        let results = try store.items(limit: 2)
+
+        #expect(results.last?.isConcealed == true)
+        #expect(results.last?.isPinned == true)
+    }
 }

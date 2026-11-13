@@ -134,10 +134,14 @@ final class PanelModel: ObservableObject {
     /// The panel loads at most this many rows; `countLabel` reflects that cap
     /// rather than implying it's showing your entire history (review L-1).
     static let pageLimit = 200
+    /// Pinned items are capped separately so a long unpinned history can't hide them
+    /// (backlog H2). Quick-paste still addresses only the unpinned prefix.
+    static let pinnedPageLimit = 200
 
     func reload(resetSelection: Bool = false) {
         do {
-            items = try store.items(matching: query, limit: Self.pageLimit)
+            items = try store.items(
+                matching: query, limit: Self.pageLimit, pinnedLimit: Self.pinnedPageLimit)
         } catch {
             Log.store.error("reload failed: \(error.localizedDescription)")
             items = []
@@ -179,7 +183,10 @@ final class PanelModel: ObservableObject {
     }
 
     var countLabel: String {
-        items.count >= Self.pageLimit ? "\(Self.pageLimit)+" : "\(items.count)"
+        let unpinned = items.prefix(while: { !$0.isPinned }).count
+        let pinned = items.count - unpinned
+        let capped = unpinned >= Self.pageLimit || pinned >= Self.pinnedPageLimit
+        return capped ? "\(items.count)+" : "\(items.count)"
     }
 
     func moveSelection(by delta: Int) {
