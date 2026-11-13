@@ -13,6 +13,7 @@ struct PanelView: View {
         ZStack {
             VStack(spacing: 0) {
                 searchBar
+                appSuggestionBar
                 Divider()
                 if model.items.isEmpty {
                     emptyState
@@ -56,7 +57,7 @@ struct PanelView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search clipboard history", text: $model.query)
+            TextField("Search — try app: or is:concealed", text: $model.query)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
         }
@@ -65,6 +66,23 @@ struct PanelView: View {
         .onAppear { searchFocused = true }
         .onChange(of: model.focusToken) {
             searchFocused = true
+        }
+    }
+
+    @ViewBuilder
+    private var appSuggestionBar: some View {
+        let suggestions = model.appSuggestions
+        if !suggestions.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(suggestions, id: \.self) { app in
+                    Button(app) { model.applyAppSuggestion(app) }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
         }
     }
 

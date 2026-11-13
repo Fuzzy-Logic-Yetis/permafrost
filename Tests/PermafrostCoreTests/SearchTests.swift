@@ -199,4 +199,66 @@ import Testing
         #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\").text == "")
         #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\").isLiteral == true)
     }
+
+    // MARK: - is:concealed and source-app listing
+
+    @Test func isConcealedFilterListsOnlyConcealedItems() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "plain note"), now: now)
+        try store.save(
+            ClipboardCapture(text: "hunter2hunter2", isConcealed: true),
+            now: now.addingTimeInterval(1))
+
+        let results = try store.items(matching: "is:concealed")
+
+        #expect(results.count == 1)
+        #expect(results.first?.isConcealed == true)
+        // Still redacted: the filter never surfaces plaintext.
+        #expect(results.first?.text == nil)
+        #expect(try store.items(matching: "  IS:Concealed ").count == 1)
+    }
+
+    @Test func isConcealedFilterKeepsPinnedItemsLast() throws {
+        let store = try ClipboardStore.inMemory()
+        let first = try store.save(
+            ClipboardCapture(text: "secretone", isConcealed: true), now: now)
+        try store.save(
+            ClipboardCapture(text: "secrettwo", isConcealed: true), now: now.addingTimeInterval(1))
+        try store.setPinned(true, id: try #require(first.id))
+
+        let results = try store.items(matching: "is:concealed")
+
+        #expect(results.map(\.isPinned) == [false, true])
+    }
+
+    @Test func isConcealedWithExtraTextOrEscapeFallsBackToContentSearch() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "is:concealed is a filter"), now: now)
+        try store.save(
+            ClipboardCapture(text: "hunter2hunter2", isConcealed: true),
+            now: now.addingTimeInterval(1))
+
+        #expect(try store.items(matching: "\\is:concealed").map(\.text) == ["is:concealed is a filter"])
+        #expect(try store.items(matching: "is:concealed filter").map(\.text) == ["is:concealed is a filter"])
+    }
+
+    @Test func isConcealedFilterParsing() {
+        #expect(ClipboardStore.isConcealedFilter(in: "is:concealed"))
+        #expect(ClipboardStore.isConcealedFilter(in: "IS:CONCEALED"))
+        #expect(!ClipboardStore.isConcealedFilter(in: "is:concealed x"))
+        #expect(!ClipboardStore.isConcealedFilter(in: "is:"))
+        #expect(!ClipboardStore.isConcealedFilter(in: "concealed"))
+    }
+
+    @Test func distinctSourceAppsAreUniqueAndMostRecentFirst() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "a", sourceApp: "TextEdit"), now: now)
+        try store.save(
+            ClipboardCapture(text: "b", sourceApp: "Microsoft Edge"), now: now.addingTimeInterval(1))
+        try store.save(
+            ClipboardCapture(text: "c", sourceApp: "TextEdit"), now: now.addingTimeInterval(2))
+        try store.save(ClipboardCapture(text: "d"), now: now.addingTimeInterval(3))
+
+        #expect(try store.distinctSourceApps() == ["TextEdit", "Microsoft Edge"])
+    }
 }
