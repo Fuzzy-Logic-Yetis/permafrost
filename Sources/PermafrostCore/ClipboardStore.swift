@@ -410,57 +410,62 @@ public final class ClipboardStore: Sendable {
     /// leading `\` forces literal content search instead (ADR-025). `is:concealed` lists
     /// only concealed items, still redacted like everywhere else. A leading `is:pinned` limits
     /// any of the above to pinned items.
-    public func items(matching query: String? = nil, limit: Int = 500) throws -> [ClipboardItem] {
+    ///
+    /// `limit` caps the unpinned rows and `pinnedLimit` caps the pinned rows separately, so a
+    /// long unpinned history can never push pinned items out of the result (and pinned items
+    /// never use up the unpinned budget).
+    public func items(
+        matching query: String? = nil, limit: Int = 500, pinnedLimit: Int = 500
+    ) throws -> [ClipboardItem] {
         let (literalTrimmed, isLiteral) = Self.stripLiteralSearchEscape(
             from: (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
         // `is:pinned` is a modifier, not a mode: whatever follows it is searched as usual,
         // restricted to pinned rows.
         let pinnedRemainder = isLiteral ? nil : Self.pinnedFilterRemainder(in: literalTrimmed)
         let trimmed = pinnedRemainder ?? literalTrimmed
-        let pinnedClause = pinnedRemainder == nil ? "1 = 1" : "clipboard_item.is_pinned = 1"
+        let pattern: FTS5Pattern?
+        if trimmed.isEmpty || (!isLiteral && Self.isConcealedFilter(in: trimmed)) {
+            pattern = nil
+        } else if !isLiteral, let appTerm = Self.appFilterTerm(in: trimmed) {
+            pattern = Self.columnRestrictedPattern(appTerm, columns: ["source_app"])
+        } else {
+            pattern = Self.columnRestrictedPattern(trimmed, columns: ["text", "ocr_text"])
+        }
+        let concealedOnly = !trimmed.isEmpty && !isLiteral && Self.isConcealedFilter(in: trimmed)
+        // A non-empty content/app query whose pattern is invalid matches nothing.
+        if !trimmed.isEmpty, !concealedOnly, pattern == nil { return [] }
+
         return try dbQueue.read { db in
-            let ordering = """
-                ORDER BY is_pinned ASC,
-                         CASE WHEN is_pinned = 0 THEN last_used_at END DESC,
-                         CASE WHEN is_pinned = 1 THEN pin_order END DESC
-                LIMIT ?
-                """
-            if trimmed.isEmpty {
-                return try ClipboardItem.fetchAll(
-                    db,
-                    sql: "SELECT * FROM clipboard_item WHERE \(pinnedClause) \(ordering)",
-                    arguments: [limit]
-                )
-            }
-            if !isLiteral, Self.isConcealedFilter(in: trimmed) {
+            func fetch(pinned: Bool, limit: Int) throws -> [ClipboardItem] {
+                let ordering =
+                    pinned
+                    ? "ORDER BY pin_order DESC LIMIT ?"
+                    : "ORDER BY last_used_at DESC LIMIT ?"
+                var clauses = ["clipboard_item.is_pinned = \(pinned ? 1 : 0)"]
+                if concealedOnly { clauses.append("clipboard_item.is_concealed = 1") }
+                var arguments: StatementArguments = []
+                var join = ""
+                if let pattern {
+                    join = """
+                        JOIN clipboard_item_fts
+                          ON clipboard_item_fts.rowid = clipboard_item.id
+                         AND clipboard_item_fts MATCH ?
+                        """
+                    arguments += [pattern]
+                }
+                arguments += [limit]
                 return try ClipboardItem.fetchAll(
                     db,
                     sql: """
-                        SELECT * FROM clipboard_item
-                        WHERE is_concealed = 1 AND \(pinnedClause) \(ordering)
+                        SELECT clipboard_item.* FROM clipboard_item \(join)
+                        WHERE \(clauses.joined(separator: " AND "))
+                        \(ordering)
                         """,
-                    arguments: [limit]
+                    arguments: arguments
                 )
             }
-            let pattern: FTS5Pattern?
-            if !isLiteral, let appTerm = Self.appFilterTerm(in: trimmed) {
-                pattern = Self.columnRestrictedPattern(appTerm, columns: ["source_app"])
-            } else {
-                pattern = Self.columnRestrictedPattern(trimmed, columns: ["text", "ocr_text"])
-            }
-            guard let pattern else { return [] }
-            return try ClipboardItem.fetchAll(
-                db,
-                sql: """
-                    SELECT clipboard_item.* FROM clipboard_item
-                    JOIN clipboard_item_fts
-                      ON clipboard_item_fts.rowid = clipboard_item.id
-                     AND clipboard_item_fts MATCH ?
-                    WHERE \(pinnedClause)
-                    \(ordering)
-                    """,
-                arguments: [pattern, limit]
-            )
+            if pinnedRemainder != nil { return try fetch(pinned: true, limit: pinnedLimit) }
+            return try fetch(pinned: false, limit: limit) + fetch(pinned: true, limit: pinnedLimit)
         }
     }
 

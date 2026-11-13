@@ -98,6 +98,23 @@ import PermafrostCore
         #expect(model.query == "")
     }
 
+    @Test func pinnedItemsStayInThePanelWhenUnpinnedHistoryExceedsThePageLimit() throws {
+        let (store, model, _) = try makeModel()
+        let pinned = try store.save(ClipboardCapture(text: "saved login"), now: now)
+        try store.setPinned(true, id: try #require(pinned.id))
+        for n in 1...(PanelModel.pageLimit + 5) {
+            try store.save(
+                ClipboardCapture(text: "clip \(n)"), now: now.addingTimeInterval(Double(n)))
+        }
+
+        model.prepareForShow()
+
+        #expect(model.items.count == PanelModel.pageLimit + 1)
+        #expect(model.items.last?.text == "saved login")
+        #expect(model.items.prefix(while: { !$0.isPinned }).count == PanelModel.pageLimit)
+        #expect(model.countLabel == "\(PanelModel.pageLimit + 1)+")
+    }
+
     @Test func prepareForShowResetsQuerySelectionAndRefocuses() throws {
         let (store, model, _) = try makeModel()
         try store.save(ClipboardCapture(text: "first"), now: now)

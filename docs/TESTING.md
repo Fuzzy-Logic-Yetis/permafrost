@@ -241,6 +241,9 @@ outside the app (e.g. CI or a broken build that won't launch):
     copied from. Open the panel with that app frontmost → the search field starts as
     `app:<name>` showing only its items; `Esc` clears to the full list. Open from another
     app → full list. Add an app you have never copied from → opens on the full list.
+5g. **Pinned survive a long history** (H2): not practical to hand-build 200 copies; covered by
+    `pinnedItemsStayInThePanelWhenUnpinnedHistoryExceedsThePageLimit`. Manual spot check: with
+    pinned items present, the pinned section still appears below the recent items.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.
