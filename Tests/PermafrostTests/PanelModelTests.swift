@@ -47,6 +47,57 @@ import PermafrostCore
         #expect(model.items.map(\.text) == ["a"])
     }
 
+    @Test func openingFilterAppRequiresAListedAppWithAName() {
+        let listed: Set<String> = ["com.example.herdr"]
+
+        #expect(
+            PanelModel.openingFilterApp(
+                bundleID: "com.example.herdr", name: " herdr ", listedBundleIDs: listed) == "herdr")
+        #expect(
+            PanelModel.openingFilterApp(
+                bundleID: "com.apple.Safari", name: "Safari", listedBundleIDs: listed) == nil)
+        #expect(
+            PanelModel.openingFilterApp(bundleID: nil, name: "herdr", listedBundleIDs: listed) == nil)
+        #expect(
+            PanelModel.openingFilterApp(
+                bundleID: "com.example.herdr", name: nil, listedBundleIDs: listed) == nil)
+        #expect(
+            PanelModel.openingFilterApp(
+                bundleID: "com.example.herdr", name: "  ", listedBundleIDs: listed) == nil)
+    }
+
+    @Test func showOpensFilteredToTheAppsOwnHistory() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "from herdr", sourceApp: "herdr"), now: now)
+        try store.save(
+            ClipboardCapture(text: "from safari", sourceApp: "Safari"),
+            now: now.addingTimeInterval(1))
+
+        model.prepareForShow(openingFilterApp: "herdr")
+
+        #expect(model.query == "app:herdr")
+        #expect(model.items.map(\.text) == ["from herdr"])
+
+        model.prepareForShow()
+
+        #expect(model.query == "")
+        #expect(model.items.count == 2)
+    }
+
+    @Test func showFallsBackToFullListWhenTheAppHasNoHistory() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(
+            ClipboardCapture(text: "from safari", sourceApp: "Safari"), now: now)
+
+        model.prepareForShow(openingFilterApp: "herdr")
+
+        #expect(model.query == "")
+        #expect(model.items.map(\.text) == ["from safari"])
+        // Under the trigram floor: also empty, so also the full list.
+        model.prepareForShow(openingFilterApp: "ab")
+        #expect(model.query == "")
+    }
+
     @Test func prepareForShowResetsQuerySelectionAndRefocuses() throws {
         let (store, model, _) = try makeModel()
         try store.save(ClipboardCapture(text: "first"), now: now)

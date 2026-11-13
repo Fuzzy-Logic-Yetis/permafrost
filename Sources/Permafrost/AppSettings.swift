@@ -2,15 +2,18 @@ import Foundation
 import PermafrostCore
 import ServiceManagement
 
-/// An app excluded from clipboard capture, identified by bundle ID (stable across
+/// An app in one of the Settings app lists, identified by bundle ID (stable across
 /// launches and renames); the display name is cached alongside it so the Settings
 /// list can show something readable even while the app isn't running.
-struct ExcludedApp: Codable, Identifiable, Equatable {
+struct ListedApp: Codable, Identifiable, Equatable {
     var bundleID: String
     var displayName: String
 
     var id: String { bundleID }
 }
+
+/// Apps excluded from clipboard capture.
+typealias ExcludedApp = ListedApp
 
 /// UserDefaults-backed settings. SwiftUI views bind via @AppStorage on the same keys;
 /// this type is the single place that interprets raw values (e.g. into RetentionPolicy).
@@ -32,6 +35,7 @@ final class AppSettings: HotkeySettingsStore {
         static let recordSensitiveQRCodes = "recordSensitiveQRCodes"
         static let didShowWelcome = "didShowWelcome"
         static let excludedApps = "excludedApps"  // JSON-encoded [ExcludedApp]
+        static let openFilteredApps = "openFilteredApps"  // JSON-encoded [ListedApp]
     }
 
     private let defaults = UserDefaults.standard
@@ -152,6 +156,31 @@ final class AppSettings: HotkeySettingsStore {
 
     func removeExcludedApp(bundleID: String) {
         excludedApps.removeAll { $0.bundleID == bundleID }
+    }
+
+    /// Apps for which the panel opens pre-filtered to that app's own history (`app:<name>`).
+    var openFilteredApps: [ListedApp] {
+        get {
+            guard let data = defaults.data(forKey: Keys.openFilteredApps) else { return [] }
+            return (try? JSONDecoder().decode([ListedApp].self, from: data)) ?? []
+        }
+        set {
+            let data = try? JSONEncoder().encode(newValue)
+            defaults.set(data, forKey: Keys.openFilteredApps)
+        }
+    }
+
+    var openFilteredBundleIDs: Set<String> {
+        Set(openFilteredApps.map(\.bundleID))
+    }
+
+    func addOpenFilteredApp(_ app: ListedApp) {
+        guard !openFilteredBundleIDs.contains(app.bundleID) else { return }
+        openFilteredApps.append(app)
+    }
+
+    func removeOpenFilteredApp(bundleID: String) {
+        openFilteredApps.removeAll { $0.bundleID == bundleID }
     }
 
     /// Login item state via SMAppService. Registration only works from a real .app

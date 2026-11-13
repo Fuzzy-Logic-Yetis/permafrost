@@ -42,6 +42,7 @@ struct SettingsView: View {
     @State private var pinnedCount = 0
     @State private var totalCount = 0
     @State private var excludedApps = AppSettings.shared.excludedApps
+    @State private var openFilteredApps = AppSettings.shared.openFilteredApps
     @State private var operationErrorMessage: String?
 
     private let trustPoll = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
@@ -233,6 +234,26 @@ struct SettingsView: View {
                 Text("Recorded passwords are marked with a key icon in the panel.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                ForEach(openFilteredApps) { app in
+                    HStack {
+                        Text(app.displayName)
+                        Spacer()
+                        Button("Remove") { removeOpenFilteredApp(app) }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                Button("Add App…") { addOpenFilteredApp() }
+            } header: {
+                Text("Open Filtered Apps")
+            } footer: {
+                Text(
+                    "When the panel opens while one of these apps is frontmost, it starts filtered to items copied from that app (as if you typed app:name). Esc clears the filter. Other apps open on the full list."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section {
@@ -455,7 +476,7 @@ struct SettingsView: View {
         refreshCounts()
     }
 
-    private func addExcludedApp() {
+    private func pickApp() -> ListedApp? {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.application]
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
@@ -463,10 +484,26 @@ struct SettingsView: View {
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url,
             let bundleID = Bundle(url: url)?.bundleIdentifier
-        else { return }
+        else { return nil }
         let name = FileManager.default.displayName(atPath: url.path)
-        AppSettings.shared.addExcludedApp(ExcludedApp(bundleID: bundleID, displayName: name))
+        return ListedApp(bundleID: bundleID, displayName: name)
+    }
+
+    private func addExcludedApp() {
+        guard let app = pickApp() else { return }
+        AppSettings.shared.addExcludedApp(app)
         excludedApps = AppSettings.shared.excludedApps
+    }
+
+    private func addOpenFilteredApp() {
+        guard let app = pickApp() else { return }
+        AppSettings.shared.addOpenFilteredApp(app)
+        openFilteredApps = AppSettings.shared.openFilteredApps
+    }
+
+    private func removeOpenFilteredApp(_ app: ListedApp) {
+        AppSettings.shared.removeOpenFilteredApp(bundleID: app.bundleID)
+        openFilteredApps = AppSettings.shared.openFilteredApps
     }
 
     private func removeExcludedApp(_ app: ExcludedApp) {
