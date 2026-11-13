@@ -261,4 +261,70 @@ import Testing
 
         #expect(try store.distinctSourceApps() == ["TextEdit", "Microsoft Edge"])
     }
+
+    // MARK: - is:pinned
+
+    private func pinnedFixture() throws -> ClipboardStore {
+        let store = try ClipboardStore.inMemory()
+        let pinned = try store.save(
+            ClipboardCapture(text: "login hunter22 for work", sourceApp: "Safari"), now: now)
+        try store.save(
+            ClipboardCapture(text: "login scratch note", sourceApp: "Safari"),
+            now: now.addingTimeInterval(1))
+        try store.save(
+            ClipboardCapture(text: "unrelated", sourceApp: "TextEdit"),
+            now: now.addingTimeInterval(2))
+        let secret = try store.save(
+            ClipboardCapture(text: "topsecretvalue", isConcealed: true),
+            now: now.addingTimeInterval(3))
+        try store.setPinned(true, id: try #require(pinned.id))
+        try store.setPinned(true, id: try #require(secret.id))
+        return store
+    }
+
+    @Test func isPinnedAloneListsOnlyPinnedItems() throws {
+        let store = try pinnedFixture()
+
+        #expect(try store.items(matching: "is:pinned").count == 2)
+        #expect(try store.items(matching: "IS:Pinned").allSatisfy(\.isPinned))
+    }
+
+    @Test func isPinnedCombinesWithContentSearch() throws {
+        let store = try pinnedFixture()
+
+        // "login" also matches an unpinned note; only the pinned one may come back.
+        #expect(try store.items(matching: "login").count == 2)
+        #expect(
+            try store.items(matching: "is:pinned login").map(\.text) == ["login hunter22 for work"])
+        #expect(try store.items(matching: "is:pinned unrelated").isEmpty)
+    }
+
+    @Test func isPinnedCombinesWithAppAndConcealedFilters() throws {
+        let store = try pinnedFixture()
+
+        #expect(try store.items(matching: "is:pinned app:safari").count == 1)
+        #expect(try store.items(matching: "is:pinned app:textedit").isEmpty)
+        let concealed = try store.items(matching: "is:pinned is:concealed")
+        #expect(concealed.count == 1)
+        #expect(concealed.first?.isConcealed == true)
+    }
+
+    @Test func isPinnedMustBeAWholeWordAndHonorsTheLiteralEscape() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "is:pinned is a filter"), now: now)
+        try store.save(ClipboardCapture(text: "is:pinnedish thing"), now: now.addingTimeInterval(1))
+
+        #expect(try store.items(matching: "\\is:pinned filter").map(\.text) == ["is:pinned is a filter"])
+        // Not the filter: no pinned items exist, yet the content search still finds this.
+        #expect(try store.items(matching: "is:pinnedish").map(\.text) == ["is:pinnedish thing"])
+        #expect(try store.items(matching: "is:pinned").isEmpty)
+    }
+
+    @Test func pinnedFilterRemainderParsing() {
+        #expect(ClipboardStore.pinnedFilterRemainder(in: "is:pinned") == "")
+        #expect(ClipboardStore.pinnedFilterRemainder(in: "is:pinned  login pw") == "login pw")
+        #expect(ClipboardStore.pinnedFilterRemainder(in: "IS:PINNED app:edge") == "app:edge")
+        #expect(ClipboardStore.pinnedFilterRemainder(in: "is:pinnedx") == nil)
+        #expect(ClipboardStore.pinnedFilterRemainder(in: "pinned") == nil)
+    }
 }

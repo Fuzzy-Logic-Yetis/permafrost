@@ -57,7 +57,7 @@ struct PanelView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search — try app: or is:concealed", text: $model.query)
+            TextField("Search — try is:pinned or app:", text: $model.query)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
         }

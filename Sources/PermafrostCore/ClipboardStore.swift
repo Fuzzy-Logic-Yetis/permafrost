@@ -357,6 +357,18 @@ public final class ClipboardStore: Sendable {
         trimmed.lowercased() == "is:concealed"
     }
 
+    /// `is:pinned` as the first word of the query restricts results to pinned items and
+    /// returns the rest of the query (possibly empty) to be searched as usual, so
+    /// `is:pinned login`, `is:pinned app:edge` and `is:pinned is:concealed` all work.
+    /// `nil` when the query doesn't start with that whole word (`is:pinnedx` is content).
+    static func pinnedFilterRemainder(in trimmed: String) -> String? {
+        let prefix = "is:pinned"
+        guard trimmed.lowercased().hasPrefix(prefix) else { return nil }
+        let rest = trimmed.dropFirst(prefix.count)
+        guard rest.isEmpty || rest.first?.isWhitespace == true else { return nil }
+        return rest.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Distinct, non-empty `source_app` values, most recently used first. Feeds the
     /// `app:` suggestions in the panel.
     public func distinctSourceApps() throws -> [String] {
@@ -396,10 +408,16 @@ public final class ClipboardStore: Sendable {
     /// instead, deliberately not merged into ordinary content search: a bare "edge" should
     /// not also surface every unrelated item that merely came from Microsoft Edge. A
     /// leading `\` forces literal content search instead (ADR-025). `is:concealed` lists
-    /// only concealed items, still redacted like everywhere else.
+    /// only concealed items, still redacted like everywhere else. A leading `is:pinned` limits
+    /// any of the above to pinned items.
     public func items(matching query: String? = nil, limit: Int = 500) throws -> [ClipboardItem] {
-        let (trimmed, isLiteral) = Self.stripLiteralSearchEscape(
+        let (literalTrimmed, isLiteral) = Self.stripLiteralSearchEscape(
             from: (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
+        // `is:pinned` is a modifier, not a mode: whatever follows it is searched as usual,
+        // restricted to pinned rows.
+        let pinnedRemainder = isLiteral ? nil : Self.pinnedFilterRemainder(in: literalTrimmed)
+        let trimmed = pinnedRemainder ?? literalTrimmed
+        let pinnedClause = pinnedRemainder == nil ? "1 = 1" : "clipboard_item.is_pinned = 1"
         return try dbQueue.read { db in
             let ordering = """
                 ORDER BY is_pinned ASC,
@@ -410,14 +428,17 @@ public final class ClipboardStore: Sendable {
             if trimmed.isEmpty {
                 return try ClipboardItem.fetchAll(
                     db,
-                    sql: "SELECT * FROM clipboard_item \(ordering)",
+                    sql: "SELECT * FROM clipboard_item WHERE \(pinnedClause) \(ordering)",
                     arguments: [limit]
                 )
             }
             if !isLiteral, Self.isConcealedFilter(in: trimmed) {
                 return try ClipboardItem.fetchAll(
                     db,
-                    sql: "SELECT * FROM clipboard_item WHERE is_concealed = 1 \(ordering)",
+                    sql: """
+                        SELECT * FROM clipboard_item
+                        WHERE is_concealed = 1 AND \(pinnedClause) \(ordering)
+                        """,
                     arguments: [limit]
                 )
             }
@@ -435,6 +456,7 @@ public final class ClipboardStore: Sendable {
                     JOIN clipboard_item_fts
                       ON clipboard_item_fts.rowid = clipboard_item.id
                      AND clipboard_item_fts MATCH ?
+                    WHERE \(pinnedClause)
                     \(ordering)
                     """,
                 arguments: [pattern, limit]

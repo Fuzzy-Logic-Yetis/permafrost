@@ -234,6 +234,9 @@ outside the app (e.g. CI or a broken build that won't launch):
     Type `app:` → up to four recent source apps appear below the field; keep typing
     (`app:ed`) → the list narrows; click one → the query becomes `app:<name>` and the list
     filters. Type a full single app name → the buttons disappear.
+5e. **`is:pinned`**: pin an item containing "login", copy another containing "login", then
+    type `is:pinned` → only pinned items; `is:pinned login` → only the pinned one. The
+    placeholder mentions `is:pinned`.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.

@@ -231,6 +231,16 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    - **Deferred:** keyboard acceptance of a suggestion (Tab/arrows). The row is
      mouse-only, which is out of step with the keyboard-first goal.
 
+4. ~~`is:pinned` filter~~ — **DONE 2026-11-13.** Reaching a pinned saved login meant scrolling
+   past the whole history, because pinned items sort last (ADR-012, unchanged). `is:pinned`
+   restricts to pinned items and composes with content, `app:` and `is:concealed` terms.
+   No schema change, no ADR.
+5. **Per-app "open filtered" list.** Settings list of apps (like Excluded Apps); when the
+   panel opens with one of them frontmost, the query starts as `app:<that app>` with a
+   clearable chip, falling back to the full list when that app has no history. Motivated by
+   work that stays inside one app (herdr). Other apps keep the plain recency list. No
+   schema change.
+
 ## Later
 
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).
