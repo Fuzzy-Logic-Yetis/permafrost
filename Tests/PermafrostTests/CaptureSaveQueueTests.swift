@@ -136,6 +136,106 @@ import PermafrostCore
         #expect(try store.allItems().first?.richData == nativeRTF)
     }
 
+    // MARK: - Clearing history vs. pending captures (backlog M3)
+
+    @Test func clearDropsConcealedCapturesWaitingForTheKey() throws {
+        let url = try tempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = try ClipboardStore.onDisk(at: url)
+        let queue = CaptureSaveQueue(store: store)
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(text: "secret", isConcealed: true),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()))
+        queue.waitUntilIdle()
+
+        try queue.clearHistory(keepPinned: false)
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))
+        queue.retryPendingConcealedCaptures()
+        queue.waitUntilIdle()
+
+        #expect(try store.count() == 0)  // the pre-clear secret did not reappear
+    }
+
+    /// The only way a pre-clear capture can still be saved after the clear is a delayed
+    /// retry: here the key arrives, a retry is scheduled, and the clear lands before it fires.
+    @Test func delayedRetryOfAPreClearCaptureIsSkipped() throws {
+        let url = try tempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = try ClipboardStore.onDisk(at: url)
+        let queue = CaptureSaveQueue(store: store)
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(text: "secret", isConcealed: true),
+                capturedAt: Date(),
+                retentionPolicy: RetentionPolicy()))
+        queue.waitUntilIdle()  // parked in the pending list: no key yet
+
+        queue.retryPendingConcealedCaptures()  // fails again (still no key): retry in 0.1 s
+        queue.waitUntilIdle()
+        store.setConcealedContentKey(SymmetricKey(size: .bits256))  // the retry would now succeed
+        try queue.clearHistory(keepPinned: false)
+        Thread.sleep(forTimeInterval: CaptureSaveQueue.retryDelay * Double(CaptureSaveQueue.maxSaveAttempts) * 2)
+        queue.waitUntilIdle()
+
+        #expect(try store.count() == 0)
+    }
+
+    @Test func capturesMadeAfterAClearAreSavedNormally() throws {
+        let store = try ClipboardStore.inMemory()
+        let queue = CaptureSaveQueue(store: store)
+        try queue.clearHistory(keepPinned: false)
+
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(text: "copied after the clear"),
+                capturedAt: Date(timeIntervalSince1970: 1_000_000_000),  // even a clock-skewed one
+                retentionPolicy: RetentionPolicy()))
+        queue.waitUntilIdle()
+
+        #expect(try store.allItems().map(\.text) == ["copied after the clear"])
+    }
+
+    @Test func clearWaitsForInFlightOCRAndLeavesNothingBehind() throws {
+        let store = try ClipboardStore.inMemory()
+        let recognizer = BlockingQueueTextRecognizer()
+        let queue = CaptureSaveQueue(store: store, textRecognizer: recognizer)
+        queue.enqueue(
+            CaptureSaveQueue.PendingCapture(
+                capture: ClipboardCapture(imageData: Data([1, 2, 3])),
+                capturedAt: Date(timeIntervalSince1970: 2_000_000_000),
+                retentionPolicy: RetentionPolicy()))
+        #expect(recognizer.waitUntilStarted(timeout: 5))
+
+        let cleared = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            try? queue.clearHistory(keepPinned: false)
+            cleared.signal()
+        }
+        // The clear is queued behind the running OCR job, so it cannot finish yet.
+        #expect(cleared.wait(timeout: .now() + 0.3) == .timedOut)
+        recognizer.release()
+        #expect(cleared.wait(timeout: .now() + 5) == .success)
+
+        queue.waitUntilIdle()
+        #expect(try store.count() == 0)
+    }
+
+    @Test func clearKeepingPinnedStillKeepsPinnedItems() throws {
+        let store = try ClipboardStore.inMemory()
+        let queue = CaptureSaveQueue(store: store)
+        let kept = try store.save(
+            ClipboardCapture(text: "keep me"), now: Date(timeIntervalSince1970: 2_000_000_000))
+        try store.save(
+            ClipboardCapture(text: "drop me"), now: Date(timeIntervalSince1970: 2_000_000_001))
+        try store.setPinned(true, id: try #require(kept.id))
+
+        try queue.clearHistory(keepPinned: true)
+
+        #expect(try store.allItems().map(\.text) == ["keep me"])
+    }
+
     // MARK: - Concealed captures while the Keychain key is pending (regression, 2026-07-22)
     //
     // `ClipboardStore.onDisk(at:)` never takes a key — exactly the real app's state between
@@ -472,6 +572,24 @@ private final class FakeQueueTextRecognizer: TextRecognizing, @unchecked Sendabl
         lock.withLock { _callCount += 1 }
         return result
     }
+}
+
+/// Holds the capture queue inside OCR until the test releases it.
+private final class BlockingQueueTextRecognizer: TextRecognizing, @unchecked Sendable {
+    private let started = DispatchSemaphore(value: 0)
+    private let gate = DispatchSemaphore(value: 0)
+
+    func recognizeText(in imageData: Data) -> String? {
+        started.signal()
+        _ = gate.wait(timeout: .now() + 10)
+        return nil
+    }
+
+    func waitUntilStarted(timeout: TimeInterval) -> Bool {
+        started.wait(timeout: .now() + timeout) == .success
+    }
+
+    func release() { gate.signal() }
 }
 
 private final class FakeQueueBarcodeDetector: BarcodeDetecting, @unchecked Sendable {
