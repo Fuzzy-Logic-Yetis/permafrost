@@ -22,13 +22,17 @@ Last written 2026-11-14, after the v0.7 search work (backlog items 6 to 9) merge
 - `main` is protected on GitHub (ADR-027): no direct pushes, and the CI `test` check must
   pass. Secret scanning (with push protection) and Dependabot security updates are on.
 
-## The running app is behind `main`
+## The running app
 
-- The owner's running Permafrost was built from `347dee1` (#15 and #16). It lacks #17 and
-  #18, the kind filters, the suggestion rows, the new grammar, and the time filters.
-- Rebuilding (`./scripts/make-app.sh`) is the owner's call. It re-signs ad hoc, so the owner
-  must relaunch and re-grant Accessibility and Input Monitoring afterwards.
-- Manual checks 5c to 5j in docs/TESTING.md have not been run against a build.
+- `dist/Permafrost.app` was rebuilt from `main` at `3505593` (everything through #23, built
+  19:51 CST on this Mac; the bundle carries no commit hash, so this comes from the
+  coordinator and the build time). The owner closed the old app for the rebuild and
+  relaunches the new build himself; when this was written it was not running.
+- Every ad-hoc rebuild is a new code identity, so after relaunching the owner must re-grant
+  Accessibility and Input Monitoring (Settings > Permissions > Reset Permissions). A
+  Developer ID (v1.0) would end that.
+- Rebuilding (`./scripts/make-app.sh`) is always the owner's call.
+- Manual checks 5c to 5j in docs/TESTING.md have not been run against this build yet.
 
 ## How to work here
 
