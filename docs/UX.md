@@ -33,7 +33,7 @@ If an interaction needs the mouse, it's a bug in the design.
   number with unit `m`, `h` or `d`). They combine with everything else
   (`is:image age:<1d invoice`) and apply to pinned items too. Using or re-copying an old item
   brings it back inside the window. `age:2h` or `age:<2x` are plain text.
-- Discoverability: the placeholder is generic ("type is: for filters") so it never needs
+- Discoverability: the placeholder is generic ("type is: or app: for filters") so it never needs
   rewording. Typing `is:` lists every filter with a few words each (from one list in core,
   `SearchFilters.all`), narrowed as you type and skipping ones already used. Typing `app:`
   lists up to four known source apps (read when the panel opens). Both work anywhere in the query

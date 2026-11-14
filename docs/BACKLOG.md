@@ -257,7 +257,7 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
 6. ~~`is:` filter suggestions~~ — **DONE 2026-11-13.** Typing `is:` lists every filter with a
    few words each, from one list in core (`SearchFilters.all`; a test fails if an entry isn't
    something the parser understands, so a new filter is one entry plus its parsing). The
-   placeholder is generic ("type is: for filters"). The `app:` suggestions use the same rows
+   placeholder is generic ("type is: or app: for filters"). The `app:` suggestions use the same rows
    and now work after leading filters. Keyboard acceptance (item 3's deferred part) is done
    for both: `Tab` accepts, `↑`/`↓` move the highlight while suggestions show. UI-only, no
    schema.
