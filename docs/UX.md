@@ -28,6 +28,11 @@ If an interaction needs the mouse, it's a bug in the design.
   keeps the last. `is:pinnedx`, `is:foo`, a lone `app:` and `app: nginx` (space after the
   colon) are plain text. A leading `\` makes the whole query plain text (ADR-025), for
   content that really contains a filter word, such as `\login is:pinned how to`.
+- **Time filters** (ADR-029), on *last used* time, the same timestamp the list is ordered by:
+  `is:today` (used since local midnight) and `age:<30m`, `age:<2h`, `age:<1d` (any whole
+  number with unit `m`, `h` or `d`). They combine with everything else
+  (`is:image age:<1d invoice`) and apply to pinned items too. Using or re-copying an old item
+  brings it back inside the window. `age:2h` or `age:<2x` are plain text.
 - Discoverability: the placeholder is generic ("type is: for filters") so it never needs
   rewording. Typing `is:` lists every filter with a few words each (from one list in core,
   `SearchFilters.all`), narrowed as you type and skipping ones already used. Typing `app:`

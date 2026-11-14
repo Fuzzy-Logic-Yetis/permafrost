@@ -25,6 +25,16 @@ public enum SearchFilters {
         SearchFilterInfo(token: "is:image", summary: "screenshots and images"),
         SearchFilterInfo(token: "is:text", summary: "text items"),
         SearchFilterInfo(token: "is:link", summary: "items that are just a web link"),
+        SearchFilterInfo(token: "is:today", summary: "last used today"),
+    ]
+
+    /// Examples offered once `age:` is typed. `age:<N>` takes any whole number with unit
+    /// `m` (minutes), `h` (hours) or `d` (days); these are just the common ones.
+    public static let ageExamples: [SearchFilterInfo] = [
+        SearchFilterInfo(token: "age:<30m", summary: "used in the last 30 minutes"),
+        SearchFilterInfo(token: "age:<2h", summary: "used in the last 2 hours"),
+        SearchFilterInfo(token: "age:<1d", summary: "used in the last day"),
+        SearchFilterInfo(token: "age:<7d", summary: "used in the last week"),
     ]
 
     /// Suggestions for the word being typed at the end of `query`: matching `is:` filters not
@@ -50,10 +60,20 @@ public enum SearchFilters {
                 switch filter.token {
                 case "is:pinned": return !used.pinned
                 case "is:concealed": return !used.concealed
+                case "is:today": return !used.today
                 default: return used.kind == nil
                 }
             }
             if matches.count == 1, matches[0].token == lowered { return [] }
+            return matches.map {
+                SearchSuggestion(label: $0.token, detail: $0.summary, query: prefix + $0.token + " ")
+            }
+        }
+
+        if lowered.hasPrefix("age:"), !word.contains(where: \.isWhitespace) {
+            let matches = ageExamples.filter { $0.token.hasPrefix(lowered) }
+            if matches.count == 1, matches[0].token == lowered { return [] }
+            if SearchQuery.ageSeconds(in: lowered) != nil { return [] }  // a valid value typed
             return matches.map {
                 SearchSuggestion(label: $0.token, detail: $0.summary, query: prefix + $0.token + " ")
             }

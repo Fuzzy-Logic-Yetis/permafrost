@@ -1426,3 +1426,45 @@ A query language with `AND`/`OR`/parentheses: far more than a clipboard panel ne
   parsing rules.
 - No schema change. Search cost is unchanged in kind: one FTS5 MATCH plus indexed column
   filters; the ADR-024 timings (a few ms at 5,000 items) were not re-measured.
+
+## ADR-029: Time filters — `is:today` and `age:<N>` on last-used time
+
+*Builds on ADR-028 (one search grammar). Backlog v0.7 item 9.*
+
+**Context.** "What did I copy this morning" had no answer except scrolling. ADR-028 made
+the grammar extensible; this adds time filters as two more word types. The open question
+was which timestamp "age" means.
+
+**Decision.**
+
+1. **Age is last-used time** (`last_used_at`). Owner decision, 2026-11-14: "last used"
+   (confirmed by Anthony in the Permafrost worker session). It is the same timestamp the
+   list is ordered by and that retention expires on (ADR-012), so a filter, the list order
+   and expiry always agree, and copying or pasting an old item again brings it back into the
+   window. Capture time (`created_at`) exists but is deliberately not used here: the owner
+   chose last-used, and mixing the two would make the filter disagree with the list order.
+   No schema change.
+2. **`age:<N>m`, `age:<N>h`, `age:<N>d`** keep items used within the last N minutes,
+   hours or days (N a whole number, 1 to 99,999; any case). Only `<` is supported.
+   Anything else (`age:2h`, `age:<2x`, `age:<0h`) is ordinary text, like other malformed
+   filter words. A repeated `age:` keeps the last.
+3. **`is:today`** keeps items used since the start of the current calendar day in the
+   system time zone. It is `is:today`, not a bare `today`, which deliberately differs from
+   the backlog wording: a bare word would turn every search for the word "today" into a
+   filter. It also joins the `is:` suggestion list, so it is discoverable.
+4. Time filters combine with everything else in the grammar, apply to pinned items too (a
+   pinned item last used last week is outside `age:<1d`), and use the same indexed
+   `last_used_at` column. `items(matching:now:calendar:)` takes the clock and calendar so
+   tests are deterministic.
+5. Typing `age:` offers `age:<30m`, `age:<2h`, `age:<1d`, `age:<7d` as examples; any valid
+   value works.
+
+**Not doing.** `is:>30` (nothing unpinned is older than the 30-day default retention) and
+`is:oldest` (a sort; the pinned-last and recent-only quick-paste ordering is a product
+guarantee, ADR-012). Calendar-day filters such as `yesterday` or dates: not asked for.
+
+**Consequences.** "Today" follows the system time zone and changes at local midnight; a
+Mac that travels across time zones sees the window move. Because age follows last use,
+`age:<1h` answers "what have I used lately", not strictly "what did I first copy lately".
+No schema change.
+

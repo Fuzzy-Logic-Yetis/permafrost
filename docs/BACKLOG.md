@@ -275,11 +275,10 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    (`app:"Microsoft Edge"`). `\` still escapes. One parser (`SearchQuery.parse`) serves both
    search and the suggestion row. Behavior changes are listed in the ADR. Item 9 now needs
    only a new word type and a clause.
-9. **Time filters.** `today`, `age:<2h`, `age:<1d` for "what did I copy this morning", on
-   `last_used_at` (or capture time; decide in the ADR for 8). Not `is:>30`: with the
-   default 30-day retention, nothing unpinned is older than that. Not `is:oldest`: it is a
-   sort, and the pinned-last / recent-only quick-paste ordering is a product guarantee
-   (ADR-012).
+9. ~~Time filters~~ — **DONE 2026-11-14, ADR-029.** `is:today` and `age:<N>m|h|d` on
+   `last_used_at`. Anthony, 2026-11-14: "last used" (matches the list order and retention).
+   `is:today` rather than a bare `today`, so searching the word "today" still works. `age:`
+   suggests examples. No schema change. Not doing `is:>30` or `is:oldest` (see the ADR).
 
 ## Later
 
