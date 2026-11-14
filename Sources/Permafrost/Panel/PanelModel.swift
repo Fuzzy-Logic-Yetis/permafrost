@@ -100,6 +100,13 @@ final class PanelModel: ObservableObject {
         return name
     }
 
+    /// `app:<name>`, quoted when the name has spaces ("Microsoft Edge") so the parser reads it
+    /// as one filter rather than `app:Microsoft` plus the word `Edge`.
+    static func appFilterQuery(for name: String) -> String {
+        let clean = name.replacingOccurrences(of: "\"", with: "")
+        return clean.contains(where: \.isWhitespace) ? "app:\"\(clean)\"" : "app:\(clean)"
+    }
+
     /// `openingFilterApp` starts the query as `app:<name>`, visible in the search field and
     /// cleared like any query. If that leaves nothing to show (no history for the app, or a
     /// name under the 3-character trigram floor), the panel opens on the full list instead.
@@ -109,7 +116,7 @@ final class PanelModel: ObservableObject {
         isPreviewShown = false
         reload(resetSelection: true)
         if let openingFilterApp {
-            query = "app:\(openingFilterApp)"
+            query = Self.appFilterQuery(for: openingFilterApp)
             if items.isEmpty { query = "" }
         }
         focusToken = UUID()

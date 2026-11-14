@@ -111,6 +111,20 @@ import PermafrostCore
         #expect(model.items.count == 2)
     }
 
+    @Test func showQuotesAppNamesWithSpaces() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(
+            ClipboardCapture(text: "from edge", sourceApp: "Microsoft Edge"), now: now)
+        try store.save(
+            ClipboardCapture(text: "from safari", sourceApp: "Safari"),
+            now: now.addingTimeInterval(1))
+
+        model.prepareForShow(openingFilterApp: "Microsoft Edge")
+
+        #expect(model.query == "app:\"Microsoft Edge\"")
+        #expect(model.items.map(\.text) == ["from edge"])
+    }
+
     @Test func showFallsBackToFullListWhenTheAppHasNoHistory() throws {
         let (store, model, _) = try makeModel()
         try store.save(
