@@ -255,6 +255,29 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
      name can also match other apps whose name contains it (for example "Code" and
      "Xcode").
 
+6. **`is:` filter suggestions (quick win).** Typing `is:` shows every filter as a button
+   with a few words each (`is:pinned` saved items, `is:concealed` passwords, and later
+   ones), reusing the `app:` suggestion row. The placeholder becomes generic ("type is: for
+   filters") so it never needs rewording when a filter is added. Do the deferred keyboard
+   acceptance (Tab/arrows) for both rows here. UI-only, no schema. Requested by Anthony
+   2026-11-13.
+   - **Not doing:** aliases (`is:secured`, `is:hidden`) for `is:concealed`. The suggestion
+     row solves "what was it called"; if the word is wrong, rename it once instead.
+7. **`is:image` / `is:text` / `is:link` (quick win).** Filter on the existing `kind` column;
+   `is:link` = text items whose whole text is a URL (concealed items have no text, so they
+   never match). Same modifier shape as `is:pinned`. No schema change, no ADR.
+8. **One search grammar: filters combine in any order.** Today `is:concealed` must be the
+   whole query and `is:pinned` must come first; each new filter makes that worse. Parse
+   the query into filter tokens (`is:*`, `app:*`, later `age:*`) plus free text, in any
+   order, e.g. `is:image app:safari invoice`. Keep `\` as the literal escape. Changes how
+   search reads, so it needs an ADR (amends ADR-024/025). Do after 6 and 7, before more
+   filters.
+9. **Time filters.** `today`, `age:<2h`, `age:<1d` for "what did I copy this morning", on
+   `last_used_at` (or capture time; decide in the ADR for 8). Not `is:>30`: with the
+   default 30-day retention, nothing unpinned is older than that. Not `is:oldest`: it is a
+   sort, and the pinned-last / recent-only quick-paste ordering is a product guarantee
+   (ADR-012).
+
 ## Later
 
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).
