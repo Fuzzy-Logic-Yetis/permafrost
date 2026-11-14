@@ -1441,7 +1441,9 @@ was which timestamp "age" means.
    (confirmed by Anthony in the Permafrost worker session). It is the same timestamp the
    list is ordered by and that retention expires on (ADR-012), so a filter, the list order
    and expiry always agree, and copying or pasting an old item again brings it back into the
-   window. There is no separate capture-time column, and none is added: no schema change.
+   window. Capture time (`created_at`) exists but is deliberately not used here: the owner
+   chose last-used, and mixing the two would make the filter disagree with the list order.
+   No schema change.
 2. **`age:<N>m`, `age:<N>h`, `age:<N>d`** keep items used within the last N minutes,
    hours or days (N a whole number, 1 to 99,999; any case). Only `<` is supported.
    Anything else (`age:2h`, `age:<2x`, `age:<0h`) is ordinary text, like other malformed
