@@ -17,7 +17,12 @@ extension PasteService: PanelPasteServing {}
 @MainActor
 final class PanelModel: ObservableObject {
     @Published var query = "" {
-        didSet { if query != oldValue { reload(resetSelection: true) } }
+        didSet {
+            if query != oldValue {
+                suggestionIndex = 0
+                reload(resetSelection: true)
+            }
+        }
     }
     @Published private(set) var items: [ClipboardItem] = []
     /// Source apps seen in history, most recent first. Loaded when the panel opens, not per
@@ -59,26 +64,28 @@ final class PanelModel: ObservableObject {
         items.indices.contains(selectedIndex) ? items[selectedIndex] : nil
     }
 
-    /// Apps to offer while the user is typing an `app:` filter (backlog v0.7 item 3).
-    /// Empty unless the query starts with `app:`, and empty once the typed term already
-    /// equals the only match, so the hint disappears when there is nothing left to suggest.
-    var appSuggestions: [String] {
-        Self.appSuggestions(for: query, among: knownSourceApps)
+    /// Filter and app suggestions for the word being typed (see `SearchFilters.suggestions`).
+    var suggestions: [SearchSuggestion] {
+        SearchFilters.suggestions(for: query, knownApps: knownSourceApps)
     }
 
-    static func appSuggestions(
-        for query: String, among apps: [String], limit: Int = 4
-    ) -> [String] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.lowercased().hasPrefix("app:") else { return [] }
-        let term = trimmed.dropFirst(4).trimmingCharacters(in: .whitespaces).lowercased()
-        let matches = apps.filter { term.isEmpty || $0.lowercased().contains(term) }
-        if matches.count == 1, matches[0].lowercased() == term { return [] }
-        return Array(matches.prefix(limit))
+    /// Highlighted row of `suggestions`; Tab accepts it, ↑/↓ move it.
+    @Published private(set) var suggestionIndex = 0
+
+    func moveSuggestionSelection(by delta: Int) {
+        let count = suggestions.count
+        guard count > 0 else { return }
+        suggestionIndex = min(max(suggestionIndex + delta, 0), count - 1)
     }
 
-    func applyAppSuggestion(_ app: String) {
-        query = "app:\(app)"
+    func acceptSuggestion(at index: Int) {
+        let all = suggestions
+        guard all.indices.contains(index) else { return }
+        query = all[index].query
+    }
+
+    func acceptHighlightedSuggestion() {
+        acceptSuggestion(at: suggestionIndex)
     }
 
     /// The app name to open pre-filtered to, or nil to open on the full list. Only apps the

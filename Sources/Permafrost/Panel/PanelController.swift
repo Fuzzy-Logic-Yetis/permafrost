@@ -170,6 +170,24 @@ final class PanelController: NSObject, NSWindowDelegate {
             return true
         }
 
+        // While suggestions are showing, Tab accepts the highlighted one and ↑/↓ move the
+        // highlight instead of the list selection. Typing more or Esc dismisses them.
+        if !model.suggestions.isEmpty {
+            switch input.keyCode {
+            case kVKTab where input.modifiers.isEmpty:
+                model.acceptHighlightedSuggestion()
+                return true
+            case kVKUpArrow:
+                model.moveSuggestionSelection(by: -1)
+                return true
+            case kVKDownArrow:
+                model.moveSuggestionSelection(by: 1)
+                return true
+            default:
+                break
+            }
+        }
+
         switch input.keyCode {
         case kVKUpArrow:
             model.moveSelection(by: -1)
@@ -222,3 +240,4 @@ private let kVKDelete = 51
 private let kVKUpArrow = 126
 private let kVKDownArrow = 125
 private let kVKSpace = 49
+private let kVKTab = 48
