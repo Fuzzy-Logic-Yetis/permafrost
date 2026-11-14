@@ -1160,6 +1160,8 @@ observation follow-up are explicitly recorded in BACKLOG.md before removal of th
 
 ## ADR-024: Trigram search (mid-word matching) and `app:` source-app filtering
 
+*Amended by ADR-028: `app:` now takes one word (or a quoted name) and combines with other filters and free text.*
+
 **Context.** Real bug report from live use: the project owner pinned a password-manager
 password, remembered a fragment from the *middle* of it (`ACO` from `mY7C0ACO2h`), searched
 for it, got "No matches" — despite the item being unencrypted, pinned, and directly visible
@@ -1219,6 +1221,8 @@ narrow results to "everything copied from Microsoft Edge."
   indexed) and its own ADR — tracked in docs/BACKLOG.md, not folded into this change.
 
 ## ADR-025: Independent review fixes (QR privacy/search review, 2026-10-13)
+
+*Search-escape portion amended by ADR-028: the leading `\` still makes the whole query plain text, and filters are now recognized anywhere else in the query.*
 
 **Context.** A high-effort, 8-angle independent review of the sensitive-QR feature (ADR-023)
 and the trigram/`app:` search feature (ADR-024) — both built the same day as this review —
@@ -1370,3 +1374,55 @@ the macOS runner) before it reaches `main`. In exchange, nothing reaches the bui
 runs every day without passing CI first. The owner's local build is unaffected: protection
 applies only to the GitHub branch. In an emergency the owner can lift the protection in
 the repository settings, push, and turn it back on.
+
+## ADR-028: One search grammar — filters combine in any order
+
+*Amends ADR-024 (`app:`) and ADR-025 (the `\` escape). Backlog v0.7 item 8.*
+
+**Context.** Search had grown one special case per filter. `is:concealed` had to be the whole
+query. `is:pinned`, `is:image`, `is:text` and `is:link` had to come first, and then only
+among themselves. `app:` took the entire rest of the query as its name, so it could not be
+combined with a content word at all (`app:safari invoice` searched source apps for "safari
+invoice"). Each new filter made the rules harder to explain and the parser harder to extend,
+and time filters were next in line (backlog item 9).
+
+**Decision.**
+
+1. A query is split into words. A word is a filter if it is one of `is:pinned`,
+   `is:concealed`, `is:image`, `is:text`, `is:link` (whole word, any case) or `app:<name>`
+   with a non-empty name. Every other word is free text, kept in order. Filters are
+   recognized anywhere in the query, in any order.
+2. `app:` takes one word; a name with spaces is quoted: `app:"Microsoft Edge"`. An unclosed
+   quote runs to the end of the query so a name can be typed. The panel inserts the quoted
+   form when a suggestion is accepted.
+3. Filters are ANDed with each other and with free text. `app:` and free text become one
+   FTS5 query, `{source_app}: (...) AND {text ocr_text}: (...)`, built from GRDB's own
+   escaping. Kind, pinned and concealed filters stay SQL clauses on the existing columns.
+4. A repeated kind filter or `app:` keeps the last, since neither can sensibly combine.
+5. The `\` escape is unchanged in effect: a leading `\` makes the whole query plain text.
+6. `is:concealed` composes with the other filters. Free text still never matches concealed
+   items (they store no text, ADR-011/021), so `is:concealed hunter` returns nothing. This
+   is deliberate and keeps the concealed-search decision (ADR-024's open follow-up) separate.
+7. One parser, `SearchQuery.parse`, is shared by search and by the suggestion row
+   (`SearchFilters.suggestions`), so the two cannot disagree about what a query means. The
+   list of `is:` filters shown to the user is `SearchFilters.all`; a test fails if an entry is
+   not understood by the parser.
+
+**Alternatives rejected.** Keeping leading-modifier parsing and bolting on more cases: it
+does not scale to time filters. Letting `app:` take everything up to the next filter word:
+ambiguous for names that contain a word like `is:`, and harder to explain than quotes.
+A query language with `AND`/`OR`/parentheses: far more than a clipboard panel needs.
+
+**Consequences.**
+
+- Behavior changes, all user-visible and documented in docs/UX.md: `app:microsoft edge` no
+  longer means the app "microsoft edge" (it is `app:microsoft` plus the content word `edge`;
+  use quotes); `app: nginx` (space after the colon) and a lone `app:` are plain text, so the
+  docker-compose case ADR-025 added an escape for now works without one; a filter word in
+  the middle of a sentence is now a filter, so content that contains one needs the `\` escape
+  (for example `\login is:pinned how to`); `is:concealed foo` returns nothing instead of
+  searching content for the literal text.
+- Time filters (backlog item 9) become one more word type plus a clause, with no new
+  parsing rules.
+- No schema change. Search cost is unchanged in kind: one FTS5 MATCH plus indexed column
+  filters; the ADR-024 timings (a few ms at 5,000 items) were not re-measured.

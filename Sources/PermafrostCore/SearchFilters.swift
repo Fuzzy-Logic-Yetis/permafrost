@@ -30,25 +30,27 @@ public enum SearchFilters {
     /// Suggestions for the word being typed at the end of `query`: matching `is:` filters not
     /// already used, or, after `app:`, known source apps (at most `appLimit`). Empty when the
     /// last word is neither, is already complete (including an `app:` name that exactly
-    /// matches a known app), or the query ends in a space.
+    /// matches a known app), the query ends in a space, or it starts with the `\` literal
+    /// escape. A name with spaces is suggested as `app:"two words"`.
     public static func suggestions(
         for query: String, knownApps: [String], appLimit: Int = 4
     ) -> [SearchSuggestion] {
-        let endsWithSpace = query.last?.isWhitespace == true
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return [] }
-        let parsed = ClipboardStore.leadingFilters(in: q)
-        let rest = parsed.rest
-        let prefix = String(q.dropLast(rest.count))
-        let lowered = rest.lowercased()
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("\\"),
+            let last = SearchQuery.tokens(in: query).last,
+            last.range.upperBound == query.endIndex
+        else { return [] }
+        let prefix = String(query[..<last.range.lowerBound])
+        let used = SearchQuery.parse(prefix)
+        let word = String(last.raw)
+        let lowered = word.lowercased()
 
-        if !endsWithSpace, !rest.contains(where: \.isWhitespace), lowered.hasPrefix("is:") {
+        if lowered.hasPrefix("is:"), !word.contains(where: \.isWhitespace) {
             let matches = all.filter { filter in
                 guard filter.token.hasPrefix(lowered) else { return false }
                 switch filter.token {
-                case "is:pinned": return !parsed.pinned
-                case "is:image", "is:text", "is:link": return parsed.kind == nil
-                default: return true
+                case "is:pinned": return !used.pinned
+                case "is:concealed": return !used.concealed
+                default: return used.kind == nil
                 }
             }
             if matches.count == 1, matches[0].token == lowered { return [] }
@@ -57,15 +59,19 @@ public enum SearchFilters {
             }
         }
 
-        if !endsWithSpace, lowered.hasPrefix("app:") {
-            let term = lowered.dropFirst(4).trimmingCharacters(in: .whitespaces)
-            let matches = knownApps.filter { term.isEmpty || $0.lowercased().contains(term) }
+        if lowered.hasPrefix("app:") {
+            var term = Substring(lowered.dropFirst(4))
+            if term.first == "\"" { term = term.dropFirst() }
+            if term.last == "\"" { term = term.dropLast() }
+            let needle = term.trimmingCharacters(in: .whitespaces)
+            let matches = knownApps.filter { needle.isEmpty || $0.lowercased().contains(needle) }
             // A name typed or accepted in full ends the suggestions even when longer names
             // contain it (`Safari` vs `Safari Technology Preview`); otherwise ↑/↓ would stay
             // trapped in the row with no way out but Esc.
-            if matches.contains(where: { $0.lowercased() == term }) { return [] }
-            return matches.prefix(appLimit).map {
-                SearchSuggestion(label: $0, detail: nil, query: prefix + "app:" + $0)
+            if matches.contains(where: { $0.lowercased() == needle }) { return [] }
+            return matches.prefix(appLimit).map { name in
+                let token = name.contains(where: \.isWhitespace) ? "app:\"\(name)\"" : "app:\(name)"
+                return SearchSuggestion(label: name, detail: nil, query: prefix + token)
             }
         }
         return []

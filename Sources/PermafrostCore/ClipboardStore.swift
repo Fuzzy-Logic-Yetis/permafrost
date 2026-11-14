@@ -325,70 +325,6 @@ public final class ClipboardStore: Sendable {
         return try cipher.open(encryptedData)
     }
 
-    /// A leading backslash forces literal content search, bypassing `app:` (or any future
-    /// query-syntax prefix, e.g. the planned `is:concealed`) entirely (ADR-025). Content
-    /// that genuinely starts with a recognized prefix — a copied `docker-compose.yml` line
-    /// like `app: nginx`, a Kubernetes label, a log line `App: Zoom` — is a real, plausible
-    /// thing to search for verbatim, and without an escape it's silently reinterpreted as a
-    /// filter instead of matched as content, with no indication to the user why their
-    /// search came up empty.
-    static func stripLiteralSearchEscape(from trimmed: String) -> (text: String, isLiteral: Bool) {
-        guard trimmed.hasPrefix("\\") else { return (trimmed, false) }
-        return (String(trimmed.dropFirst()), true)
-    }
-
-    /// The `app:` prefix that scopes a search to `source_app` instead of content
-    /// (ADR-024). Case-insensitive on the prefix itself; `nil` for a bare content query or
-    /// a lone `app:` with nothing after it, which falls back to literal content search of
-    /// the text "app:" rather than matching everything.
-    static func appFilterTerm(in trimmed: String) -> String? {
-        let prefix = "app:"
-        guard trimmed.lowercased().hasPrefix(prefix) else { return nil }
-        let remainder = trimmed.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
-        return remainder.isEmpty ? nil : remainder
-    }
-
-    /// `is:concealed` (exact, case-insensitive) narrows the list to items captured as
-    /// concealed. It filters on the `is_concealed` flag only: it never reads or decrypts
-    /// content, so it does not weaken the concealed-content search exclusion (ADR-011,
-    /// ADR-021). Extra text after the prefix is not a filter, so such a query falls back
-    /// to ordinary content search, same as a lone `app:`.
-    static func isConcealedFilter(in trimmed: String) -> Bool {
-        trimmed.lowercased() == "is:concealed"
-    }
-
-    /// Which kind of item an `is:image` / `is:text` / `is:link` modifier selects.
-    enum KindFilter: Equatable {
-        case image, text, link
-    }
-
-    /// Leading `is:` modifiers and the rest of the query, which is searched as usual.
-    struct LeadingFilters: Equatable {
-        var pinned = false
-        var kind: KindFilter?
-        var rest: String
-    }
-
-    /// Strips leading whole-word modifiers, in any order: `is:pinned`, `is:image`,
-    /// `is:text`, `is:link`. What remains (possibly empty) is searched as usual, so
-    /// `is:pinned login`, `is:image app:safari` and `is:pinned is:concealed` all work.
-    /// `is:pinnedx` is plain content, not a modifier.
-    static func leadingFilters(in trimmed: String) -> LeadingFilters {
-        var filters = LeadingFilters(rest: trimmed)
-        while true {
-            let word = filters.rest.prefix(while: { !$0.isWhitespace })
-            switch word.lowercased() {
-            case "is:pinned": filters.pinned = true
-            case "is:image": filters.kind = .image
-            case "is:text": filters.kind = .text
-            case "is:link": filters.kind = .link
-            default: return filters
-            }
-            filters.rest = String(filters.rest.dropFirst(word.count))
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-    }
-
     /// SQL for `is:link`: an unconcealed text item whose whole trimmed text is a single
     /// `http://` or `https://` URL (no whitespace inside). Other schemes (`mailto:`, `ftp:`,
     /// `file:`) are deliberately not links here. Concealed items have no stored text, so
@@ -419,16 +355,35 @@ public final class ClipboardStore: Sendable {
         }
     }
 
-    /// Builds an FTS5 pattern restricted to the given column(s), reusing GRDB's own
-    /// tokenization/escaping (`matchingAllPrefixesIn`) for the term itself rather than
-    /// hand-rolling it, then wrapping the already-validated pattern in an FTS5 column
-    /// filter and re-validating the combined string. `nil` on anything that doesn't
-    /// produce a valid pattern (empty input, FTS-hostile characters) — same safe-empty
-    /// contract as the plain convenience initializers.
-    private static func columnRestrictedPattern(_ text: String, columns: [String]) -> FTS5Pattern? {
-        guard let base = FTS5Pattern(matchingAllPrefixesIn: text) else { return nil }
-        let raw = "{\(columns.joined(separator: " "))}: \(base.rawPattern)"
-        return try? FTS5Pattern(rawPattern: raw, allowedColumns: columns)
+    /// Builds the FTS5 pattern for a parsed query: `app:` restricted to `source_app` and free
+    /// text to the content columns, both required when both are present. Reuses GRDB's own
+    /// tokenization/escaping (`matchingAllPrefixesIn`) for each term rather than hand-rolling
+    /// it, then re-validates the combined string. `nil` when there is nothing to match
+    /// (no app and no text); `.invalid` when a term does not produce a valid pattern
+    /// (empty after escaping, FTS-hostile characters), which must match nothing.
+    private enum PatternResult {
+        case none
+        case invalid
+        case pattern(FTS5Pattern)
+    }
+
+    private static func ftsPattern(for query: SearchQuery) -> PatternResult {
+        var parts: [String] = []
+        if let app = query.app {
+            guard let base = FTS5Pattern(matchingAllPrefixesIn: app) else { return .invalid }
+            parts.append("{source_app}: (\(base.rawPattern))")
+        }
+        if !query.text.isEmpty {
+            guard let base = FTS5Pattern(matchingAllPrefixesIn: query.text) else { return .invalid }
+            parts.append("{text ocr_text}: (\(base.rawPattern))")
+        }
+        guard !parts.isEmpty else { return .none }
+        let raw = parts.joined(separator: " AND ")
+        guard
+            let pattern = try? FTS5Pattern(
+                rawPattern: raw, allowedColumns: ["text", "ocr_text", "source_app"])
+        else { return .invalid }
+        return .pattern(pattern)
     }
 
     /// Unpinned entries first (by recency), pinned entries in their own section at
@@ -437,14 +392,14 @@ public final class ClipboardStore: Sendable {
     /// the front of the list or from the `⌘1`–`⌘9` quick-paste slots, which address
     /// only the unpinned prefix.
     ///
-    /// A non-empty query matches anywhere in the text via FTS5 trigram indexing (ADR-024),
-    /// not just from the start of a word — text rows match their body, image rows match
-    /// recognized OCR/QR metadata. An `app:` prefix (e.g. `app:edge`) searches `source_app`
-    /// instead, deliberately not merged into ordinary content search: a bare "edge" should
-    /// not also surface every unrelated item that merely came from Microsoft Edge. A
-    /// leading `\` forces literal content search instead (ADR-025). `is:concealed` lists
-    /// only concealed items, still redacted like everywhere else. Leading `is:pinned`,
-    /// `is:image`, `is:text` and `is:link` limit any of the above (see `leadingFilters`).
+    /// A query is filter words and free text in any order (ADR-028, see `SearchQuery`). Free
+    /// text matches anywhere in the text via FTS5 trigram indexing (ADR-024) — text rows match
+    /// their body, image rows match recognized OCR/QR metadata. `app:edge` or `app:"two words"`
+    /// restricts to items from that source app, never merged into content search: a bare
+    /// "edge" does not surface every item that merely came from Microsoft Edge. `is:pinned`,
+    /// `is:concealed`, `is:image`, `is:text` and `is:link` restrict by state or kind;
+    /// concealed items are listed redacted and free text never matches them (ADR-011/021). A
+    /// leading `\` makes the whole query literal text (ADR-025).
     ///
     /// `limit` caps the unpinned rows and `pinnedLimit` caps the pinned rows separately, so a
     /// long unpinned history can never push pinned items out of the result (and pinned items
@@ -452,23 +407,13 @@ public final class ClipboardStore: Sendable {
     public func items(
         matching query: String? = nil, limit: Int = 500, pinnedLimit: Int = 500
     ) throws -> [ClipboardItem] {
-        let (literalTrimmed, isLiteral) = Self.stripLiteralSearchEscape(
-            from: (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
-        // `is:pinned` and the kind filters are modifiers, not modes: whatever follows them is
-        // searched as usual, restricted to what they select.
-        let filters = isLiteral ? LeadingFilters(rest: literalTrimmed) : Self.leadingFilters(in: literalTrimmed)
-        let trimmed = filters.rest
+        let parsed = SearchQuery.parse(query ?? "")
         let pattern: FTS5Pattern?
-        if trimmed.isEmpty || (!isLiteral && Self.isConcealedFilter(in: trimmed)) {
-            pattern = nil
-        } else if !isLiteral, let appTerm = Self.appFilterTerm(in: trimmed) {
-            pattern = Self.columnRestrictedPattern(appTerm, columns: ["source_app"])
-        } else {
-            pattern = Self.columnRestrictedPattern(trimmed, columns: ["text", "ocr_text"])
+        switch Self.ftsPattern(for: parsed) {
+        case .none: pattern = nil
+        case .invalid: return []
+        case .pattern(let value): pattern = value
         }
-        let concealedOnly = !trimmed.isEmpty && !isLiteral && Self.isConcealedFilter(in: trimmed)
-        // A non-empty content/app query whose pattern is invalid matches nothing.
-        if !trimmed.isEmpty, !concealedOnly, pattern == nil { return [] }
 
         return try dbQueue.read { db in
             func fetch(pinned: Bool, limit: Int) throws -> [ClipboardItem] {
@@ -477,8 +422,8 @@ public final class ClipboardStore: Sendable {
                     ? "ORDER BY pin_order DESC LIMIT ?"
                     : "ORDER BY last_used_at DESC LIMIT ?"
                 var clauses = ["clipboard_item.is_pinned = \(pinned ? 1 : 0)"]
-                if concealedOnly { clauses.append("clipboard_item.is_concealed = 1") }
-                switch filters.kind {
+                if parsed.concealed { clauses.append("clipboard_item.is_concealed = 1") }
+                switch parsed.kind {
                 case .image: clauses.append("clipboard_item.kind = 'image'")
                 case .text: clauses.append("clipboard_item.kind = 'text'")
                 case .link: clauses.append("(\(Self.linkClause))")
@@ -505,7 +450,7 @@ public final class ClipboardStore: Sendable {
                     arguments: arguments
                 )
             }
-            if filters.pinned { return try fetch(pinned: true, limit: pinnedLimit) }
+            if parsed.pinned { return try fetch(pinned: true, limit: pinnedLimit) }
             return try fetch(pinned: false, limit: limit) + fetch(pinned: true, limit: pinnedLimit)
         }
     }

@@ -250,6 +250,12 @@ outside the app (e.g. CI or a broken build that won't launch):
     containing a URL, and take a screenshot. `is:link` → only the bare URL; `is:text` → the
     text items, not the screenshot; `is:image` → only the screenshot; `is:image` plus a word
     in the screenshot's OCR text finds it. A concealed item never appears under `is:link`.
+5i. **Search grammar** (ADR-028): with items from two apps and one screenshot, type
+    `invoice is:image` and `is:image invoice` → same results. `app:<name> <word>` narrows by
+    app and content together, in either order. Copy something from an app whose name has a
+    space; accept it from the `app:` suggestions → the field shows `app:"Two Words"` and
+    filters. `is:concealed app:<name>` lists concealed items from that app, redacted;
+    `is:concealed <word>` shows nothing. `\login is:pinned` searches for that exact text.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.

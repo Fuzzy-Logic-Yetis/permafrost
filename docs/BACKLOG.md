@@ -269,12 +269,12 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    is one `http://` or `https://` URL (other schemes are not links); concealed items never
    match it. `is:text` lists text-kind items, concealed ones still redacted. Separate
    pinned/unpinned caps kept. No schema change, no ADR.
-8. **One search grammar: filters combine in any order.** Today `is:concealed` must be the
-   whole query and `is:pinned` must come first; each new filter makes that worse. Parse
-   the query into filter tokens (`is:*`, `app:*`, later `age:*`) plus free text, in any
-   order, e.g. `is:image app:safari invoice`. Keep `\` as the literal escape. Changes how
-   search reads, so it needs an ADR (amends ADR-024/025). Do after 6 and 7, before more
-   filters.
+8. ~~One search grammar: filters combine in any order~~ — **DONE 2026-11-14, ADR-028.**
+   Filters (`is:*`, `app:*`) are recognized anywhere in the query and combine with each other
+   and with free text: `is:image app:safari invoice`. `app:` takes one word or a quoted name
+   (`app:"Microsoft Edge"`). `\` still escapes. One parser (`SearchQuery.parse`) serves both
+   search and the suggestion row. Behavior changes are listed in the ADR. Item 9 now needs
+   only a new word type and a clause.
 9. **Time filters.** `today`, `age:<2h`, `age:<1d` for "what did I copy this morning", on
    `last_used_at` (or capture time; decide in the ADR for 8). Not `is:>30`: with the
    default 30-day retention, nothing unpinned is older than that. Not `is:oldest`: it is a
