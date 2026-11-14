@@ -17,21 +17,7 @@ import PermafrostCore
         return (store, model, pasteService)
     }
 
-    @Test func appSuggestionsOfferKnownAppsOnlyWhileTypingAppFilter() throws {
-        let apps = ["Microsoft Edge", "TextEdit", "Safari"]
-
-        #expect(PanelModel.appSuggestions(for: "", among: apps).isEmpty)
-        #expect(PanelModel.appSuggestions(for: "edge", among: apps).isEmpty)
-        #expect(PanelModel.appSuggestions(for: "app:", among: apps) == apps)
-        #expect(PanelModel.appSuggestions(for: "APP:ed", among: apps) == ["Microsoft Edge", "TextEdit"])
-        #expect(PanelModel.appSuggestions(for: "app:saf", among: apps) == ["Safari"])
-        #expect(PanelModel.appSuggestions(for: "app:zzz", among: apps).isEmpty)
-        // Fully typed, single match: nothing left to suggest.
-        #expect(PanelModel.appSuggestions(for: "app:safari", among: apps).isEmpty)
-        #expect(PanelModel.appSuggestions(for: "app:", among: apps, limit: 2).count == 2)
-    }
-
-    @Test func showLoadsKnownAppsAndSuggestionFiltersTheList() throws {
+    @Test func appSuggestionsLoadAtShowAndAcceptingOneFiltersTheList() throws {
         let (store, model, _) = try makeModel()
         try store.save(ClipboardCapture(text: "a", sourceApp: "Safari"), now: now)
         try store.save(
@@ -39,12 +25,53 @@ import PermafrostCore
         model.prepareForShow()
         model.query = "app:"
 
-        #expect(model.appSuggestions == ["TextEdit", "Safari"])
+        #expect(model.suggestions.map(\.label) == ["TextEdit", "Safari"])
 
-        model.applyAppSuggestion("Safari")
+        model.acceptSuggestion(at: 1)
 
         #expect(model.query == "app:Safari")
         #expect(model.items.map(\.text) == ["a"])
+        #expect(model.suggestions.isEmpty)
+    }
+
+    @Test func tabAcceptsTheHighlightedFilterAndArrowsMoveTheHighlight() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "a", sourceApp: "Safari"), now: now)
+        model.prepareForShow()
+        model.query = "is:"
+
+        #expect(model.suggestions.map(\.label) == SearchFilters.all.map(\.token))
+        #expect(model.suggestionIndex == 0)
+
+        model.moveSuggestionSelection(by: 1)
+        model.moveSuggestionSelection(by: 1)
+        #expect(model.suggestionIndex == 2)
+        model.moveSuggestionSelection(by: -10)
+        #expect(model.suggestionIndex == 0)
+        model.moveSuggestionSelection(by: 99)
+        #expect(model.suggestionIndex == SearchFilters.all.count - 1)
+
+        model.moveSuggestionSelection(by: -99)
+        model.moveSuggestionSelection(by: 1)
+        model.acceptHighlightedSuggestion()
+
+        #expect(model.query == "is:concealed ")
+        // Typing resets the highlight to the first row.
+        model.query = "is:"
+        #expect(model.suggestionIndex == 0)
+    }
+
+    @Test func acceptingWithNoSuggestionsOrABadIndexChangesNothing() throws {
+        let (_, model, _) = try makeModel()
+        model.prepareForShow()
+        model.query = "invoice"
+
+        model.acceptHighlightedSuggestion()
+        model.acceptSuggestion(at: 7)
+        model.moveSuggestionSelection(by: 1)
+
+        #expect(model.query == "invoice")
+        #expect(model.suggestionIndex == 0)
     }
 
     @Test func openingFilterAppRequiresAListedAppWithAName() {

@@ -487,4 +487,60 @@ import Testing
             "https://recent.example/4", "https://recent.example/3", "https://pinned.example",
         ])
     }
+
+    // MARK: - Filter suggestions
+
+    /// Drift guard: a filter listed for suggestion must be one the search actually understands.
+    @Test func everyListedFilterIsRecognizedByTheParser() throws {
+        let store = try ClipboardStore.inMemory()
+        for filter in SearchFilters.all {
+            let parsed = ClipboardStore.leadingFilters(in: filter.token)
+            let recognized =
+                parsed.pinned || parsed.kind != nil || ClipboardStore.isConcealedFilter(in: filter.token)
+            #expect(recognized, "\(filter.token) is listed but not parsed")
+            #expect(filter.token.hasPrefix("is:"))
+            #expect(!filter.summary.isEmpty)
+            _ = try store.items(matching: filter.token)  // and it runs
+        }
+        #expect(Set(SearchFilters.all.map(\.token)).count == SearchFilters.all.count)
+    }
+
+    @Test func isPrefixListsFiltersAndNarrowsAsYouType() {
+        let all = SearchFilters.all.map(\.token)
+
+        #expect(SearchFilters.suggestions(for: "is:", knownApps: []).map(\.label) == all)
+        #expect(SearchFilters.suggestions(for: "IS:p", knownApps: []).map(\.label) == ["is:pinned"])
+        #expect(SearchFilters.suggestions(for: "is:i", knownApps: []).map(\.label) == ["is:image"])
+        #expect(SearchFilters.suggestions(for: "is:zzz", knownApps: []).isEmpty)
+        // Complete word, trailing space, or not a filter prefix: nothing to suggest.
+        #expect(SearchFilters.suggestions(for: "is:pinned", knownApps: []).isEmpty)
+        #expect(SearchFilters.suggestions(for: "is:pinned ", knownApps: []).isEmpty)
+        #expect(SearchFilters.suggestions(for: "", knownApps: []).isEmpty)
+        #expect(SearchFilters.suggestions(for: "invoice", knownApps: []).isEmpty)
+        #expect(SearchFilters.suggestions(for: "login is:", knownApps: []).isEmpty)
+    }
+
+    @Test func suggestionsSkipFiltersAlreadyUsedAndKeepTheEarlierWords() throws {
+        let afterPinned = SearchFilters.suggestions(for: "is:pinned is:", knownApps: [])
+        #expect(afterPinned.map(\.label) == ["is:concealed", "is:image", "is:text", "is:link"])
+        #expect(afterPinned.first?.query == "is:pinned is:concealed ")
+
+        let afterKind = SearchFilters.suggestions(for: "is:image is:", knownApps: [])
+        #expect(afterKind.map(\.label) == ["is:pinned", "is:concealed"])
+    }
+
+    @Test func appSuggestionsFilterKnownAppsAndComposeAfterModifiers() {
+        let apps = ["Microsoft Edge", "TextEdit", "Safari"]
+
+        #expect(SearchFilters.suggestions(for: "app:", knownApps: apps).map(\.label) == apps)
+        #expect(
+            SearchFilters.suggestions(for: "APP:ed", knownApps: apps).map(\.label)
+                == ["Microsoft Edge", "TextEdit"])
+        #expect(SearchFilters.suggestions(for: "app:zzz", knownApps: apps).isEmpty)
+        #expect(SearchFilters.suggestions(for: "app:safari", knownApps: apps).isEmpty)
+        #expect(SearchFilters.suggestions(for: "app:", knownApps: apps, appLimit: 2).count == 2)
+        #expect(SearchFilters.suggestions(for: "edge", knownApps: apps).isEmpty)
+        let composed = SearchFilters.suggestions(for: "is:pinned app:saf", knownApps: apps)
+        #expect(composed.map(\.query) == ["is:pinned app:Safari"])
+    }
 }

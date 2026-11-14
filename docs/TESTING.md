@@ -230,10 +230,12 @@ outside the app (e.g. CI or a broken build that won't launch):
 5c. **`is:concealed`**: with a concealed item in history (copy from a password manager that
     sets the concealed marker, with the opt-in on), type `is:concealed` → only concealed
     items show, still redacted. `\is:concealed` searches for that literal text instead.
-5d. **`app:` hint**: the empty search field's placeholder mentions `app:` and `is:concealed`.
-    Type `app:` → up to four recent source apps appear below the field; keep typing
-    (`app:ed`) → the list narrows; click one → the query becomes `app:<name>` and the list
-    filters. Type a full single app name → the buttons disappear.
+5d. **Filter suggestions**: the empty field's placeholder says "type is: for filters". Type
+    `is:` → five filters listed with descriptions; `is:p` narrows to `is:pinned`. `↓`/`↑`
+    move the highlight, `Tab` fills in the highlighted filter plus a space; clicking a row
+    does the same. Type `app:` → up to four recent source apps; `app:ed` narrows; `Tab` or a
+    click fills in `app:<name>`. `is:pinned is:` omits `is:pinned`. With nothing showing,
+    `↑`/`↓` still move the list. Verify `Tab` does nothing odd when no suggestions show.
 5e. **`is:pinned`**: pin an item containing "login", copy another containing "login", then
     type `is:pinned` → only pinned items; `is:pinned login` → only the pinned one. The
     placeholder mentions `is:pinned`.

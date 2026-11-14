@@ -238,8 +238,7 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
 3. ~~`app:` syntax discoverability~~ — **DONE 2026-11-13.** Placeholder text names `app:`
    and `is:concealed`; typing `app:` shows up to four known source apps as buttons
    (`ClipboardStore.distinctSourceApps()`, read at panel open). UI-only, no schema.
-   - **Deferred:** keyboard acceptance of a suggestion (Tab/arrows). The row is
-     mouse-only, which is out of step with the keyboard-first goal.
+   - ~~Deferred: keyboard acceptance of a suggestion~~ — done with item 6.
 
 4. ~~`is:pinned` filter~~ — **DONE 2026-11-13.** Reaching a pinned saved login meant scrolling
    past the whole history, because pinned items sort last (ADR-012, unchanged). `is:pinned`
@@ -255,12 +254,13 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
      name can also match other apps whose name contains it (for example "Code" and
      "Xcode").
 
-6. **`is:` filter suggestions (quick win).** Typing `is:` shows every filter as a button
-   with a few words each (`is:pinned` saved items, `is:concealed` passwords, and later
-   ones), reusing the `app:` suggestion row. The placeholder becomes generic ("type is: for
-   filters") so it never needs rewording when a filter is added. Do the deferred keyboard
-   acceptance (Tab/arrows) for both rows here. UI-only, no schema. Requested by Anthony
-   2026-11-13.
+6. ~~`is:` filter suggestions~~ — **DONE 2026-11-13.** Typing `is:` lists every filter with a
+   few words each, from one list in core (`SearchFilters.all`; a test fails if an entry isn't
+   something the parser understands, so a new filter is one entry plus its parsing). The
+   placeholder is generic ("type is: for filters"). The `app:` suggestions use the same rows
+   and now work after leading filters. Keyboard acceptance (item 3's deferred part) is done
+   for both: `Tab` accepts, `↑`/`↓` move the highlight while suggestions show. UI-only, no
+   schema.
    - **Not doing:** aliases (`is:secured`, `is:hidden`) for `is:concealed`. The suggestion
      row solves "what was it called"; if the word is wrong, rename it once instead.
 7. ~~`is:image` / `is:text` / `is:link`~~ — **DONE 2026-11-13.** Filters on the existing `kind`

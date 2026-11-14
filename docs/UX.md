@@ -18,10 +18,14 @@ If an interaction needs the mouse, it's a bug in the design.
   modes don't blend into each other. A leading `\` forces literal content search instead,
   for content that happens to start with a recognized prefix (ADR-025) — e.g. `\app: nginx`
   searches for that literal text rather than filtering to an app named "nginx".
-- Discoverability: the search placeholder names both filters ("try is:pinned or app:").
-  Typing `app:` shows up to four known source apps as buttons under the field, narrowed as
-  you type; clicking one fills in `app:<name>`. The list is read when the panel opens, and
-  the row disappears once the typed name is the only match. Mouse-only for now (backlog).
+- Discoverability: the placeholder is generic ("type is: for filters") so it never needs
+  rewording. Typing `is:` lists every filter with a few words each (from one list in core,
+  `SearchFilters.all`), narrowed as you type and skipping ones already used. Typing `app:`
+  lists up to four known source apps (read when the panel opens). Both work after leading
+  filters (`is:pinned app:saf`). Rows are clickable; `Tab` accepts the highlighted row and
+  `↑`/`↓` move the highlight while suggestions are showing (typing more, or `Esc`, dismisses
+  them; with none showing, `↑`/`↓` move the list as usual). The list disappears once the
+  typed word is complete or when the query ends in a space.
 - `is:concealed` (the whole query) lists only items captured as concealed, still redacted.
   It filters on the existing `is_concealed` flag and never reads or decrypts content, so
   concealed items remain excluded from content search. Pinned items still sort last.

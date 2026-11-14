@@ -13,7 +13,7 @@ struct PanelView: View {
         ZStack {
             VStack(spacing: 0) {
                 searchBar
-                appSuggestionBar
+                suggestionBar
                 Divider()
                 if model.items.isEmpty {
                     emptyState
@@ -57,7 +57,7 @@ struct PanelView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Search — try is:pinned or app:", text: $model.query)
+            TextField("Search — type is: for filters", text: $model.query)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
         }
@@ -70,18 +70,37 @@ struct PanelView: View {
     }
 
     @ViewBuilder
-    private var appSuggestionBar: some View {
-        let suggestions = model.appSuggestions
+    private var suggestionBar: some View {
+        let suggestions = model.suggestions
         if !suggestions.isEmpty {
-            HStack(spacing: 6) {
-                ForEach(suggestions, id: \.self) { app in
-                    Button(app) { model.applyAppSuggestion(app) }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(suggestions.enumerated()), id: \.element.id) { index, suggestion in
+                    Button {
+                        model.acceptSuggestion(at: index)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Text(suggestion.label).fontWeight(.medium)
+                            if let detail = suggestion.detail {
+                                Text(detail).foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            if index == model.suggestionIndex {
+                                Text("⇥").foregroundStyle(.tertiary)
+                            }
+                        }
+                        .font(.callout)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            index == model.suggestionIndex ? Color.accentColor.opacity(0.18) : .clear,
+                            in: RoundedRectangle(cornerRadius: 5))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 8)
             .padding(.bottom, 8)
         }
     }
