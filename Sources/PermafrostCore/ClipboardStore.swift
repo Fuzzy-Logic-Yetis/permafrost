@@ -404,8 +404,12 @@ public final class ClipboardStore: Sendable {
     /// `limit` caps the unpinned rows and `pinnedLimit` caps the pinned rows separately, so a
     /// long unpinned history can never push pinned items out of the result (and pinned items
     /// never use up the unpinned budget).
+    ///
+    /// `is:today` and `age:<2h` filter on `last_used_at` (ADR-029), relative to `now`; `calendar`
+    /// decides where "today" starts.
     public func items(
-        matching query: String? = nil, limit: Int = 500, pinnedLimit: Int = 500
+        matching query: String? = nil, limit: Int = 500, pinnedLimit: Int = 500,
+        now: Date = Date(), calendar: Calendar = .current
     ) throws -> [ClipboardItem] {
         let parsed = SearchQuery.parse(query ?? "")
         let pattern: FTS5Pattern?
@@ -417,6 +421,7 @@ public final class ClipboardStore: Sendable {
 
         return try dbQueue.read { db in
             func fetch(pinned: Bool, limit: Int) throws -> [ClipboardItem] {
+                var timeArguments: [Date] = []
                 let ordering =
                     pinned
                     ? "ORDER BY pin_order DESC LIMIT ?"
@@ -431,6 +436,14 @@ public final class ClipboardStore: Sendable {
                 }
                 var arguments: StatementArguments = []
                 var join = ""
+                if parsed.today {
+                    clauses.append("clipboard_item.last_used_at >= ?")
+                    timeArguments.append(calendar.startOfDay(for: now))
+                }
+                if let maxAge = parsed.maxAge {
+                    clauses.append("clipboard_item.last_used_at >= ?")
+                    timeArguments.append(now.addingTimeInterval(-maxAge))
+                }
                 if let pattern {
                     join = """
                         JOIN clipboard_item_fts
@@ -439,6 +452,8 @@ public final class ClipboardStore: Sendable {
                         """
                     arguments += [pattern]
                 }
+                // Placeholder order in the SQL: MATCH, then the WHERE time bounds, then LIMIT.
+                for bound in timeArguments { arguments += [bound] }
                 arguments += [limit]
                 return try ClipboardItem.fetchAll(
                     db,

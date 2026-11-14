@@ -460,11 +460,13 @@ import Testing
 
     @Test func suggestionsSkipFiltersAlreadyUsedAndKeepTheEarlierWords() throws {
         let afterPinned = SearchFilters.suggestions(for: "is:pinned is:", knownApps: [])
-        #expect(afterPinned.map(\.label) == ["is:concealed", "is:image", "is:text", "is:link"])
+        #expect(
+            afterPinned.map(\.label)
+                == ["is:concealed", "is:image", "is:text", "is:link", "is:today"])
         #expect(afterPinned.first?.query == "is:pinned is:concealed ")
 
         let afterKind = SearchFilters.suggestions(for: "is:image is:", knownApps: [])
-        #expect(afterKind.map(\.label) == ["is:pinned", "is:concealed"])
+        #expect(afterKind.map(\.label) == ["is:pinned", "is:concealed", "is:today"])
     }
 
     @Test func appSuggestionsFilterKnownAppsAndComposeAfterModifiers() {
@@ -642,5 +644,104 @@ import Testing
         // Punctuation-only words are dropped by the tokenizer rather than failing the query.
         _ = try store.items(matching: "app:safari ((( invoice")
         #expect(try store.items(matching: "is:image \"unterminated").isEmpty)
+    }
+
+    // MARK: - Time filters (ADR-029)
+
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    /// 2033-05-18 03:33:20 UTC, so "today" began 3h33m before `anchor`.
+    private var anchor: Date { Date(timeIntervalSince1970: 2_000_000_000) }
+
+    private func timeFixture() throws -> ClipboardStore {
+        let store = try ClipboardStore.inMemory()
+        for (text, age) in [
+            ("invoice ten minutes", 600.0), ("invoice three hours", 3 * 3600.0),
+            ("invoice twelve hours", 12 * 3600.0), ("invoice thirty hours", 30 * 3600.0), ("note ten days", 10 * 86400.0),
+        ] {
+            try store.save(ClipboardCapture(text: text), now: anchor.addingTimeInterval(-age))
+        }
+        return store
+    }
+
+    private func texts(_ store: ClipboardStore, _ query: String) throws -> [String?] {
+        try store.items(matching: query, now: anchor, calendar: utc).map(\.text)
+    }
+
+    @Test func ageFiltersUseLastUsedTimeRelativeToNow() throws {
+        let store = try timeFixture()
+
+        #expect(try texts(store, "age:<30m") == ["invoice ten minutes"])
+        #expect(try texts(store, "age:<2h") == ["invoice ten minutes"])
+        #expect(try texts(store, "age:<4h").count == 2)
+        #expect(try texts(store, "age:<1d").count == 3)
+        #expect(try texts(store, "age:<2d").count == 4)
+        #expect(try texts(store, "age:<30d").count == 5)
+        #expect(try texts(store, "AGE:<2H") == ["invoice ten minutes"])
+    }
+
+    @Test func isTodayStartsAtMidnightInTheGivenCalendar() throws {
+        let store = try timeFixture()
+
+        // 03:33 UTC: the 3-hour-old item (00:33) is today, the 30-hour-old one is not.
+        #expect(try texts(store, "is:today").count == 2)
+        // Seen from Los Angeles it is 20:33 the evening before, so "today" began 20.5h ago and
+        // also includes the 12-hour-old item, but not the 30-hour-old one.
+        var pacific = utc
+        pacific.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let pacificTexts = try store.items(matching: "is:today", now: anchor, calendar: pacific)
+        #expect(pacificTexts.count == 3)
+    }
+
+    @Test func timeFiltersComposeWithContentOtherFiltersAndEachOther() throws {
+        let store = try timeFixture()
+
+        #expect(try texts(store, "age:<1d invoice").count == 3)
+        #expect(try texts(store, "invoice age:<2h") == ["invoice ten minutes"])
+        #expect(try texts(store, "is:today age:<2h") == ["invoice ten minutes"])
+        #expect(try texts(store, "is:today note").isEmpty)
+        #expect(try texts(store, "age:<2h age:<30d").count == 5)  // last age wins
+        let pinned = try #require(store.items(matching: "ten minutes").first)
+        try store.setPinned(true, id: try #require(pinned.id))
+        #expect(try texts(store, "is:pinned age:<1h") == ["invoice ten minutes"])
+        #expect(try texts(store, "is:pinned age:<5m").isEmpty)
+    }
+
+    @Test func usingAnItemAgainBringsItBackIntoTheWindow() throws {
+        let store = try timeFixture()
+        let old = try #require(store.items(matching: "note ten days").first)
+        #expect(try texts(store, "age:<1d").count == 3)
+
+        try store.markUsed(id: try #require(old.id), now: anchor.addingTimeInterval(-60))
+
+        #expect(try texts(store, "age:<1d").count == 4)
+    }
+
+    @Test func malformedAgeWordsAreOrdinaryText() throws {
+        typealias Q = SearchQuery
+        for word in ["age:<2x", "age:2h", "age:<h", "age:<0h", "age:<-2h", "age:<123456h", "age:<2.5h", "age:<"] {
+            #expect(Q.parse(word) == Q(text: word), "\(word)")
+        }
+        #expect(Q.parse("age:<2h") == Q(maxAge: 7200))
+        #expect(Q.parse("age:<90m") == Q(maxAge: 5400))
+        #expect(Q.parse("age:<3d is:today") == Q(today: true, maxAge: 259_200))
+        #expect(Q.parse("\\age:<2h") == Q(text: "age:<2h"))
+    }
+
+    @Test func ageSuggestionsListExamplesAndEndOnAValidValue() {
+        let all = SearchFilters.ageExamples.map(\.token)
+
+        #expect(SearchFilters.suggestions(for: "age:", knownApps: []).map(\.label) == all)
+        #expect(SearchFilters.suggestions(for: "age:<2", knownApps: []).map(\.label) == ["age:<2h"])
+        #expect(SearchFilters.suggestions(for: "age:<2h", knownApps: []).isEmpty)
+        #expect(SearchFilters.suggestions(for: "age:<5h", knownApps: []).isEmpty)  // valid, any N
+        #expect(SearchFilters.suggestions(for: "is:image age:<", knownApps: []).count == all.count)
+        for example in SearchFilters.ageExamples {
+            #expect(SearchQuery.ageSeconds(in: example.token) != nil, "\(example.token)")
+        }
     }
 }

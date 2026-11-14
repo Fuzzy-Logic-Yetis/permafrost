@@ -256,6 +256,9 @@ outside the app (e.g. CI or a broken build that won't launch):
     space; accept it from the `app:` suggestions → the field shows `app:"Two Words"` and
     filters. `is:concealed app:<name>` lists concealed items from that app, redacted;
     `is:concealed <word>` shows nothing. `\login is:pinned` searches for that exact text.
+5j. **Time filters** (ADR-029): `is:today` → items used since midnight only; `age:<1h` →
+    items used in the last hour; paste an old item again, then `age:<1h` → it now appears.
+    Type `age:` → four examples; `Tab` accepts one. `age:2h` (no `<`) searches for that text.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.
