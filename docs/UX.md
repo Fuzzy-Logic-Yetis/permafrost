@@ -25,7 +25,8 @@ If an interaction needs the mouse, it's a bug in the design.
   filters (`is:pinned app:saf`). Rows are clickable; `Tab` accepts the highlighted row and
   `↑`/`↓` move the highlight while suggestions are showing (typing more, or `Esc`, dismisses
   them; with none showing, `↑`/`↓` move the list as usual). The list disappears once the
-  typed word is complete or when the query ends in a space.
+  typed word is complete (an `app:` name that exactly matches a known app counts, even if a
+  longer name contains it) or when the query ends in a space.
 - `is:concealed` (the whole query) lists only items captured as concealed, still redacted.
   It filters on the existing `is_concealed` flag and never reads or decrypts content, so
   concealed items remain excluded from content search. Pinned items still sort last.

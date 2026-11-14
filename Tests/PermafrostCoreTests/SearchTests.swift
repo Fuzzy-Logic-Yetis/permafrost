@@ -543,4 +543,29 @@ import Testing
         let composed = SearchFilters.suggestions(for: "is:pinned app:saf", knownApps: apps)
         #expect(composed.map(\.query) == ["is:pinned app:Safari"])
     }
+
+    @Test func appSuggestionsEndOnATrailingSpace() {
+        let apps = ["Safari", "Safari Technology Preview"]
+
+        #expect(SearchFilters.suggestions(for: "app:Safari ", knownApps: apps).isEmpty)
+        #expect(SearchFilters.suggestions(for: "app:saf ", knownApps: apps).isEmpty)
+        #expect(SearchFilters.suggestions(for: "is:pinned app:saf ", knownApps: apps).isEmpty)
+    }
+
+    /// Accepting `Safari` must dismiss the row even though a longer app name still contains it,
+    /// or the arrow keys stay captured by the suggestions.
+    @Test func acceptingAnAppThatIsAPrefixOfAnotherEndsTheSuggestions() throws {
+        let apps = ["Safari", "Safari Technology Preview"]
+        let typed = SearchFilters.suggestions(for: "app:saf", knownApps: apps)
+        #expect(typed.map(\.label) == apps)
+
+        let accepted = try #require(typed.first).query
+
+        #expect(accepted == "app:Safari")
+        #expect(SearchFilters.suggestions(for: accepted, knownApps: apps).isEmpty)
+        // The longer name is still reachable by typing on or accepting it.
+        #expect(
+            SearchFilters.suggestions(for: "app:Safari T", knownApps: apps).map(\.label)
+                == ["Safari Technology Preview"])
+    }
 }

@@ -29,7 +29,8 @@ public enum SearchFilters {
 
     /// Suggestions for the word being typed at the end of `query`: matching `is:` filters not
     /// already used, or, after `app:`, known source apps (at most `appLimit`). Empty when the
-    /// last word is neither, is already complete, or the query ends in a space.
+    /// last word is neither, is already complete (including an `app:` name that exactly
+    /// matches a known app), or the query ends in a space.
     public static func suggestions(
         for query: String, knownApps: [String], appLimit: Int = 4
     ) -> [SearchSuggestion] {
@@ -56,10 +57,13 @@ public enum SearchFilters {
             }
         }
 
-        if lowered.hasPrefix("app:") {
+        if !endsWithSpace, lowered.hasPrefix("app:") {
             let term = lowered.dropFirst(4).trimmingCharacters(in: .whitespaces)
             let matches = knownApps.filter { term.isEmpty || $0.lowercased().contains(term) }
-            if matches.count == 1, matches[0].lowercased() == term { return [] }
+            // A name typed or accepted in full ends the suggestions even when longer names
+            // contain it (`Safari` vs `Safari Technology Preview`); otherwise ↑/↓ would stay
+            // trapped in the row with no way out but Esc.
+            if matches.contains(where: { $0.lowercased() == term }) { return [] }
             return matches.prefix(appLimit).map {
                 SearchSuggestion(label: $0, detail: nil, query: prefix + "app:" + $0)
             }
