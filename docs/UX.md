@@ -12,30 +12,31 @@ If an interaction needs the mouse, it's a bug in the design.
   text attached to image/snipping rows once OCR has run. Matching works anywhere in the
   text, not just from a word's start (ADR-024) — a fragment from the middle of a password
   or code matches, though a query under 3 characters won't (the index granularity's floor).
-- `app:` + part of an app's name (e.g. `app:edge`) filters to items copied from that app,
-  via the already-captured, already-displayed source-app metadata. Scoped deliberately:
-  plain search never matches on source app, and `app:` never matches on content — the two
-  modes don't blend into each other. A leading `\` forces literal content search instead,
-  for content that happens to start with a recognized prefix (ADR-025) — e.g. `\app: nginx`
-  searches for that literal text rather than filtering to an app named "nginx".
+- **Search grammar** (ADR-028). A query is filter words and free text, in any order:
+  `is:image app:safari invoice` and `invoice app:safari is:image` are the same search.
+  Filter words are whole words, any case: `is:pinned` (saved items; they sort last, ADR-012,
+  so this is the way to reach a saved login without scrolling), `is:concealed` (items
+  captured as concealed, still redacted), `is:image`, `is:text`, `is:link` (an unconcealed
+  text item whose whole trimmed text is one `http://` or `https://` URL; `mailto:`, `ftp:`
+  and other schemes are not links), and `app:<name>` (items copied from that app, a
+  substring of its name, e.g. `app:edge`; use quotes for a name with spaces:
+  `app:"Microsoft Edge"`). Everything else is free text, matched anywhere in an item's text
+  (images: their recognized text). Filters never blend into free text in either direction: a
+  bare `edge` does not match source app, and `app:` never matches content. Concealed items
+  have no searchable text, so free text never matches them: `is:concealed app:safari` works,
+  `is:concealed hunter` returns nothing (ADR-011/021). A repeated kind filter or `app:`
+  keeps the last. `is:pinnedx`, `is:foo`, a lone `app:` and `app: nginx` (space after the
+  colon) are plain text. A leading `\` makes the whole query plain text (ADR-025), for
+  content that really contains a filter word, such as `\login is:pinned how to`.
 - Discoverability: the placeholder is generic ("type is: for filters") so it never needs
   rewording. Typing `is:` lists every filter with a few words each (from one list in core,
   `SearchFilters.all`), narrowed as you type and skipping ones already used. Typing `app:`
-  lists up to four known source apps (read when the panel opens). Both work after leading
-  filters (`is:pinned app:saf`). Rows are clickable; `Tab` accepts the highlighted row and
+  lists up to four known source apps (read when the panel opens). Both work anywhere in the query
+  (`is:pinned app:saf`); a name with spaces is inserted quoted. Rows are clickable; `Tab` accepts the highlighted row and
   `↑`/`↓` move the highlight while suggestions are showing (typing more, or `Esc`, dismisses
   them; with none showing, `↑`/`↓` move the list as usual). The list disappears once the
   typed word is complete (an `app:` name that exactly matches a known app counts, even if a
   longer name contains it) or when the query ends in a space.
-- `is:concealed` (the whole query) lists only items captured as concealed, still redacted.
-  It filters on the existing `is_concealed` flag and never reads or decrypts content, so
-  concealed items remain excluded from content search. Pinned items still sort last.
-  `\is:concealed` or any extra text falls back to ordinary content search.
-- `is:pinned` as the first word restricts results to pinned items, and whatever follows is
-  searched as usual: `is:pinned login`, `is:pinned app:edge`, `is:pinned is:concealed`.
-  Pinned items sit below unpinned ones (ADR-012), so this is the way to reach a saved
-  login without scrolling the whole history. `is:pinnedx` is plain content, and `\` forces
-  literal search as with the other prefixes.
 - Settings → Open Filtered Apps: when the panel opens while a listed app is frontmost, the
   query starts as `app:<that app>` (visible in the field; `Esc` clears it). The frontmost
   app is read before the panel takes focus, by bundle ID, and the filter uses the app's
@@ -47,12 +48,6 @@ If an interaction needs the mouse, it's a bug in the design.
 - Clearing history (menu or Settings) waits for any in-flight capture work, then deletes;
   nothing copied before the clear can reappear afterwards, including concealed text that was
   still waiting for the Keychain key.
-- `is:image`, `is:text` and `is:link` as leading words (combinable with `is:pinned`, in any
-  order, and with whatever follows) restrict results to that kind. `is:link` means an
-  unconcealed text item whose whole trimmed text is a single `http://` or `https://` URL;
-  `mailto:`, `ftp:` and other schemes are not links. Concealed items never match `is:link`
-  (they have no stored text and nothing is decrypted); `is:text` lists text-kind items,
-  concealed ones still redacted. Words later in the query are content, not filters.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 

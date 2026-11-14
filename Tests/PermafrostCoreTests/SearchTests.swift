@@ -163,16 +163,6 @@ import Testing
         #expect(try store.items(matching: "app:").map(\.text) == ["see app: for details"])
     }
 
-    @Test func appFilterTermParsing() {
-        #expect(ClipboardStore.appFilterTerm(in: "app:edge") == "edge")
-        #expect(ClipboardStore.appFilterTerm(in: "app: edge") == "edge")
-        #expect(ClipboardStore.appFilterTerm(in: "APP:Edge") == "Edge")
-        #expect(ClipboardStore.appFilterTerm(in: "app:") == nil)
-        #expect(ClipboardStore.appFilterTerm(in: "app:   ") == nil)
-        #expect(ClipboardStore.appFilterTerm(in: "application:edge") == nil)
-        #expect(ClipboardStore.appFilterTerm(in: "edge") == nil)
-    }
-
     // MARK: - Literal search escape (ADR-025)
 
     /// The bug a leading `\` exists to fix: content that genuinely starts with "app:" —
@@ -183,21 +173,12 @@ import Testing
         try store.save(
             ClipboardCapture(text: "unrelated", sourceApp: "nginx"), now: now.addingTimeInterval(1))
 
-        // Unescaped: hijacked into an app: filter, matches the Edge-equivalent row only.
-        #expect(try store.items(matching: "app: nginx").map(\.text) == ["unrelated"])
-        // Escaped: literal content search, matches the docker-compose-style line instead.
+        // `app:` needs its value attached (ADR-028), so `app: nginx` is already plain text.
+        #expect(try store.items(matching: "app: nginx").map(\.text) == ["app: nginx"])
         #expect(try store.items(matching: "\\app: nginx").map(\.text) == ["app: nginx"])
-    }
-
-    @Test func stripLiteralSearchEscapeParsing() {
-        #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\app: nginx").text == "app: nginx")
-        #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\app: nginx").isLiteral == true)
-        #expect(ClipboardStore.stripLiteralSearchEscape(from: "app:edge").text == "app:edge")
-        #expect(ClipboardStore.stripLiteralSearchEscape(from: "app:edge").isLiteral == false)
-        // A bare backslash still forces literal mode, even though nothing remains after it —
-        // same degenerate-but-sane fallback as a lone "app:".
-        #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\").text == "")
-        #expect(ClipboardStore.stripLiteralSearchEscape(from: "\\").isLiteral == true)
+        // The filter itself still works; escaped, the same words search content instead.
+        #expect(try store.items(matching: "app:nginx").map(\.text) == ["unrelated"])
+        #expect(try store.items(matching: "\\app:nginx").map(\.text) == ["app: nginx"])
     }
 
     // MARK: - is:concealed and source-app listing
@@ -231,7 +212,7 @@ import Testing
         #expect(results.map(\.isPinned) == [false, true])
     }
 
-    @Test func isConcealedWithExtraTextOrEscapeFallsBackToContentSearch() throws {
+    @Test func isConcealedWithFreeTextMatchesNothingAndTheEscapeSearchesText() throws {
         let store = try ClipboardStore.inMemory()
         try store.save(ClipboardCapture(text: "is:concealed is a filter"), now: now)
         try store.save(
@@ -239,15 +220,8 @@ import Testing
             now: now.addingTimeInterval(1))
 
         #expect(try store.items(matching: "\\is:concealed").map(\.text) == ["is:concealed is a filter"])
-        #expect(try store.items(matching: "is:concealed filter").map(\.text) == ["is:concealed is a filter"])
-    }
-
-    @Test func isConcealedFilterParsing() {
-        #expect(ClipboardStore.isConcealedFilter(in: "is:concealed"))
-        #expect(ClipboardStore.isConcealedFilter(in: "IS:CONCEALED"))
-        #expect(!ClipboardStore.isConcealedFilter(in: "is:concealed x"))
-        #expect(!ClipboardStore.isConcealedFilter(in: "is:"))
-        #expect(!ClipboardStore.isConcealedFilter(in: "concealed"))
+        // A filter plus free text: concealed content is never searched, so nothing matches.
+        #expect(try store.items(matching: "is:concealed filter").isEmpty)
     }
 
     @Test func distinctSourceAppsAreUniqueAndMostRecentFirst() throws {
@@ -318,31 +292,6 @@ import Testing
         // Not the filter: no pinned items exist, yet the content search still finds this.
         #expect(try store.items(matching: "is:pinnedish").map(\.text) == ["is:pinnedish thing"])
         #expect(try store.items(matching: "is:pinned").isEmpty)
-    }
-
-    @Test func leadingFiltersParsing() {
-        typealias F = ClipboardStore.LeadingFilters
-        #expect(ClipboardStore.leadingFilters(in: "is:pinned") == F(pinned: true, rest: ""))
-        #expect(
-            ClipboardStore.leadingFilters(in: "is:pinned  login pw")
-                == F(pinned: true, rest: "login pw"))
-        #expect(
-            ClipboardStore.leadingFilters(in: "IS:PINNED app:edge")
-                == F(pinned: true, rest: "app:edge"))
-        #expect(
-            ClipboardStore.leadingFilters(in: "is:image invoice")
-                == F(kind: .image, rest: "invoice"))
-        #expect(
-            ClipboardStore.leadingFilters(in: "is:link is:pinned")
-                == F(pinned: true, kind: .link, rest: ""))
-        #expect(
-            ClipboardStore.leadingFilters(in: "is:text is:concealed")
-                == F(kind: .text, rest: "is:concealed"))
-        #expect(ClipboardStore.leadingFilters(in: "is:pinnedx") == F(rest: "is:pinnedx"))
-        #expect(ClipboardStore.leadingFilters(in: "is:imagery") == F(rest: "is:imagery"))
-        #expect(ClipboardStore.leadingFilters(in: "pinned") == F(rest: "pinned"))
-        // A filter word later in the query is content, not a modifier.
-        #expect(ClipboardStore.leadingFilters(in: "login is:image") == F(rest: "login is:image"))
     }
 
     // MARK: - Separate pinned limit (backlog H2)
@@ -490,21 +439,6 @@ import Testing
 
     // MARK: - Filter suggestions
 
-    /// Drift guard: a filter listed for suggestion must be one the search actually understands.
-    @Test func everyListedFilterIsRecognizedByTheParser() throws {
-        let store = try ClipboardStore.inMemory()
-        for filter in SearchFilters.all {
-            let parsed = ClipboardStore.leadingFilters(in: filter.token)
-            let recognized =
-                parsed.pinned || parsed.kind != nil || ClipboardStore.isConcealedFilter(in: filter.token)
-            #expect(recognized, "\(filter.token) is listed but not parsed")
-            #expect(filter.token.hasPrefix("is:"))
-            #expect(!filter.summary.isEmpty)
-            _ = try store.items(matching: filter.token)  // and it runs
-        }
-        #expect(Set(SearchFilters.all.map(\.token)).count == SearchFilters.all.count)
-    }
-
     @Test func isPrefixListsFiltersAndNarrowsAsYouType() {
         let all = SearchFilters.all.map(\.token)
 
@@ -517,7 +451,11 @@ import Testing
         #expect(SearchFilters.suggestions(for: "is:pinned ", knownApps: []).isEmpty)
         #expect(SearchFilters.suggestions(for: "", knownApps: []).isEmpty)
         #expect(SearchFilters.suggestions(for: "invoice", knownApps: []).isEmpty)
-        #expect(SearchFilters.suggestions(for: "login is:", knownApps: []).isEmpty)
+        // Filters work anywhere in the query, so they are suggested anywhere too.
+        #expect(
+            SearchFilters.suggestions(for: "login is:i", knownApps: []).map(\.query)
+                == ["login is:image "])
+        #expect(SearchFilters.suggestions(for: "\\is:", knownApps: []).isEmpty)  // literal escape
     }
 
     @Test func suggestionsSkipFiltersAlreadyUsedAndKeepTheEarlierWords() throws {
@@ -565,7 +503,144 @@ import Testing
         #expect(SearchFilters.suggestions(for: accepted, knownApps: apps).isEmpty)
         // The longer name is still reachable by typing on or accepting it.
         #expect(
-            SearchFilters.suggestions(for: "app:Safari T", knownApps: apps).map(\.label)
-                == ["Safari Technology Preview"])
+            SearchFilters.suggestions(for: "app:\"Safari T", knownApps: apps).map(\.query)
+                == ["app:\"Safari Technology Preview\""])
+    }
+
+    // MARK: - One grammar (ADR-028)
+
+    @Test func parserSeparatesFiltersFromFreeTextInAnyOrder() {
+        typealias Q = SearchQuery
+        #expect(Q.parse("") == Q())
+        #expect(Q.parse("invoice") == Q(text: "invoice"))
+        #expect(Q.parse("is:pinned") == Q(pinned: true))
+        #expect(Q.parse("IS:Image invoice") == Q(kind: .image, text: "invoice"))
+        #expect(Q.parse("invoice is:image") == Q(kind: .image, text: "invoice"))
+        #expect(
+            Q.parse("is:image app:safari invoice total")
+                == Q(kind: .image, app: "safari", text: "invoice total"))
+        #expect(
+            Q.parse("login app:edge is:pinned is:concealed")
+                == Q(pinned: true, concealed: true, app: "edge", text: "login"))
+        #expect(Q.parse("is:text is:link") == Q(kind: .link))  // last kind wins
+        #expect(Q.parse("app:a app:b") == Q(app: "b"))  // last app wins
+    }
+
+    @Test func parserTreatsUnknownOrIncompleteFiltersAsText() {
+        typealias Q = SearchQuery
+        #expect(Q.parse("is:pinnedx") == Q(text: "is:pinnedx"))
+        #expect(Q.parse("is:foo bar") == Q(text: "is:foo bar"))
+        #expect(Q.parse("app:") == Q(text: "app:"))  // lone app: is searchable text
+        #expect(Q.parse("app: nginx") == Q(text: "app: nginx"))  // space after the colon
+        #expect(Q.parse("application:edge") == Q(text: "application:edge"))
+    }
+
+    @Test func parserReadsQuotedAppNamesAndTheLiteralEscape() {
+        typealias Q = SearchQuery
+        #expect(Q.parse("app:\"Microsoft Edge\"") == Q(app: "Microsoft Edge"))
+        #expect(
+            Q.parse("is:pinned app:\"Microsoft Edge\" login")
+                == Q(pinned: true, app: "Microsoft Edge", text: "login"))
+        #expect(Q.parse("app:\"Microsoft Edge") == Q(app: "Microsoft Edge"))  // still typing
+        #expect(Q.parse("\\is:pinned app:x") == Q(text: "is:pinned app:x"))
+        #expect(Q.parse("\\") == Q())
+    }
+
+    @Test func everyListedFilterIsRecognizedByTheParser() throws {
+        let store = try ClipboardStore.inMemory()
+        for filter in SearchFilters.all {
+            let parsed = SearchQuery.parse(filter.token)
+            #expect(parsed != SearchQuery(text: filter.token), "\(filter.token) is listed but not parsed")
+            #expect(parsed.text.isEmpty)
+            #expect(filter.token.hasPrefix("is:"))
+            #expect(!filter.summary.isEmpty)
+            _ = try store.items(matching: filter.token)  // and it runs
+        }
+        #expect(Set(SearchFilters.all.map(\.token)).count == SearchFilters.all.count)
+    }
+
+    private func grammarFixture() throws -> ClipboardStore {
+        let store = try ClipboardStore.inMemory()
+        try store.save(
+            ClipboardCapture(text: "invoice total 42", sourceApp: "Safari"), now: now)
+        try store.save(
+            ClipboardCapture(text: "invoice total 99", sourceApp: "TextEdit"),
+            now: now.addingTimeInterval(1))
+        try store.save(
+            ClipboardCapture(text: "hello world", sourceApp: "Safari"),
+            now: now.addingTimeInterval(2))
+        try store.save(
+            ClipboardCapture(
+                imageData: TestImages.png(width: 10, height: 10), ocrText: "invoice scan",
+                sourceApp: "Safari"),
+            now: now.addingTimeInterval(3))
+        try store.save(
+            ClipboardCapture(text: "microsoft doc invoice", sourceApp: "Microsoft Edge"),
+            now: now.addingTimeInterval(4))
+        try store.save(
+            ClipboardCapture(text: "hunter2hunter2", sourceApp: "Safari", isConcealed: true),
+            now: now.addingTimeInterval(5))
+        return store
+    }
+
+    @Test func appAndContentCombineInEitherOrder() throws {
+        let store = try grammarFixture()
+
+        #expect(try store.items(matching: "app:safari invoice").count == 2)  // text + image
+        #expect(try store.items(matching: "invoice app:safari").count == 2)
+        #expect(try store.items(matching: "app:textedit invoice").count == 1)
+        #expect(try store.items(matching: "app:textedit hello").isEmpty)
+        #expect(try store.items(matching: "app:safari").count == 4)  // incl. the concealed one
+    }
+
+    @Test func filtersCombineWithAppAndContentInAnyOrder() throws {
+        let store = try grammarFixture()
+
+        #expect(try store.items(matching: "is:image app:safari invoice").count == 1)
+        #expect(try store.items(matching: "invoice is:image app:safari").count == 1)
+        #expect(try store.items(matching: "app:safari is:text invoice").count == 1)
+        #expect(try store.items(matching: "is:text invoice").count == 3)
+    }
+
+    @Test func quotedAppNamesMatchNamesWithSpaces() throws {
+        let store = try grammarFixture()
+
+        #expect(try store.items(matching: "app:\"Microsoft Edge\"").count == 1)
+        #expect(try store.items(matching: "app:\"Microsoft Edge\" invoice").count == 1)
+        #expect(try store.items(matching: "app:\"Microsoft Edge\" hello").isEmpty)
+    }
+
+    @Test func concealedComposesWithAppAndPinnedButFreeTextNeverMatchesIt() throws {
+        let store = try grammarFixture()
+
+        let concealed = try store.items(matching: "is:concealed app:safari")
+        #expect(concealed.count == 1)
+        #expect(concealed.first?.text == nil)  // still redacted
+        #expect(try store.items(matching: "app:edge is:concealed").isEmpty)
+        // Content is never searched inside concealed items (ADR-011/021).
+        #expect(try store.items(matching: "is:concealed hunter2").isEmpty)
+        #expect(try store.items(matching: "hunter2").isEmpty)
+    }
+
+    @Test func aFilterWordLaterInTheQueryIsAFilterAndTheEscapeMakesItText() throws {
+        let store = try ClipboardStore.inMemory()
+        let pinned = try store.save(ClipboardCapture(text: "login for work"), now: now)
+        try store.setPinned(true, id: try #require(pinned.id))
+        try store.save(ClipboardCapture(text: "login scratch"), now: now.addingTimeInterval(1))
+        try store.save(
+            ClipboardCapture(text: "login is:pinned how to"), now: now.addingTimeInterval(2))
+
+        #expect(try store.items(matching: "login is:pinned").map(\.text) == ["login for work"])
+        #expect(
+            try store.items(matching: "\\login is:pinned").map(\.text) == ["login is:pinned how to"])
+    }
+
+    @Test func invalidOrHostileFilterValuesMatchNothingWithoutThrowing() throws {
+        let store = try grammarFixture()
+
+        #expect(try store.items(matching: "app:\"\"\"").isEmpty)
+        // Punctuation-only words are dropped by the tokenizer rather than failing the query.
+        _ = try store.items(matching: "app:safari ((( invoice")
+        #expect(try store.items(matching: "is:image \"unterminated").isEmpty)
     }
 }
