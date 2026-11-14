@@ -263,9 +263,12 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    2026-11-13.
    - **Not doing:** aliases (`is:secured`, `is:hidden`) for `is:concealed`. The suggestion
      row solves "what was it called"; if the word is wrong, rename it once instead.
-7. **`is:image` / `is:text` / `is:link` (quick win).** Filter on the existing `kind` column;
-   `is:link` = text items whose whole text is a URL (concealed items have no text, so they
-   never match). Same modifier shape as `is:pinned`. No schema change, no ADR.
+7. ~~`is:image` / `is:text` / `is:link`~~ — **DONE 2026-11-13.** Filters on the existing `kind`
+   column; leading whole-word modifiers like `is:pinned`, combinable in any order with it and
+   with the rest of the query. `is:link` = an unconcealed text item whose whole trimmed text
+   is one `http://` or `https://` URL (other schemes are not links); concealed items never
+   match it. `is:text` lists text-kind items, concealed ones still redacted. Separate
+   pinned/unpinned caps kept. No schema change, no ADR.
 8. **One search grammar: filters combine in any order.** Today `is:concealed` must be the
    whole query and `is:pinned` must come first; each new filter makes that worse. Parse
    the query into filter tokens (`is:*`, `app:*`, later `age:*`) plus free text, in any

@@ -42,6 +42,12 @@ If an interaction needs the mouse, it's a bug in the design.
 - Clearing history (menu or Settings) waits for any in-flight capture work, then deletes;
   nothing copied before the clear can reappear afterwards, including concealed text that was
   still waiting for the Keychain key.
+- `is:image`, `is:text` and `is:link` as leading words (combinable with `is:pinned`, in any
+  order, and with whatever follows) restrict results to that kind. `is:link` means an
+  unconcealed text item whose whole trimmed text is a single `http://` or `https://` URL;
+  `mailto:`, `ftp:` and other schemes are not links. Concealed items never match `is:link`
+  (they have no stored text and nothing is decrypted); `is:text` lists text-kind items,
+  concealed ones still redacted. Words later in the query are content, not filters.
 - Panel closes on: `Esc` (clears search first if non-empty), selection (`⏎`), clicking
   outside, or losing key status.
 
