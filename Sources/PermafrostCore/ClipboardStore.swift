@@ -357,17 +357,52 @@ public final class ClipboardStore: Sendable {
         trimmed.lowercased() == "is:concealed"
     }
 
-    /// `is:pinned` as the first word of the query restricts results to pinned items and
-    /// returns the rest of the query (possibly empty) to be searched as usual, so
-    /// `is:pinned login`, `is:pinned app:edge` and `is:pinned is:concealed` all work.
-    /// `nil` when the query doesn't start with that whole word (`is:pinnedx` is content).
-    static func pinnedFilterRemainder(in trimmed: String) -> String? {
-        let prefix = "is:pinned"
-        guard trimmed.lowercased().hasPrefix(prefix) else { return nil }
-        let rest = trimmed.dropFirst(prefix.count)
-        guard rest.isEmpty || rest.first?.isWhitespace == true else { return nil }
-        return rest.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Which kind of item an `is:image` / `is:text` / `is:link` modifier selects.
+    enum KindFilter: Equatable {
+        case image, text, link
     }
+
+    /// Leading `is:` modifiers and the rest of the query, which is searched as usual.
+    struct LeadingFilters: Equatable {
+        var pinned = false
+        var kind: KindFilter?
+        var rest: String
+    }
+
+    /// Strips leading whole-word modifiers, in any order: `is:pinned`, `is:image`,
+    /// `is:text`, `is:link`. What remains (possibly empty) is searched as usual, so
+    /// `is:pinned login`, `is:image app:safari` and `is:pinned is:concealed` all work.
+    /// `is:pinnedx` is plain content, not a modifier.
+    static func leadingFilters(in trimmed: String) -> LeadingFilters {
+        var filters = LeadingFilters(rest: trimmed)
+        while true {
+            let word = filters.rest.prefix(while: { !$0.isWhitespace })
+            switch word.lowercased() {
+            case "is:pinned": filters.pinned = true
+            case "is:image": filters.kind = .image
+            case "is:text": filters.kind = .text
+            case "is:link": filters.kind = .link
+            default: return filters
+            }
+            filters.rest = String(filters.rest.dropFirst(word.count))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    /// SQL for `is:link`: an unconcealed text item whose whole trimmed text is a single
+    /// `http://` or `https://` URL (no whitespace inside). Other schemes (`mailto:`, `ftp:`,
+    /// `file:`) are deliberately not links here. Concealed items have no stored text, so
+    /// they can never match, and nothing is decrypted to decide.
+    private static let linkClause = """
+        clipboard_item.kind = 'text' AND clipboard_item.is_concealed = 0
+        AND clipboard_item.text IS NOT NULL
+        AND (trim(clipboard_item.text, char(32, 9, 10, 13)) LIKE 'http://_%'
+             OR trim(clipboard_item.text, char(32, 9, 10, 13)) LIKE 'https://_%')
+        AND instr(trim(clipboard_item.text, char(32, 9, 10, 13)), char(32)) = 0
+        AND instr(trim(clipboard_item.text, char(32, 9, 10, 13)), char(9)) = 0
+        AND instr(trim(clipboard_item.text, char(32, 9, 10, 13)), char(10)) = 0
+        AND instr(trim(clipboard_item.text, char(32, 9, 10, 13)), char(13)) = 0
+        """
 
     /// Distinct, non-empty `source_app` values, most recently used first. Feeds the
     /// `app:` suggestions in the panel.
@@ -408,8 +443,8 @@ public final class ClipboardStore: Sendable {
     /// instead, deliberately not merged into ordinary content search: a bare "edge" should
     /// not also surface every unrelated item that merely came from Microsoft Edge. A
     /// leading `\` forces literal content search instead (ADR-025). `is:concealed` lists
-    /// only concealed items, still redacted like everywhere else. A leading `is:pinned` limits
-    /// any of the above to pinned items.
+    /// only concealed items, still redacted like everywhere else. Leading `is:pinned`,
+    /// `is:image`, `is:text` and `is:link` limit any of the above (see `leadingFilters`).
     ///
     /// `limit` caps the unpinned rows and `pinnedLimit` caps the pinned rows separately, so a
     /// long unpinned history can never push pinned items out of the result (and pinned items
@@ -419,10 +454,10 @@ public final class ClipboardStore: Sendable {
     ) throws -> [ClipboardItem] {
         let (literalTrimmed, isLiteral) = Self.stripLiteralSearchEscape(
             from: (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
-        // `is:pinned` is a modifier, not a mode: whatever follows it is searched as usual,
-        // restricted to pinned rows.
-        let pinnedRemainder = isLiteral ? nil : Self.pinnedFilterRemainder(in: literalTrimmed)
-        let trimmed = pinnedRemainder ?? literalTrimmed
+        // `is:pinned` and the kind filters are modifiers, not modes: whatever follows them is
+        // searched as usual, restricted to what they select.
+        let filters = isLiteral ? LeadingFilters(rest: literalTrimmed) : Self.leadingFilters(in: literalTrimmed)
+        let trimmed = filters.rest
         let pattern: FTS5Pattern?
         if trimmed.isEmpty || (!isLiteral && Self.isConcealedFilter(in: trimmed)) {
             pattern = nil
@@ -443,6 +478,12 @@ public final class ClipboardStore: Sendable {
                     : "ORDER BY last_used_at DESC LIMIT ?"
                 var clauses = ["clipboard_item.is_pinned = \(pinned ? 1 : 0)"]
                 if concealedOnly { clauses.append("clipboard_item.is_concealed = 1") }
+                switch filters.kind {
+                case .image: clauses.append("clipboard_item.kind = 'image'")
+                case .text: clauses.append("clipboard_item.kind = 'text'")
+                case .link: clauses.append("(\(Self.linkClause))")
+                case nil: break
+                }
                 var arguments: StatementArguments = []
                 var join = ""
                 if let pattern {
@@ -464,7 +505,7 @@ public final class ClipboardStore: Sendable {
                     arguments: arguments
                 )
             }
-            if pinnedRemainder != nil { return try fetch(pinned: true, limit: pinnedLimit) }
+            if filters.pinned { return try fetch(pinned: true, limit: pinnedLimit) }
             return try fetch(pinned: false, limit: limit) + fetch(pinned: true, limit: pinnedLimit)
         }
     }

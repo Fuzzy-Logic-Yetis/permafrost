@@ -320,12 +320,29 @@ import Testing
         #expect(try store.items(matching: "is:pinned").isEmpty)
     }
 
-    @Test func pinnedFilterRemainderParsing() {
-        #expect(ClipboardStore.pinnedFilterRemainder(in: "is:pinned") == "")
-        #expect(ClipboardStore.pinnedFilterRemainder(in: "is:pinned  login pw") == "login pw")
-        #expect(ClipboardStore.pinnedFilterRemainder(in: "IS:PINNED app:edge") == "app:edge")
-        #expect(ClipboardStore.pinnedFilterRemainder(in: "is:pinnedx") == nil)
-        #expect(ClipboardStore.pinnedFilterRemainder(in: "pinned") == nil)
+    @Test func leadingFiltersParsing() {
+        typealias F = ClipboardStore.LeadingFilters
+        #expect(ClipboardStore.leadingFilters(in: "is:pinned") == F(pinned: true, rest: ""))
+        #expect(
+            ClipboardStore.leadingFilters(in: "is:pinned  login pw")
+                == F(pinned: true, rest: "login pw"))
+        #expect(
+            ClipboardStore.leadingFilters(in: "IS:PINNED app:edge")
+                == F(pinned: true, rest: "app:edge"))
+        #expect(
+            ClipboardStore.leadingFilters(in: "is:image invoice")
+                == F(kind: .image, rest: "invoice"))
+        #expect(
+            ClipboardStore.leadingFilters(in: "is:link is:pinned")
+                == F(pinned: true, kind: .link, rest: ""))
+        #expect(
+            ClipboardStore.leadingFilters(in: "is:text is:concealed")
+                == F(kind: .text, rest: "is:concealed"))
+        #expect(ClipboardStore.leadingFilters(in: "is:pinnedx") == F(rest: "is:pinnedx"))
+        #expect(ClipboardStore.leadingFilters(in: "is:imagery") == F(rest: "is:imagery"))
+        #expect(ClipboardStore.leadingFilters(in: "pinned") == F(rest: "pinned"))
+        // A filter word later in the query is content, not a modifier.
+        #expect(ClipboardStore.leadingFilters(in: "login is:image") == F(rest: "login is:image"))
     }
 
     // MARK: - Separate pinned limit (backlog H2)
@@ -371,5 +388,103 @@ import Testing
 
         #expect(results.last?.isConcealed == true)
         #expect(results.last?.isPinned == true)
+    }
+
+    // MARK: - is:image / is:text / is:link
+
+    private func kindFixture() throws -> ClipboardStore {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "plain note about invoice"), now: now)
+        try store.save(ClipboardCapture(text: "https://example.com/a?b=1"), now: now.addingTimeInterval(1))
+        try store.save(
+            ClipboardCapture(text: "  http://example.org/path  \n"), now: now.addingTimeInterval(2))
+        try store.save(
+            ClipboardCapture(text: "see https://example.com for more"), now: now.addingTimeInterval(3))
+        try store.save(ClipboardCapture(text: "mailto:a@b.co"), now: now.addingTimeInterval(4))
+        try store.save(ClipboardCapture(text: "https://exa mple.com"), now: now.addingTimeInterval(5))
+        try store.save(
+            ClipboardCapture(text: "https://secret.example/token", isConcealed: true),
+            now: now.addingTimeInterval(6))
+        try store.save(
+            ClipboardCapture(imageData: TestImages.png(width: 10, height: 10), ocrText: "invoice scan"),
+            now: now.addingTimeInterval(7))
+        return store
+    }
+
+    @Test func isImageListsOnlyImages() throws {
+        let store = try kindFixture()
+
+        let results = try store.items(matching: "is:image")
+
+        #expect(results.count == 1)
+        #expect(results.allSatisfy { $0.kind == .image })
+    }
+
+    @Test func isTextListsOnlyTextItems() throws {
+        let store = try kindFixture()
+
+        let results = try store.items(matching: "IS:Text")
+
+        #expect(results.count == 7)
+        #expect(results.allSatisfy { $0.kind == .text })
+    }
+
+    @Test func isLinkMatchesOnlyAWholeHTTPURL() throws {
+        let store = try kindFixture()
+
+        let texts = try store.items(matching: "is:link").map(\.text)
+
+        #expect(
+            Set(texts) == ["https://example.com/a?b=1", "  http://example.org/path  \n"])
+    }
+
+    @Test func concealedItemsNeverMatchIsLinkEvenWhenTheirPlaintextWasAURL() throws {
+        let store = try kindFixture()
+
+        let results = try store.items(matching: "is:link")
+
+        #expect(results.allSatisfy { !$0.isConcealed })
+        #expect(try store.items(matching: "is:link is:concealed").isEmpty)
+    }
+
+    @Test func kindFiltersComposeWithContentAppAndPinned() throws {
+        let store = try kindFixture()
+        // OCR text is content for images; a text-only note with the same word must not leak in.
+        #expect(try store.items(matching: "is:image invoice").count == 1)
+        #expect(try store.items(matching: "is:text invoice").map(\.text) == ["plain note about invoice"])
+        #expect(try store.items(matching: "is:link example.org").count == 1)
+
+        let pinned = try #require(try store.items(matching: "is:link").first)
+        try store.setPinned(true, id: try #require(pinned.id))
+        #expect(try store.items(matching: "is:pinned is:link").count == 1)
+        #expect(try store.items(matching: "is:link is:pinned").count == 1)
+        #expect(try store.items(matching: "is:pinned is:image").isEmpty)
+    }
+
+    @Test func kindFiltersHonorTheLiteralEscapeAndWholeWordRule() throws {
+        let store = try ClipboardStore.inMemory()
+        try store.save(ClipboardCapture(text: "is:image is a filter"), now: now)
+        try store.save(ClipboardCapture(text: "is:imagery thing"), now: now.addingTimeInterval(1))
+
+        #expect(try store.items(matching: "\\is:image filter").map(\.text) == ["is:image is a filter"])
+        #expect(try store.items(matching: "is:imagery").map(\.text) == ["is:imagery thing"])
+        #expect(try store.items(matching: "is:image").isEmpty)
+    }
+
+    @Test func kindFiltersKeepTheSeparatePinnedAndUnpinnedCaps() throws {
+        let store = try ClipboardStore.inMemory()
+        let old = try store.save(ClipboardCapture(text: "https://pinned.example"), now: now)
+        try store.setPinned(true, id: try #require(old.id))
+        for n in 1...4 {
+            try store.save(
+                ClipboardCapture(text: "https://recent.example/\(n)"),
+                now: now.addingTimeInterval(Double(n)))
+        }
+
+        let results = try store.items(matching: "is:link", limit: 2)
+
+        #expect(results.map(\.text) == [
+            "https://recent.example/4", "https://recent.example/3", "https://pinned.example",
+        ])
     }
 }

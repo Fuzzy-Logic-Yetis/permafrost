@@ -244,6 +244,10 @@ outside the app (e.g. CI or a broken build that won't launch):
 5g. **Pinned survive a long history** (H2): not practical to hand-build 200 copies; covered by
     `pinnedItemsStayInThePanelWhenUnpinnedHistoryExceedsThePageLimit`. Manual spot check: with
     pinned items present, the pinned section still appears below the recent items.
+5h. **Kind filters**: copy a plain sentence, a bare URL (`https://example.com`), a sentence
+    containing a URL, and take a screenshot. `is:link` → only the bare URL; `is:text` → the
+    text items, not the screenshot; `is:image` → only the screenshot; `is:image` plus a word
+    in the screenshot's OCR text finds it. A concealed item never appears under `is:link`.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.
