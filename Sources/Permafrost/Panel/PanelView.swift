@@ -70,19 +70,37 @@ struct PanelView: View {
         }
     }
 
+    /// One row if the chips fit the panel width, otherwise two, rather than squeezing them.
     private var chipBar: some View {
-        HStack(spacing: 6) {
-            ForEach(SearchFilters.chips) { chip in
-                FilterChipButton(
-                    label: chip.label,
-                    key: PanelModel.chipKeys[chip.token].map { "⌥" + $0.uppercased() },
-                    isActive: model.isChipActive(chip.token),
-                    action: { model.toggleChip(chip.token) })
+        let chips = SearchFilters.chips
+        let split = (chips.count + 1) / 2
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                ForEach(chips) { chipButton($0) }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    ForEach(Array(chips.prefix(split))) { chipButton($0) }
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 6) {
+                    ForEach(Array(chips.dropFirst(split))) { chipButton($0) }
+                    Spacer(minLength: 0)
+                }
+            }
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+    }
+
+    private func chipButton(_ chip: FilterChip) -> some View {
+        FilterChipButton(
+            label: chip.label,
+            key: PanelModel.chipKeys[chip.token].map { "⌥" + $0.uppercased() },
+            isActive: model.isChipActive(chip.token),
+            isEnabled: model.isChipEnabled(chip.token),
+            action: { model.toggleChip(chip.token) })
     }
 
     @ViewBuilder
@@ -257,6 +275,7 @@ private struct FilterChipButton: View {
     let label: String
     let key: String?
     let isActive: Bool
+    var isEnabled = true
     let action: () -> Void
 
     var body: some View {
@@ -287,6 +306,8 @@ private struct FilterChipButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
         .accessibilityLabel("\(label) filter")
         .accessibilityAddTraits(isActive ? .isSelected : [])
     }

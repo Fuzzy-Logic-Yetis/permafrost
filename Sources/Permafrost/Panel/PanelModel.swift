@@ -25,6 +25,9 @@ final class PanelModel: ObservableObject {
         }
     }
     @Published private(set) var items: [ClipboardItem] = []
+    /// The app the panel was opened from, remembered for the `app` chip. Nil when unknown
+    /// (opened from Permafrost itself, or no frontmost app).
+    @Published private(set) var openedFromApp: String?
     /// Source apps seen in history, most recent first. Loaded when the panel opens, not per
     /// keystroke, so `appSuggestions` stays a pure in-memory filter.
     @Published private(set) var knownSourceApps: [String] = []
@@ -67,7 +70,7 @@ final class PanelModel: ObservableObject {
     /// Option-letter shortcut for each filter chip (shown on the chip). Letters avoid the
     /// existing `⌥P` (pin) and are free in the panel.
     static let chipKeys: [String: String] = [
-        "is:today": "t", "is:pinned": "s", "is:concealed": "c", "is:image": "i", "is:link": "l",
+        "app:": "a", "is:today": "t", "is:pinned": "s", "is:concealed": "c", "is:image": "i", "is:link": "l",
     ]
 
     static func chipToken(forOptionKey key: String) -> String? {
@@ -80,8 +83,15 @@ final class PanelModel: ObservableObject {
         SearchFilters.isActive(token, in: query)
     }
 
+    /// The `app` chip can switch on only when there is an app to filter to (the one the panel
+    /// was opened from); every other chip, and switching `app` off, is always available.
+    func isChipEnabled(_ token: String) -> Bool {
+        token != "app:" || isChipActive(token) || openedFromApp != nil
+    }
+
     func toggleChip(_ token: String) {
-        query = SearchFilters.toggling(token, in: query)
+        guard isChipEnabled(token) else { return }
+        query = SearchFilters.toggling(token, in: query, appName: openedFromApp)
         focusToken = UUID()  // keep typing in the search field after a click
     }
 
@@ -124,14 +134,17 @@ final class PanelModel: ObservableObject {
     /// `app:<name>`, quoted when the name has spaces ("Microsoft Edge") so the parser reads it
     /// as one filter rather than `app:Microsoft` plus the word `Edge`.
     static func appFilterQuery(for name: String) -> String {
-        let clean = name.replacingOccurrences(of: "\"", with: "")
-        return clean.contains(where: \.isWhitespace) ? "app:\"\(clean)\"" : "app:\(clean)"
+        SearchFilters.appWord(for: name)
     }
 
     /// `openingFilterApp` starts the query as `app:<name>`, visible in the search field and
     /// cleared like any query. If that leaves nothing to show (no history for the app, or a
     /// name under the 3-character trigram floor), the panel opens on the full list instead.
-    func prepareForShow(openingFilterApp: String? = nil) {
+    ///
+    /// `openedFromApp` is the app that was in front when the panel opened (any app, not only
+    /// the ones listed in Settings); the `app` chip uses it to switch the app filter back on.
+    func prepareForShow(openingFilterApp: String? = nil, openedFromApp: String? = nil) {
+        self.openedFromApp = openedFromApp
         query = ""
         knownSourceApps = (try? store.distinctSourceApps()) ?? []
         isPreviewShown = false

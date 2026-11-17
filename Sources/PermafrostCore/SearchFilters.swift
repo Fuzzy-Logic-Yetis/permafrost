@@ -26,7 +26,11 @@ public struct FilterChip: Equatable, Sendable, Identifiable {
 public enum SearchFilters {
     /// The filters offered as toggle chips, in display order. `is:text` is left out: almost
     /// everything copied is text. Each token must be one of `all`.
+    ///
+    /// `app:` is the one chip that is not an `is:` word. It is on when the query has an `app:`
+    /// filter; switching it on needs the app to filter to (see `toggling`).
     public static let chips: [FilterChip] = [
+        FilterChip(token: "app:", label: "app"),
         FilterChip(token: "is:today", label: "today"),
         FilterChip(token: "is:pinned", label: "pinned"),
         FilterChip(token: "is:concealed", label: "concealed"),
@@ -42,6 +46,7 @@ public enum SearchFilters {
     public static func isActive(_ token: String, in query: String) -> Bool {
         let parsed = SearchQuery.parse(query)
         switch token {
+        case "app:": return parsed.app != nil
         case "is:today": return parsed.today
         case "is:pinned": return parsed.pinned
         case "is:concealed": return parsed.concealed
@@ -55,17 +60,43 @@ public enum SearchFilters {
     /// `query` with `token` switched: removed (every occurrence) when active, otherwise added
     /// at the end after dropping any other kind filter (a kind is exclusive). Other words
     /// keep their order; spacing is normalized. A literal (`\`-escaped) query is unchanged.
-    public static func toggling(_ token: String, in query: String) -> String {
+    ///
+    /// The `app:` token switches off by removing every `app:` filter, and on by adding
+    /// `app:<appName>` (quoted if it has spaces); with no `appName` it cannot switch on and the
+    /// query is unchanged.
+    public static func toggling(
+        _ token: String, in query: String, appName: String? = nil
+    ) -> String {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("\\") else {
             return query
         }
         let isActive = isActive(token, in: query)
+        if token == "app:" {
+            let words = SearchQuery.tokens(in: query).map { String($0.raw) }
+            if isActive {
+                let kept = words.filter { word in
+                    !(word.lowercased().hasPrefix("app:") && SearchQuery.appName(in: Substring(word)) != nil)
+                }
+                return kept.joined(separator: " ")
+            }
+            guard let appName, !appName.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return query
+            }
+            return (words + [appWord(for: appName)]).joined(separator: " ") + " "
+        }
         let removing: Set<String> =
             isActive ? [token] : (kindTokens.contains(token) ? kindTokens : [token])
         let kept = SearchQuery.tokens(in: query).map { String($0.raw) }
             .filter { !removing.contains($0.lowercased()) }
         let words = isActive ? kept : kept + [token]
         return words.joined(separator: " ") + (isActive || words.isEmpty ? "" : " ")
+    }
+
+    /// `app:<name>`, quoted when the name has spaces ("Microsoft Edge") so the parser reads it
+    /// as one filter rather than `app:Microsoft` plus the word `Edge`.
+    public static func appWord(for name: String) -> String {
+        let clean = name.replacingOccurrences(of: "\"", with: "")
+        return clean.contains(where: \.isWhitespace) ? "app:\"\(clean)\"" : "app:\(clean)"
     }
 
     /// Every `is:` filter, in the order suggested. Adding a filter to the search means adding

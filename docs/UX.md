@@ -34,13 +34,18 @@ If an interaction needs the mouse, it's a bug in the design.
   (`is:image age:<1d invoice`) and apply to pinned items too. Using or re-copying an old item
   brings it back inside the window. `age:2h` or `age:<2x` are plain text.
 - **Filter chips.** A row of small toggle chips under the search field, styled like the footer
-  key hints, with the shortcut on the chip: `⌥T today`, `⌥S pinned`, `⌥C concealed`,
+  key hints, with the shortcut on the chip: `⌥A app`, `⌥T today`, `⌥S pinned`, `⌥C concealed`,
   `⌥I image`, `⌥L link` (no `text` chip; almost everything copied is text). Click a chip or
   press its shortcut to switch that filter on or off; a lit chip is on. Chips are just the
   `is:` words in the query (ADR-028), so typing `is:pinned` lights the chip, clicking it
   edits the query, and they combine with `app:` and free text. `image` and `link` are
   exclusive. Because the query is cleared every time the panel opens, chips always start off
-  (Anthony, 2026-11-17: reset each time). With a `\`-escaped query the chips do nothing. The
+  (Anthony, 2026-11-17: reset each time). The **`app` chip** is lit while the query has an
+  `app:` filter, including the one added when the panel opens filtered. Clicking it removes
+  the app filter; clicking again puts `app:<name>` back, because the panel remembers the app it
+  was opened from (any app, not only Open Filtered Apps; Anthony, 2026-11-17). It is dimmed
+  when there is no such app (opened from Permafrost itself). Other chips never touch the app
+  filter. With a `\`-escaped query the chips do nothing. The
   shortcuts take over those `⌥` letters in the search field.
 - Discoverability: the placeholder is generic ("type is: or app: for filters") so it never needs
   rewording. Typing `is:` lists every filter with a few words each (from one list in core,

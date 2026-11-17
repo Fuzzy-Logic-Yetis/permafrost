@@ -284,6 +284,8 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
     (`today`, `pinned`, `concealed`, `image`, `link`; no `text`), footer-hint style with the
     `⌥` shortcut on the chip. They edit the `is:` words in the query, so no new filtering
     logic and no ADR; they reset each time the panel opens. Requested by Anthony 2026-11-17.
+    Follow-up, same day: an `app` chip (`⌥A`) that removes the open-time app filter and puts
+    it back from the remembered opened-from app. Anthony: always shown, labelled just "app".
 
 ## Later
 
