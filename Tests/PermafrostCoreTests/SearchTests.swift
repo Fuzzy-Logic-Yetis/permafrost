@@ -744,4 +744,60 @@ import Testing
             #expect(SearchQuery.ageSeconds(in: example.token) != nil, "\(example.token)")
         }
     }
+
+    // MARK: - Filter chips
+
+    @Test func everyChipIsAListedFilterAndNotText() {
+        let listed = Set(SearchFilters.all.map(\.token))
+        for chip in SearchFilters.chips {
+            #expect(listed.contains(chip.token), "\(chip.token)")
+            #expect(!chip.label.isEmpty)
+        }
+        #expect(!SearchFilters.chips.contains { $0.token == "is:text" })
+        #expect(Set(SearchFilters.chips.map(\.token)).count == SearchFilters.chips.count)
+    }
+
+    @Test func togglingAddsAndRemovesAFilterWordKeepingTheRestOfTheQuery() {
+        #expect(SearchFilters.toggling("is:pinned", in: "") == "is:pinned ")
+        #expect(SearchFilters.toggling("is:pinned", in: "invoice") == "invoice is:pinned ")
+        #expect(SearchFilters.toggling("is:pinned", in: "invoice is:pinned ") == "invoice")
+        #expect(SearchFilters.toggling("is:pinned", in: "IS:Pinned") == "")
+        #expect(
+            SearchFilters.toggling("is:today", in: "app:\"Microsoft Edge\" is:pinned")
+                == "app:\"Microsoft Edge\" is:pinned is:today ")
+        #expect(
+            SearchFilters.toggling("is:pinned", in: "app:\"Microsoft Edge\" is:pinned x")
+                == "app:\"Microsoft Edge\" x")
+        // Every occurrence goes, not just the first.
+        #expect(SearchFilters.toggling("is:pinned", in: "is:pinned a is:pinned") == "a")
+    }
+
+    @Test func kindChipsAreExclusive() {
+        #expect(SearchFilters.toggling("is:link", in: "is:image invoice") == "invoice is:link ")
+        #expect(SearchFilters.toggling("is:image", in: "is:text is:pinned") == "is:pinned is:image ")
+        #expect(SearchFilters.toggling("is:image", in: "is:image invoice") == "invoice")
+    }
+
+    @Test func isActiveFollowsTheParserAndIgnoresLiteralQueries() {
+        #expect(SearchFilters.isActive("is:today", in: "invoice is:today"))
+        #expect(SearchFilters.isActive("is:image", in: "is:image"))
+        #expect(!SearchFilters.isActive("is:link", in: "is:image"))
+        #expect(SearchFilters.isActive("is:link", in: "is:image is:link"))  // the last kind wins
+        #expect(!SearchFilters.isActive("is:image", in: "is:image is:link"))
+        #expect(!SearchFilters.isActive("is:pinned", in: "is:pinnedx"))
+        #expect(!SearchFilters.isActive("is:pinned", in: "\\is:pinned"))
+        #expect(SearchFilters.toggling("is:pinned", in: "\\is:pinned") == "\\is:pinned")
+    }
+
+    @Test func aToggledQueryRoundTripsThroughSearch() throws {
+        let store = try ClipboardStore.inMemory()
+        let pinned = try store.save(ClipboardCapture(text: "invoice kept"), now: now)
+        try store.setPinned(true, id: try #require(pinned.id))
+        try store.save(ClipboardCapture(text: "invoice scratch"), now: now.addingTimeInterval(1))
+
+        let on = SearchFilters.toggling("is:pinned", in: "invoice")
+
+        #expect(try store.items(matching: on).map(\.text) == ["invoice kept"])
+        #expect(try store.items(matching: SearchFilters.toggling("is:pinned", in: on)).count == 2)
+    }
 }

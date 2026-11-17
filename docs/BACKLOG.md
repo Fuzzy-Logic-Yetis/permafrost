@@ -280,6 +280,11 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
    `is:today` rather than a bare `today`, so searching the word "today" still works. `age:`
    suggests examples. No schema change. Not doing `is:>30` or `is:oldest` (see the ADR).
 
+10. ~~Filter chips~~ — **DONE 2026-11-17.** Small toggle chips under the search field
+    (`today`, `pinned`, `concealed`, `image`, `link`; no `text`), footer-hint style with the
+    `⌥` shortcut on the chip. They edit the `is:` words in the query, so no new filtering
+    logic and no ADR; they reset each time the panel opens. Requested by Anthony 2026-11-17.
+
 ## Later
 
 - **Sparkle auto-updates** — only meaningful once Developer ID signing exists (v1.0).

@@ -15,7 +15,59 @@ public struct SearchSuggestion: Equatable, Sendable, Identifiable {
     public var id: String { label }
 }
 
+/// One toggle chip in the panel (a clickable filter, see `SearchFilters.chips`).
+public struct FilterChip: Equatable, Sendable, Identifiable {
+    public let token: String
+    public let label: String
+
+    public var id: String { token }
+}
+
 public enum SearchFilters {
+    /// The filters offered as toggle chips, in display order. `is:text` is left out: almost
+    /// everything copied is text. Each token must be one of `all`.
+    public static let chips: [FilterChip] = [
+        FilterChip(token: "is:today", label: "today"),
+        FilterChip(token: "is:pinned", label: "pinned"),
+        FilterChip(token: "is:concealed", label: "concealed"),
+        FilterChip(token: "is:image", label: "image"),
+        FilterChip(token: "is:link", label: "link"),
+    ]
+
+    private static let kindTokens: Set<String> = ["is:image", "is:text", "is:link"]
+
+    /// Whether `token` is currently in effect in `query`, as the parser reads it (so a
+    /// repeated kind filter counts only if it is the one that wins). Always false for a
+    /// literal (`\`-escaped) query, where filter words are just text.
+    public static func isActive(_ token: String, in query: String) -> Bool {
+        let parsed = SearchQuery.parse(query)
+        switch token {
+        case "is:today": return parsed.today
+        case "is:pinned": return parsed.pinned
+        case "is:concealed": return parsed.concealed
+        case "is:image": return parsed.kind == .image
+        case "is:text": return parsed.kind == .text
+        case "is:link": return parsed.kind == .link
+        default: return false
+        }
+    }
+
+    /// `query` with `token` switched: removed (every occurrence) when active, otherwise added
+    /// at the end after dropping any other kind filter (a kind is exclusive). Other words
+    /// keep their order; spacing is normalized. A literal (`\`-escaped) query is unchanged.
+    public static func toggling(_ token: String, in query: String) -> String {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("\\") else {
+            return query
+        }
+        let isActive = isActive(token, in: query)
+        let removing: Set<String> =
+            isActive ? [token] : (kindTokens.contains(token) ? kindTokens : [token])
+        let kept = SearchQuery.tokens(in: query).map { String($0.raw) }
+            .filter { !removing.contains($0.lowercased()) }
+        let words = isActive ? kept : kept + [token]
+        return words.joined(separator: " ") + (isActive || words.isEmpty ? "" : " ")
+    }
+
     /// Every `is:` filter, in the order suggested. Adding a filter to the search means adding
     /// an entry here too; `SearchTests.everyListedFilterIsRecognizedByTheParser` fails if an
     /// entry is not something the parser understands.

@@ -74,6 +74,56 @@ import PermafrostCore
         #expect(model.suggestionIndex == 0)
     }
 
+    @Test func clickingAChipTogglesItsFilterAndLightsTheChip() throws {
+        let (store, model, _) = try makeModel()
+        let kept = try store.save(ClipboardCapture(text: "invoice kept"), now: now)
+        try store.setPinned(true, id: try #require(kept.id))
+        try store.save(ClipboardCapture(text: "invoice scratch"), now: now.addingTimeInterval(1))
+        model.prepareForShow()
+        model.query = "invoice"
+        let focusBefore = model.focusToken
+
+        model.toggleChip("is:pinned")
+
+        #expect(model.isChipActive("is:pinned"))
+        #expect(!model.isChipActive("is:image"))
+        #expect(model.items.map(\.text) == ["invoice kept"])
+        #expect(model.focusToken != focusBefore)
+
+        model.toggleChip("is:pinned")
+
+        #expect(!model.isChipActive("is:pinned"))
+        #expect(model.query == "invoice")
+        #expect(model.items.count == 2)
+    }
+
+    @Test func chipsResetWhenThePanelIsShownAgainAndFollowTypedFilters() throws {
+        let (_, model, _) = try makeModel()
+        model.prepareForShow()
+        model.toggleChip("is:today")
+        model.toggleChip("is:image")
+        #expect(model.isChipActive("is:today") && model.isChipActive("is:image"))
+
+        model.prepareForShow()
+
+        #expect(!model.isChipActive("is:today") && !model.isChipActive("is:image"))
+        #expect(model.query == "")
+        model.query = "is:link login"
+        #expect(model.isChipActive("is:link"))
+    }
+
+    @Test func everyChipHasAUniqueShortcutThatDoesNotShadowPin() {
+        let keys = SearchFilters.chips.compactMap { PanelModel.chipKeys[$0.token] }
+
+        #expect(keys.count == SearchFilters.chips.count)
+        #expect(Set(keys).count == keys.count)
+        #expect(!keys.contains("p"))  // ⌥P is pin
+        for chip in SearchFilters.chips {
+            #expect(PanelModel.chipToken(forOptionKey: PanelModel.chipKeys[chip.token]!) == chip.token)
+        }
+        #expect(PanelModel.chipToken(forOptionKey: "p") == nil)
+    }
+
     @Test func openingFilterAppRequiresAListedAppWithAName() {
         let listed: Set<String> = ["com.example.herdr"]
 
