@@ -19,7 +19,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     init(model: PanelModel) {
         self.model = model
         panel = KeyablePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 500),
+            contentRect: NSRect(x: 0, y: 0, width: PanelLayout.width, height: PanelLayout.height),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false

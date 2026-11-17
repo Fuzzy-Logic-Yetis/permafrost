@@ -31,7 +31,7 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    retention-policy snapshot.
 6. ~~Preview pane~~ — **DONE 2026-07-07.** `␣` (search field empty) toggles a Quick
    Look-style overlay of the selected item's full text (unwrapped, scrollable, selectable)
-   or full-resolution image, reusing the panel's existing 440×500 footprint. Follows
+   or full-resolution image, reusing the panel's existing footprint. Follows
    selection while open; `Esc` closes it before falling back to its existing
    clear-search/close-panel behavior. Deferred: a hover/mouse trigger for the preview — the
    hover row (pin/share/delete) is already at a natural width for three icons, and a fourth

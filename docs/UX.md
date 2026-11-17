@@ -47,6 +47,11 @@ If an interaction needs the mouse, it's a bug in the design.
   when there is no such app (opened from Permafrost itself). Other chips never touch the app
   filter. With a `\`-escaped query the chips do nothing. The
   shortcuts take over those `⌥` letters in the search field.
+- **Panel width** comes from the panel's own chrome, never from the list content: it is the
+  wider of the chip row and the footer key hints, measured from the real views (about 479 pt
+  today, set by the chip row; the footer needs about 435). Chips never wrap or clip, and
+  adding a chip or hint widens the panel automatically. Height stays 500 pt
+  (`PanelLayout`). Anthony, 2026-11-17: no wrapping, width follows the chips or the hints.
 - Discoverability: the placeholder is generic ("type is: or app: for filters") so it never needs
   rewording. Typing `is:` lists every filter with a few words each (from one list in core,
   `SearchFilters.all`), narrowed as you type and skipping ones already used. Typing `app:`
@@ -134,7 +139,7 @@ you just copied, and must never steal the `⌘1` slot from it either.
 - **Preview pane** (`␣`): a Quick Look-style overlay for the selected item — full text
   (unwrapped, scrollable, selectable/copyable, same monospace + whitespace-marker treatment
   as the card) or the full-resolution image, not the card's thumbnail. It reuses the panel's
-  existing 440×500 footprint instead of growing the window, so the default panel stays
+  existing panel footprint instead of growing the window, so the default panel stays
   compact and this stays opt-in. It follows the selection as you move `↑`/`↓` while open, and
   closes on a second `␣` or `Esc` (which closes the preview first, before its usual
   clear-search/close-panel behavior). Deliberately keyboard-first only — a preview toggle

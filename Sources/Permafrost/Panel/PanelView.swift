@@ -13,7 +13,7 @@ struct PanelView: View {
         ZStack {
             VStack(spacing: 0) {
                 searchBar
-                chipBar
+                ChipRow(model: model)
                 suggestionBar
                 Divider()
                 if model.items.isEmpty {
@@ -22,7 +22,7 @@ struct PanelView: View {
                     itemList
                 }
                 Divider()
-                footer
+                FooterBar(countText: model.countLabel)
             }
             if model.isPreviewShown, let item = model.selectedItem {
                 PreviewPane(
@@ -42,7 +42,7 @@ struct PanelView: View {
                 .id(item.id)
             }
         }
-        .frame(width: 440, height: 500)
+        .frame(width: PanelLayout.width, height: PanelLayout.height)
         .background(.regularMaterial)
         .onReceive(NotificationCenter.default.publisher(for: .sharePickerWillOpen)) { _ in
             isSharePickerOpen = true
@@ -68,39 +68,6 @@ struct PanelView: View {
         .onChange(of: model.focusToken) {
             searchFocused = true
         }
-    }
-
-    /// One row if the chips fit the panel width, otherwise two, rather than squeezing them.
-    private var chipBar: some View {
-        let chips = SearchFilters.chips
-        let split = (chips.count + 1) / 2
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) {
-                ForEach(chips) { chipButton($0) }
-                Spacer(minLength: 0)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    ForEach(Array(chips.prefix(split))) { chipButton($0) }
-                    Spacer(minLength: 0)
-                }
-                HStack(spacing: 6) {
-                    ForEach(Array(chips.dropFirst(split))) { chipButton($0) }
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-    }
-
-    private func chipButton(_ chip: FilterChip) -> some View {
-        FilterChipButton(
-            label: chip.label,
-            key: PanelModel.chipKeys[chip.token].map { "⌥" + $0.uppercased() },
-            isActive: model.isChipActive(chip.token),
-            isEnabled: model.isChipEnabled(chip.token),
-            action: { model.toggleChip(chip.token) })
     }
 
     @ViewBuilder
@@ -250,88 +217,6 @@ struct PanelView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private var footer: some View {
-        HStack(spacing: 8) {
-            KeyHint(key: "⏎", label: "paste")
-            KeyHint(key: "⇧⏎", label: "plain")
-            KeyHint(key: "␣", label: "preview")
-            KeyHint(key: "⌥P", label: "pin")
-            KeyHint(key: "⌫", label: "delete")
-            KeyHint(key: "esc", label: "close")
-            Spacer()
-            Text(model.countLabel)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-    }
-}
-
-/// A toggle chip in the footer-hint style: the shortcut doubles as a label on the button.
-private struct FilterChipButton: View {
-    let label: String
-    let key: String?
-    let isActive: Bool
-    var isEnabled = true
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                if let key {
-                    Text(key)
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(RoundedRectangle(cornerRadius: 3).fill(.quaternary))
-                }
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(isActive ? .primary : .secondary)
-            }
-            .lineLimit(1)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isActive ? Color.accentColor.opacity(0.25) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .strokeBorder(isActive ? Color.accentColor : Color.secondary.opacity(0.3))
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.4)
-        .accessibilityLabel("\(label) filter")
-        .accessibilityAddTraits(isActive ? .isSelected : [])
-    }
-}
-
-private struct KeyHint: View {
-    let key: String
-    let label: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(key)
-                .font(.caption.weight(.medium))
-                .lineLimit(1)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(
-                    RoundedRectangle(cornerRadius: 3).fill(.quaternary)
-                )
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
     }
 }
 
