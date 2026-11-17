@@ -159,6 +159,31 @@ import PermafrostCore
         #expect(model.openedFromApp == nil)
     }
 
+    /// The state the chip row renders from. It must change when the panel opens with an app
+    /// filter, or the row keeps showing the previous state (the `app` chip stayed dead).
+    @Test func chipStatesTrackTheQueryAndTheOpenedFromApp() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "from herdr", sourceApp: "Herdr"), now: now)
+        let all = Set(SearchFilters.chips.map(\.token))
+
+        model.prepareForShow()  // no app known, no filter
+        #expect(model.chipStates == ChipStates(active: [], enabled: all.subtracting(["app:"])))
+
+        model.prepareForShow(openingFilterApp: "Herdr", openedFromApp: "Herdr")
+        #expect(model.chipStates == ChipStates(active: ["app:"], enabled: all))
+
+        model.toggleChip("app:")
+        #expect(model.chipStates == ChipStates(active: [], enabled: all))
+
+        model.toggleChip("is:pinned")
+        #expect(model.chipStates == ChipStates(active: ["is:pinned"], enabled: all))
+
+        // Typed filter with no opened-from app: lit and still switch-off-able.
+        model.prepareForShow()
+        model.query = "app:herdr"
+        #expect(model.chipStates == ChipStates(active: ["app:"], enabled: all))
+    }
+
     @Test func chipsResetWhenThePanelIsShownAgainAndFollowTypedFilters() throws {
         let (_, model, _) = try makeModel()
         model.prepareForShow()
