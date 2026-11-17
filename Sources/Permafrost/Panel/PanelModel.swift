@@ -64,6 +64,27 @@ final class PanelModel: ObservableObject {
         items.indices.contains(selectedIndex) ? items[selectedIndex] : nil
     }
 
+    /// Option-letter shortcut for each filter chip (shown on the chip). Letters avoid the
+    /// existing `⌥P` (pin) and are free in the panel.
+    static let chipKeys: [String: String] = [
+        "is:today": "t", "is:pinned": "s", "is:concealed": "c", "is:image": "i", "is:link": "l",
+    ]
+
+    static func chipToken(forOptionKey key: String) -> String? {
+        chipKeys.first { $0.value == key }?.key
+    }
+
+    /// Chips mirror the query text, so closing the panel (which clears the query) resets
+    /// them, and typing a filter word lights the matching chip.
+    func isChipActive(_ token: String) -> Bool {
+        SearchFilters.isActive(token, in: query)
+    }
+
+    func toggleChip(_ token: String) {
+        query = SearchFilters.toggling(token, in: query)
+        focusToken = UUID()  // keep typing in the search field after a click
+    }
+
     /// Filter and app suggestions for the word being typed (see `SearchFilters.suggestions`).
     var suggestions: [SearchSuggestion] {
         SearchFilters.suggestions(for: query, knownApps: knownSourceApps)

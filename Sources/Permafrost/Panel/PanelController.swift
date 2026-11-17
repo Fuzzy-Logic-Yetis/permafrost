@@ -217,6 +217,12 @@ final class PanelController: NSObject, NSWindowDelegate {
             break
         }
 
+        if input.modifiers == .option, let key = input.baseKey,
+            let token = PanelModel.chipToken(forOptionKey: key)
+        {
+            model.toggleChip(token)
+            return true
+        }
         if input.modifiers == .option, input.baseKey == "p" {
             model.togglePinSelected()
             return true
