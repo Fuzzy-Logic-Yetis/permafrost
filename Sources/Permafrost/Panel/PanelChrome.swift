@@ -10,7 +10,7 @@ enum PanelLayout {
     static let height: CGFloat = 500
 
     static let width: CGFloat = {
-        let chips = fittingWidth(ChipRow.measured())
+        let chips = fittingWidth(ChipRow(states: ChipStates(), toggle: { _ in }))
         let footer = fittingWidth(FooterBar(countText: "999+"))
         return ceil(max(chips, footer))
     }()
@@ -18,7 +18,7 @@ enum PanelLayout {
     /// Width of the chip row and of the footer, for tests and diagnostics.
     static var chromeWidths: (chips: CGFloat, footer: CGFloat) {
         (
-            ceil(fittingWidth(ChipRow.measured())),
+            ceil(fittingWidth(ChipRow(states: ChipStates(), toggle: { _ in }))),
             ceil(fittingWidth(FooterBar(countText: "999+")))
         )
     }
@@ -28,26 +28,21 @@ enum PanelLayout {
     }
 }
 
+/// Which chips are lit and which are clickable, as plain values.
+struct ChipStates: Equatable {
+    var active: Set<String> = []
+    var enabled: Set<String> = Set(SearchFilters.chips.map(\.token))
+}
+
 /// The row of filter chips under the search field. One row, never wrapped.
+///
+/// Its inputs are plain `Equatable` values on purpose. Passing closures that read the model
+/// (`{ model.isChipActive($0) }`) looked equal to SwiftUI from one render to the next, so it
+/// skipped re-evaluating the row and the chips kept showing the state from when the panel
+/// opened: the `app` chip stayed dimmed and dead while the app filter was on.
 struct ChipRow: View {
-    let isActive: (String) -> Bool
-    let isEnabled: (String) -> Bool
+    let states: ChipStates
     let toggle: (String) -> Void
-
-    init(model: PanelModel) {
-        isActive = { model.isChipActive($0) }
-        isEnabled = { model.isChipEnabled($0) }
-        toggle = { model.toggleChip($0) }
-    }
-
-    private init() {
-        isActive = { _ in false }
-        isEnabled = { _ in true }
-        toggle = { _ in }
-    }
-
-    /// An inert row for measuring its natural width.
-    static func measured() -> ChipRow { ChipRow() }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -55,8 +50,8 @@ struct ChipRow: View {
                 FilterChipButton(
                     label: chip.label,
                     key: PanelModel.chipKeys[chip.token].map { "⌥" + $0.uppercased() },
-                    isActive: isActive(chip.token),
-                    isEnabled: isEnabled(chip.token),
+                    isActive: states.active.contains(chip.token),
+                    isEnabled: states.enabled.contains(chip.token),
                     action: { toggle(chip.token) })
             }
             Spacer(minLength: 0)

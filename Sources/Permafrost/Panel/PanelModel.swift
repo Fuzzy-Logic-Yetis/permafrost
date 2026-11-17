@@ -89,6 +89,14 @@ final class PanelModel: ObservableObject {
         token != "app:" || isChipActive(token) || openedFromApp != nil
     }
 
+    /// Every chip's state in one value, so the view re-renders when any of them changes.
+    var chipStates: ChipStates {
+        let tokens = SearchFilters.chips.map(\.token)
+        return ChipStates(
+            active: Set(tokens.filter { isChipActive($0) }),
+            enabled: Set(tokens.filter { isChipEnabled($0) }))
+    }
+
     func toggleChip(_ token: String) {
         guard isChipEnabled(token) else { return }
         query = SearchFilters.toggling(token, in: query, appName: openedFromApp)

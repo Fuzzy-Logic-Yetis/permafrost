@@ -13,7 +13,7 @@ struct PanelView: View {
         ZStack {
             VStack(spacing: 0) {
                 searchBar
-                ChipRow(model: model)
+                ChipRow(states: model.chipStates, toggle: { model.toggleChip($0) })
                 suggestionBar
                 Divider()
                 if model.items.isEmpty {
