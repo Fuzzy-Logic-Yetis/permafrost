@@ -97,6 +97,68 @@ import PermafrostCore
         #expect(model.items.count == 2)
     }
 
+    @Test func appChipDropsTheOpeningFilterAndRestoresItFromTheRememberedApp() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "from herdr", sourceApp: "herdr"), now: now)
+        try store.save(
+            ClipboardCapture(text: "from safari", sourceApp: "Safari"),
+            now: now.addingTimeInterval(1))
+
+        model.prepareForShow(openingFilterApp: "herdr", openedFromApp: "herdr")
+        #expect(model.query == "app:herdr")
+        #expect(model.isChipActive("app:"))
+        #expect(model.items.map(\.text) == ["from herdr"])
+
+        model.toggleChip("app:")  // off: the app filter goes, the panel shows everything
+        #expect(!model.isChipActive("app:"))
+        #expect(model.items.count == 2)
+
+        model.toggleChip("is:pinned")  // other chips do not bring it back
+        model.toggleChip("is:pinned")
+        #expect(!model.isChipActive("app:"))
+
+        model.toggleChip("app:")  // on again: it still knows where the panel was opened from
+        #expect(model.isChipActive("app:"))
+        #expect(model.items.map(\.text) == ["from herdr"])
+    }
+
+    @Test func appChipWorksForAnyOpenedFromAppEvenWhenNotOpenFiltered() throws {
+        let (store, model, _) = try makeModel()
+        try store.save(ClipboardCapture(text: "from safari", sourceApp: "Safari"), now: now)
+        try store.save(
+            ClipboardCapture(text: "from edge", sourceApp: "Microsoft Edge"),
+            now: now.addingTimeInterval(1))
+
+        model.prepareForShow(openedFromApp: "Microsoft Edge")
+        #expect(model.query == "")
+        #expect(!model.isChipActive("app:"))
+        #expect(model.isChipEnabled("app:"))
+
+        model.toggleChip("app:")
+
+        #expect(model.query == "app:\"Microsoft Edge\" ")
+        #expect(model.items.map(\.text) == ["from edge"])
+    }
+
+    @Test func appChipIsDisabledWithNoOpenedFromAppButCanStillSwitchOffATypedFilter() throws {
+        let (_, model, _) = try makeModel()
+        model.prepareForShow(openedFromApp: nil)
+
+        #expect(!model.isChipEnabled("app:"))
+        model.toggleChip("app:")
+        #expect(model.query == "")
+
+        model.query = "app:safari"
+        #expect(model.isChipActive("app:"))
+        #expect(model.isChipEnabled("app:"))
+        model.toggleChip("app:")
+        #expect(model.query == "")
+        // The remembered app resets on every show.
+        model.prepareForShow(openedFromApp: "herdr")
+        model.prepareForShow()
+        #expect(model.openedFromApp == nil)
+    }
+
     @Test func chipsResetWhenThePanelIsShownAgainAndFollowTypedFilters() throws {
         let (_, model, _) = try makeModel()
         model.prepareForShow()

@@ -259,12 +259,16 @@ outside the app (e.g. CI or a broken build that won't launch):
 5j. **Time filters** (ADR-029): `is:today` → items used since midnight only; `age:<1h` →
     items used in the last hour; paste an old item again, then `age:<1h` → it now appears.
     Type `age:` → four examples; `Tab` accepts one. `age:2h` (no `<`) searches for that text.
-5k. **Filter chips**: a chip row sits under the search field with `⌥T today`, `⌥S pinned`,
+5k. **Filter chips**: a chip row sits under the search field with `⌥A app`, `⌥T today`, `⌥S pinned`,
     `⌥C concealed`, `⌥I image`, `⌥L link`. Click `pinned` → it lights up, the query gains
     `is:pinned`, only pinned items show; click again → back. Press `⌥I` then `⌥L` → only
     `link` is lit (exclusive). Type `is:today` by hand → the `today` chip lights. Close and
-    reopen the panel → all chips off. Check the row fits the 440 pt panel width in light and
-    dark, and that `⌥P` still pins.
+    reopen the panel → all chips off. Check the chip row sits on one line, with the panel
+    a little wider than before (about 479 pt) in light and dark, and that `⌥P` still pins. **`app` chip**: open the panel from an Open Filtered App
+    (`app` is lit, list filtered); click `app` → filter gone, full list; click other chips →
+    `app` stays off; click `app` again → filtered to the same app again. Open from an app that is
+    not on the list → `app` is off but clickable and filters to that app. The panel stays one
+    width in every state; nothing wraps or clips.
 6. **Pin**: `⌥P` an item → it moves to the pinned section; restart the app → still pinned.
 7. **Retention**: in Settings set TTL to the test value (1 day), insert a row with an old
    `last_used_at` via `sqlite3`, relaunch → old unpinned row gone, pinned rows intact.

@@ -31,7 +31,7 @@ live in [FUTURE_IDEAS.md](FUTURE_IDEAS.md); this file is engineering work.
    retention-policy snapshot.
 6. ~~Preview pane~~ — **DONE 2026-07-07.** `␣` (search field empty) toggles a Quick
    Look-style overlay of the selected item's full text (unwrapped, scrollable, selectable)
-   or full-resolution image, reusing the panel's existing 440×500 footprint. Follows
+   or full-resolution image, reusing the panel's existing footprint. Follows
    selection while open; `Esc` closes it before falling back to its existing
    clear-search/close-panel behavior. Deferred: a hover/mouse trigger for the preview — the
    hover row (pin/share/delete) is already at a natural width for three icons, and a fourth
@@ -284,6 +284,8 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
     (`today`, `pinned`, `concealed`, `image`, `link`; no `text`), footer-hint style with the
     `⌥` shortcut on the chip. They edit the `is:` words in the query, so no new filtering
     logic and no ADR; they reset each time the panel opens. Requested by Anthony 2026-11-17.
+    Follow-up, same day: an `app` chip (`⌥A`) that removes the open-time app filter and puts
+    it back from the remembered opened-from app. Anthony: always shown, labelled just "app".
 
 ## Later
 

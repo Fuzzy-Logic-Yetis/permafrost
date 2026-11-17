@@ -19,7 +19,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     init(model: PanelModel) {
         self.model = model
         panel = KeyablePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 500),
+            contentRect: NSRect(x: 0, y: 0, width: PanelLayout.width, height: PanelLayout.height),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -59,7 +59,13 @@ final class PanelController: NSObject, NSWindowDelegate {
             bundleID: front?.bundleIdentifier,
             name: front?.localizedName,
             listedBundleIDs: AppSettings.shared.openFilteredBundleIDs)
-        model.prepareForShow(openingFilterApp: filterApp)
+        let ownBundleID = Bundle.main.bundleIdentifier
+        let openedFrom =
+            front?.bundleIdentifier == ownBundleID
+            ? nil
+            : front?.localizedName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.prepareForShow(
+            openingFilterApp: filterApp, openedFromApp: openedFrom?.isEmpty == false ? openedFrom : nil)
         position(on: screenWithMouse())
         panel.makeKeyAndOrderFront(nil)
         installKeyMonitor()

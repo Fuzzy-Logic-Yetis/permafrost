@@ -750,7 +750,8 @@ import Testing
     @Test func everyChipIsAListedFilterAndNotText() {
         let listed = Set(SearchFilters.all.map(\.token))
         for chip in SearchFilters.chips {
-            #expect(listed.contains(chip.token), "\(chip.token)")
+            // `app:` is the one chip that is not an `is:` word.
+            #expect(listed.contains(chip.token) || chip.token == "app:", "\(chip.token)")
             #expect(!chip.label.isEmpty)
         }
         #expect(!SearchFilters.chips.contains { $0.token == "is:text" })
@@ -799,5 +800,37 @@ import Testing
 
         #expect(try store.items(matching: on).map(\.text) == ["invoice kept"])
         #expect(try store.items(matching: SearchFilters.toggling("is:pinned", in: on)).count == 2)
+    }
+
+    // MARK: - The app chip
+
+    @Test func appChipIsOnWhileThereIsAnAppFilterAndRemovesEveryOne() {
+        #expect(SearchFilters.isActive("app:", in: "app:herdr"))
+        #expect(SearchFilters.isActive("app:", in: "invoice app:\"Microsoft Edge\" is:pinned"))
+        #expect(!SearchFilters.isActive("app:", in: "app:"))  // a lone app: is just text
+        #expect(!SearchFilters.isActive("app:", in: "invoice"))
+        #expect(!SearchFilters.isActive("app:", in: "\\app:herdr"))
+
+        #expect(SearchFilters.toggling("app:", in: "app:herdr") == "")
+        #expect(
+            SearchFilters.toggling("app:", in: "invoice app:herdr is:pinned app:safari")
+                == "invoice is:pinned")
+        #expect(
+            SearchFilters.toggling("app:", in: "app:\"Microsoft Edge\" login")
+                == "login")
+        // A lone `app:` is text and stays.
+        #expect(SearchFilters.toggling("app:", in: "app: app:x") == "app:")
+    }
+
+    @Test func appChipSwitchesOnToTheGivenAppQuotedWhenNeeded() {
+        #expect(SearchFilters.toggling("app:", in: "", appName: "herdr") == "app:herdr ")
+        #expect(
+            SearchFilters.toggling("app:", in: "invoice is:pinned", appName: "Microsoft Edge")
+                == "invoice is:pinned app:\"Microsoft Edge\" ")
+        // Nothing to switch on to: unchanged.
+        #expect(SearchFilters.toggling("app:", in: "invoice") == "invoice")
+        #expect(SearchFilters.toggling("app:", in: "invoice", appName: "  ") == "invoice")
+        #expect(SearchFilters.appWord(for: "Say \"hi\" app") == "app:\"Say hi app\"")
+        #expect(SearchQuery.parse(SearchFilters.appWord(for: "Microsoft Edge")).app == "Microsoft Edge")
     }
 }
