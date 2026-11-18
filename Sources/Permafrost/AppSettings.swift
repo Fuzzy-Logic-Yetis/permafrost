@@ -64,8 +64,11 @@ final class AppSettings: HotkeySettingsStore {
     }
 
     var hotkeyPreset: HotkeyPreset {
-        HotkeyPreset(rawValue: defaults.string(forKey: Keys.hotkeyPreset) ?? "")
-            ?? .optionCommandV
+        get {
+            HotkeyPreset(rawValue: defaults.string(forKey: Keys.hotkeyPreset) ?? "")
+                ?? .optionCommandV
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.hotkeyPreset) }
     }
 
     var customHotkey: HotkeyShortcut? {
