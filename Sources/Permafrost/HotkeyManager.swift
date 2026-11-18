@@ -98,6 +98,7 @@ struct HotkeyShortcut: Equatable {
 
 @MainActor
 protocol HotkeySettingsStore: AnyObject {
+    var hotkeyPreset: HotkeyPreset { get set }
     var customHotkey: HotkeyShortcut? { get set }
     var effectiveHotkey: HotkeyShortcut { get }
     var hotkeyDisplay: String { get }
@@ -114,6 +115,7 @@ final class HotkeyRegistrationCoordinator {
     private let settings: HotkeySettingsStore
     private let registrar: HotkeyRegistering
     private var lastRegisteredCustomHotkey: HotkeyShortcut?
+    private var lastRegisteredPreset: HotkeyPreset?
     private var lastRegisteredShortcut: HotkeyShortcut?
 
     init(settings: HotkeySettingsStore, registrar: HotkeyRegistering) {
@@ -122,23 +124,32 @@ final class HotkeyRegistrationCoordinator {
     }
 
     /// Registers the currently configured hotkey. If Carbon rejects it, restore
-    /// the last working custom hotkey (or the selected preset if there was no
-    /// prior custom) and re-register that rollback target. The closure receives
-    /// the rejected shortcut's display string so Settings can surface the error.
+    /// the last working configuration (preset and custom hotkey, so Settings
+    /// shows what is actually registered) and re-register it. `onFailure`
+    /// receives the rejected shortcut's display string; `onRollbackFailure`
+    /// fires when the restored shortcut is rejected too, leaving no hotkey.
     @discardableResult
-    func registerEffectiveHotkey(onFailure: (String) -> Void = { _ in }) -> Bool {
+    func registerEffectiveHotkey(
+        onFailure: (String) -> Void = { _ in },
+        onRollbackFailure: (String) -> Void = { _ in }
+    ) -> Bool {
         let requestedShortcut = settings.effectiveHotkey
         let requestedCustomHotkey = settings.customHotkey
+        let requestedPreset = settings.hotkeyPreset
         guard registrar.register(shortcut: requestedShortcut) else {
             settings.customHotkey = lastRegisteredCustomHotkey
+            if let lastRegisteredPreset { settings.hotkeyPreset = lastRegisteredPreset }
             let rollbackShortcut = lastRegisteredShortcut ?? settings.effectiveHotkey
-            _ = registrar.register(shortcut: rollbackShortcut)
+            if !registrar.register(shortcut: rollbackShortcut) {
+                onRollbackFailure(rollbackShortcut.display)
+            }
             onFailure(requestedShortcut.display)
             return false
         }
 
         lastRegisteredShortcut = requestedShortcut
         lastRegisteredCustomHotkey = requestedCustomHotkey
+        lastRegisteredPreset = requestedPreset
         return true
     }
 }

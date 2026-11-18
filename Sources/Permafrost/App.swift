@@ -176,14 +176,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// M-1 — e.g. a reserved or already-claimed combination), rolls back to the
     /// previous working shortcut and tells Settings why.
     private func registerEffectiveHotkey() {
-        hotkeyRegistrationCoordinator.registerEffectiveHotkey { failedDisplay in
-            Log.app.error("hotkey \(failedDisplay, privacy: .public) rejected; rolling back")
-            NotificationCenter.default.post(
-                name: .hotkeyRegistrationFailed,
-                object: nil,
-                userInfo: ["failedShortcut": failedDisplay]
-            )
-        }
+        var rollbackFailed = false
+        hotkeyRegistrationCoordinator.registerEffectiveHotkey(
+            onFailure: { failedDisplay in
+                Log.app.error("hotkey \(failedDisplay, privacy: .public) rejected; rolling back")
+                NotificationCenter.default.post(
+                    name: .hotkeyRegistrationFailed,
+                    object: nil,
+                    userInfo: ["failedShortcut": failedDisplay, "rollbackFailed": rollbackFailed]
+                )
+            },
+            onRollbackFailure: { _ in
+                Log.app.error("hotkey rollback also rejected; no global hotkey is registered")
+                rollbackFailed = true
+            }
+        )
         lastRegisteredHotkey = settings.effectiveHotkey
         refreshOpenMenuItemTitle()
     }

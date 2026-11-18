@@ -188,8 +188,8 @@ The raw review was curated here and in ADR-023; no finding was silently discarde
   list/search/export memory and latency with Instruments (now installed).
 - **M6 — Deferred:** bound portable KDF iteration parameters and archive expansion/allocation;
   add cancellation and malformed-input tests.
-- **M7 — Deferred:** restore preset configuration as well as actual hotkey registration after
-  conflicts; explicitly report double failure.
+- **M7 — Fixed:** a rejected hotkey now restores the preset as well as the custom shortcut, and a
+  rollback that is also rejected is reported in Settings ("no global hotkey is active").
 - **M8 — Capture path fixed:** all successful capture jobs notify the panel, including text and
   omitted QR. General import/purge observation remains deferred as a separate store-event task.
 - **L1 — Fixed:** consent, QR privacy limits, portable-backup wording, operating manual and

@@ -63,20 +63,56 @@ import Testing
         #expect(registrar.registeredShortcuts == [rejectedCustom, HotkeyPreset.controlCommandV.shortcut])
         #expect(failedDisplays == [rejectedCustom.display])
     }
+
+    @Test func failedPresetChangeRestoresPreviousPreset() {
+        let settings = FakeHotkeySettings(customHotkey: nil, preset: .optionCommandV)
+        let registrar = FakeHotkeyRegistrar(results: [true, false, true])
+        let coordinator = HotkeyRegistrationCoordinator(settings: settings, registrar: registrar)
+        var failedDisplays: [String] = []
+
+        #expect(coordinator.registerEffectiveHotkey() == true)
+        settings.hotkeyPreset = .controlCommandV
+
+        let result = coordinator.registerEffectiveHotkey(onFailure: { failedDisplays.append($0) })
+
+        #expect(result == false)
+        #expect(settings.hotkeyPreset == .optionCommandV)
+        #expect(registrar.registeredShortcuts == [
+            HotkeyPreset.optionCommandV.shortcut,
+            HotkeyPreset.controlCommandV.shortcut,
+            HotkeyPreset.optionCommandV.shortcut,
+        ])
+        #expect(failedDisplays == [HotkeyPreset.controlCommandV.display])
+    }
+
+    @Test func doubleFailureIsReported() {
+        let settings = FakeHotkeySettings(customHotkey: nil, preset: .optionCommandV)
+        let registrar = FakeHotkeyRegistrar(results: [true, false, false])
+        let coordinator = HotkeyRegistrationCoordinator(settings: settings, registrar: registrar)
+        var rollbackFailures: [String] = []
+
+        #expect(coordinator.registerEffectiveHotkey() == true)
+        settings.hotkeyPreset = .controlCommandV
+
+        let result = coordinator.registerEffectiveHotkey(onRollbackFailure: { rollbackFailures.append($0) })
+
+        #expect(result == false)
+        #expect(rollbackFailures == [HotkeyPreset.optionCommandV.display])
+    }
 }
 
 @MainActor
 private final class FakeHotkeySettings: HotkeySettingsStore {
     var customHotkey: HotkeyShortcut?
-    var preset: HotkeyPreset
+    var hotkeyPreset: HotkeyPreset
 
     init(customHotkey: HotkeyShortcut?, preset: HotkeyPreset) {
         self.customHotkey = customHotkey
-        self.preset = preset
+        self.hotkeyPreset = preset
     }
 
     var effectiveHotkey: HotkeyShortcut {
-        customHotkey ?? preset.shortcut
+        customHotkey ?? hotkeyPreset.shortcut
     }
 
     var hotkeyDisplay: String {

@@ -363,9 +363,16 @@ struct SettingsView: View {
             customHotkey = AppSettings.shared.customHotkey
             hotkeyPreset = AppSettings.shared.hotkeyPreset.rawValue
             isRecordingHotkey = false
-            hotkeyRecorderMessage =
-                "\(failedDisplay) couldn't be registered (already in use elsewhere) — "
-                + "reverted to \(AppSettings.shared.hotkeyDisplay)."
+            if notification.userInfo?["rollbackFailed"] as? Bool == true {
+                hotkeyRecorderMessage =
+                    "\(failedDisplay) couldn't be registered, and neither could "
+                    + "\(AppSettings.shared.hotkeyDisplay). No global hotkey is active; "
+                    + "use the menu bar icon or pick another shortcut."
+            } else {
+                hotkeyRecorderMessage =
+                    "\(failedDisplay) couldn't be registered (already in use elsewhere) — "
+                    + "reverted to \(AppSettings.shared.hotkeyDisplay)."
+            }
             hotkeyRecorderMessageIsError = true
         }
         .onAppear { refreshCounts() }
